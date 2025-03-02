@@ -77,6 +77,11 @@ spec:
     spec:
 {{ dict "envAll" $envAll "application" "neutron_ovn_metadata_agent" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
+      # -------------- Add by Simon Start --------------
+      {{ if $envAll.Values.pod.tolerations.neutron.enabled }}
+      {{ tuple $envAll "neutron" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+      {{ end }}
+      # -------------- Add by Simon End --------------
 {{ if $envAll.Values.pod.tolerations.neutron.enabled }}
 {{ tuple $envAll "neutron" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
 {{ end }}

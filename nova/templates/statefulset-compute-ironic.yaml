@@ -51,6 +51,11 @@ spec:
 {{ tuple $envAll "nova" "compute-ironic" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
         {{ .Values.labels.agent.compute_ironic.node_selector_key }}: {{ .Values.labels.agent.compute_ironic.node_selector_value }}
+# -------------- Add by Simon Start --------------
+{{ if $envAll.Values.pod.tolerations.compute_ironic.enabled }}
+{{ tuple $envAll "compute_ironic" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
+# -------------- Add by Simon End --------------
       hostPID: true
       dnsPolicy: ClusterFirstWithHostNet
       initContainers:

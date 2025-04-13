@@ -74,10 +74,11 @@ spec:
           readinessProbe:
             httpGet:
               scheme: HTTP
-              path: /
+              path: /v1
               port: {{ tuple "container-infra" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-            initialDelaySeconds: 5
+            initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 10
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp

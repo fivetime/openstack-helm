@@ -1,0 +1,20 @@
+---
+images:
+  tags:
+    db_init_mongodb: docker.io/8.0.9-noble
+    rabbit_init: docker.io/rabbitmq:3.13-management
+    ks_user: "quay.io/airshipit/heat:2025.1-ubuntu_noble"
+    ks_service: "quay.io/airshipit/heat:2025.1-ubuntu_noble"
+    ks_endpoints: "quay.io/airshipit/heat:2025.1-ubuntu_noble"
+    db_init: docker.io/kolla/ceilometer-base:2024.2-ubuntu-noble
+    ceilometer_api: docker.io/kolla/ceilometer-base:2024.2-ubuntu-noble
+    ceilometer_db_sync: docker.io/kolla/ceilometer-base:2024.2-ubuntu-noble
+    ceilometer_ipmi: docker.io/kolla/ceilometer-ipmi:2024.2-ubuntu-noble
+    ceilometer_central: docker.io/kolla/ceilometer-central:2024.2-ubuntu-noble
+    ceilometer_compute: docker.io/kolla/ceilometer-compute:2024.2-ubuntu-noble
+    ceilometer_notification: docker.io/kolla/ceilometer-notification:2024.2-ubuntu-noble
+    ceilometer_collector: docker.io/kolla/ubuntu-source-ceilometer-collector:wallaby
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+    test: docker.io/xrally/xrally-openstack:3.0.0
+    image_repo_sync: docker.io/docker:28.1.1
+...

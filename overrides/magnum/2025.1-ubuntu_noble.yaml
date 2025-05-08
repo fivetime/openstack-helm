@@ -8,9 +8,9 @@ images:
     ks_service: quay.io/airshipit/heat:2025.1-ubuntu_noble
     ks_endpoints: quay.io/airshipit/heat:2025.1-ubuntu_noble
 
-    magnum_db_sync: docker.io/openstackhelm/magnum:2024.2-ubuntu_jammy
-    magnum_api: docker.io/openstackhelm/magnum:2024.2-ubuntu_jammy
-    magnum_conductor: docker.io/openstackhelm/magnum:2024.2-ubuntu_jammy
+    magnum_api: docker.io/openstackhelm/magnum:master-ubuntu_jammy
+    magnum_db_sync: docker.io/openstackhelm/magnum:master-ubuntu_jammy
+    magnum_conductor: docker.io/openstackhelm/magnum:master-ubuntu_jammy
 
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
     rabbit_init: docker.io/rabbitmq:3.13-management

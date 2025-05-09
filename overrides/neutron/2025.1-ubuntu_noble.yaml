@@ -31,4 +31,54 @@ images:
     rabbit_init: "docker.io/rabbitmq:3.13-management"
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
     netoffload: "ghcr.io/vexxhost/netoffload:v1.0.1"
+labels:
+  agent:
+    l3:
+      node_selector_key: l3-agent
+      node_selector_value: enabled
+    dhcp:
+      node_selector_key: openstack-network-node
+      node_selector_value: enabled
+    metadata:
+      node_selector_key: openstack-network-node
+      node_selector_value: enabled
+    l2gw:
+      node_selector_key: openstack-network-node
+      node_selector_value: enabled
+    ovn_vpn:
+      node_selector_key: openstack-network-node
+      node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  lb:
+    node_selector_key: linuxbridge
+    node_selector_value: enabled
+  ovs:
+    node_selector_key: openvswitch
+    node_selector_value: enabled
+  sriov:
+    node_selector_key: sriov
+    node_selector_value: enabled
+  bagpipe_bgp:
+    node_selector_key: openstack-compute-node
+    node_selector_value: enabled
+  bgp_dragent:
+    node_selector_key: openstack-compute-node
+    node_selector_value: enabled
+  server:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  rpc_server:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  ironic_agent:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  netns_cleanup_cron:
+    node_selector_key: openstack-network-node
+    node_selector_value: enabled
+  test:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 ...

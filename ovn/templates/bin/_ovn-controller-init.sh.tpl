@@ -16,6 +16,7 @@
 
 ANNOTATION_KEY="openstack-helm-infra/ovn-system-id"
 
+# Get a specific IPv4 address for original functionality (preserving original function)
 function get_ip_address_from_interface {
   local interface=$1
   local ip=$(ip -4 -o addr s "${interface}" | awk '{ print $4; exit }' | awk -F '/' 'NR==1 {print $1}')
@@ -25,6 +26,7 @@ function get_ip_address_from_interface {
   echo ${ip}
 }
 
+# Get prefix from an IPv4 address for original functionality (preserving original function)
 function get_ip_prefix_from_interface {
   local interface=$1
   local prefix=$(ip -4 -o addr s "${interface}" | awk '{ print $4; exit }' | awk -F '/' 'NR==1 {print $2}')
@@ -34,43 +36,141 @@ function get_ip_prefix_from_interface {
   echo ${prefix}
 }
 
+# Migrate IP addresses from a network interface to a bridge
+# Both IPv4 and IPv6 addresses are migrated properly
 function migrate_ip_from_nic {
   src_nic=$1
   bridge_name=$2
 
-  # Enabling explicit error handling: We must avoid to lose the IP
-  # address in the migration process. Hence, on every error, we
-  # attempt to assign the IP back to the original NIC and exit.
+  # Enabling explicit error handling
   set +e
 
-  ip=$(get_ip_address_from_interface ${src_nic})
-  prefix=$(get_ip_prefix_from_interface ${src_nic})
-
-  bridge_ip=$(get_ip_address_from_interface "${bridge_name}")
-  bridge_prefix=$(get_ip_prefix_from_interface "${bridge_name}")
-
+  # Ensure the bridge interface is up
   ip link set ${bridge_name} up
 
-  if [[ -n "${ip}" && -n "${prefix}" ]]; then
-    ip addr flush dev ${src_nic}
-    if [ $? -ne 0 ] ; then
-      ip addr add ${ip}/${prefix} dev ${src_nic}
-      echo "Error while flushing IP from ${src_nic}."
-      exit 1
-    fi
+  # Check if bridge already has global IP addresses (excluding link-local IPv6)
+  bridge_has_addr=false
+  bridge_ipv4=$(ip -4 addr show dev ${bridge_name} 2>/dev/null | grep inet)
+  bridge_ipv6=$(ip -6 addr show dev ${bridge_name} 2>/dev/null | grep inet6 | grep -v "scope link")
 
-    ip addr add ${ip}/${prefix} dev "${bridge_name}"
-    if [ $? -ne 0 ] ; then
-      echo "Error assigning IP to bridge "${bridge_name}"."
-      ip addr add ${ip}/${prefix} dev ${src_nic}
-      exit 1
+  if [[ -n "$bridge_ipv4" ]] || [[ -n "$bridge_ipv6" ]]; then
+    bridge_has_addr=true
+    echo "Bridge '${bridge_name}' already has global IP configuration. Keeping as is..."
+    set -e
+    return 0
+  fi
+
+  # Store IPv4 addresses from source interface
+  ipv4_addresses=()
+  ipv4_data=$(ip -4 addr show dev ${src_nic} 2>/dev/null | grep inet)
+
+  while read -r line; do
+    if [[ -n "$line" ]]; then
+      # Extract only the IP/prefix, broadcast and scope, removing interface name
+      ip_prefix=$(echo "$line" | awk '{print $2}')
+      broadcast=""
+      if [[ "$line" =~ brd[[:space:]]([0-9.]+) ]]; then
+        broadcast="brd ${BASH_REMATCH[1]}"
+      fi
+      scope=""
+      if [[ "$line" =~ scope[[:space:]]([a-z]+) ]]; then
+        scope="scope ${BASH_REMATCH[1]}"
+      fi
+      # Create clean config without interface name
+      clean_config="${ip_prefix} ${broadcast} ${scope}"
+      ipv4_addresses+=("$clean_config")
     fi
-  elif [[ -n "${bridge_ip}" && -n "${bridge_prefix}" ]]; then
-    echo "Bridge '${bridge_name}' already has IP assigned. Keeping the same:: IP:[${bridge_ip}]; Prefix:[${bridge_prefix}]..."
-  elif [[ -z "${bridge_ip}" && -z "${ip}" ]]; then
-    echo "Interface and bridge have no ips configured. Leaving as is."
+  done < <(echo "$ipv4_data")
+
+  # Store global IPv6 addresses from source interface (excluding link-local)
+  ipv6_addresses=()
+  ipv6_data=$(ip -6 addr show dev ${src_nic} 2>/dev/null | grep inet6 | grep -v "scope link")
+
+  while read -r line; do
+    if [[ -n "$line" ]]; then
+      # Extract only the IP/prefix and scope, removing interface name
+      ip_prefix=$(echo "$line" | awk '{print $2}')
+      scope=""
+      if [[ "$line" =~ scope[[:space:]]([a-z]+) ]]; then
+        scope="scope ${BASH_REMATCH[1]}"
+      fi
+      # Create clean config without interface name
+      clean_config="${ip_prefix} ${scope}"
+      ipv6_addresses+=("$clean_config")
+    fi
+  done < <(echo "$ipv6_data")
+
+  # Check if we have any IPs to migrate
+  if [[ ${#ipv4_addresses[@]} -eq 0 ]] && [[ ${#ipv6_addresses[@]} -eq 0 ]]; then
+    echo "Interface ${src_nic} has no global IP addresses to migrate. Leaving as is."
+    set -e
+    return 0
+  fi
+
+  echo "Migrating ${#ipv4_addresses[@]} IPv4 and ${#ipv6_addresses[@]} IPv6 addresses from ${src_nic} to ${bridge_name}..."
+
+  # Migration flag to track success/failure
+  migration_failed=false
+
+  # First add all IPv4 addresses to bridge
+  for addr_config in "${ipv4_addresses[@]}"; do
+    # Trim extra spaces
+    addr_config=$(echo "$addr_config" | tr -s ' ' | sed 's/^ //;s/ $//')
+    echo "Adding IPv4 config: $addr_config to ${bridge_name}"
+    if ! ip addr add $addr_config dev ${bridge_name}; then
+      echo "Error: Failed to add IPv4 configuration to ${bridge_name}"
+      migration_failed=true
+      break
+    fi
+  done
+
+  # If IPv4 migration was successful, proceed with IPv6
+  if [[ "$migration_failed" = false ]] && [[ ${#ipv6_addresses[@]} -gt 0 ]]; then
+    for addr_config in "${ipv6_addresses[@]}"; do
+      # Trim extra spaces
+      addr_config=$(echo "$addr_config" | tr -s ' ' | sed 's/^ //;s/ $//')
+      echo "Adding IPv6 config: $addr_config to ${bridge_name}"
+      if ! ip addr add $addr_config dev ${bridge_name}; then
+        echo "Error: Failed to add IPv6 configuration to ${bridge_name}"
+        migration_failed=true
+        break
+      fi
+    done
+  fi
+
+  # If all addresses were successfully added, flush source interface
+  if [[ "$migration_failed" = false ]]; then
+    echo "Successfully added all IP addresses to ${bridge_name}. Flushing source interface ${src_nic}..."
+
+    # Give system a moment to process new config
+    sleep 1
+
+    # Flush source interface
+    ip addr flush dev ${src_nic}
+
+    # Verify system created routes
+    echo "Verifying system created routes..."
+    if ! ip route | grep -q "${bridge_name}"; then
+      echo "Warning: No routes found for ${bridge_name}. This might cause connectivity issues."
+    else
+      echo "Routes for ${bridge_name} successfully created by system."
+    fi
   else
-    echo "Interface ${src_nic} has invalid IP address. IP:[${ip}]; Prefix:[${prefix}]..."
+    # Migration failed, remove any addresses added to bridge
+    echo "IP migration failed. Cleaning up bridge ${bridge_name}..."
+
+    # Clean up any IPs we might have added
+    for addr_config in "${ipv4_addresses[@]}"; do
+      ip_prefix=$(echo "$addr_config" | awk '{print $1}')
+      ip addr del $ip_prefix dev ${bridge_name} 2>/dev/null || true
+    done
+
+    for addr_config in "${ipv6_addresses[@]}"; do
+      ip_prefix=$(echo "$addr_config" | awk '{print $1}')
+      ip addr del $ip_prefix dev ${bridge_name} 2>/dev/null || true
+    done
+
+    echo "Original interface ${src_nic} configuration preserved."
     exit 1
   fi
 

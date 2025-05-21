@@ -16,8 +16,12 @@ limitations under the License.
 
 set -ex
 
+# 创建 Ironic 需要的各种目录
 mkdir -p /var/lib/openstack-helm/ironic/images
 mkdir -p /var/lib/openstack-helm/ironic/master_images
+# 创建 IPMI 工具所需的临时目录
+mkdir -p /var/lib/openstack-helm/tmp
+chmod 1777 /var/lib/openstack-helm/tmp
 
 {{- if and (.Values.bootstrap.object_store.enabled) (.Values.bootstrap.object_store.openstack.enabled) }}
 OPTIONS=" --config-file /tmp/pod-shared/swift.conf"

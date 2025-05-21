@@ -28,6 +28,9 @@ helm.sh/hook-weight: "5"
 {{- end }}
 {{ $bootstrapJob | include "helm-toolkit.manifests.job_bootstrap" }}
 {{- else }}
-{{ include "helm-toolkit.manifests.job_bootstrap" }}
+# -------------- Modify by Simon Start --------------
+{{- $simpleBootstrapJob := dict "envAll" . "serviceName" "ironic" -}}
+{{ include "helm-toolkit.manifests.job_bootstrap" $simpleBootstrapJob }}
+# -------------- Add by Simon End --------------
 {{- end }}
 {{- end }}

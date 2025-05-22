@@ -27,8 +27,8 @@ images:
   pull_policy: IfNotPresent
   tags:
     ks_user: quay.io/airshipit/heat:2025.1-ubuntu_jammy
-    kuryr_libnetwork: docker.io/kolla/kuryr-libnetwork:2025.1-ubuntu-noble
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+    kuryr_libnetwork: docker.io/kolla/kuryr-libnetwork:2025.1-ubuntu-noble
   local_registry:
     active: false
     exclude:

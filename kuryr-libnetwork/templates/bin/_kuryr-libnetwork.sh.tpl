@@ -36,5 +36,12 @@ cat > ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec << EOF
 http://127.0.0.1:23750
 EOF
 
-# Start kuryr-libnetwork
-exec kuryr-libnetwork --config-file /etc/kuryr/kuryr.conf
+echo "Created kuryr spec file at ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec"
+cat ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec
+
+# Add kolla venv to PATH
+export PATH="/var/lib/kolla/venv/bin:$PATH"
+
+# Start kuryr-server (the actual kuryr-libnetwork service)
+echo "Starting kuryr-server..."
+exec kuryr-server --config-file /etc/kuryr/kuryr.conf

@@ -86,19 +86,18 @@ spec:
               hostPort: {{ .Values.network.kuryr.bind_port }}
               protocol: TCP
           livenessProbe:
-            httpGet:
-              path: /Plugin.Activate
+            tcpSocket:
               port: {{ .Values.network.kuryr.bind_port }}
             initialDelaySeconds: 30
-            timeoutSeconds: 30
+            timeoutSeconds: 5
             failureThreshold: 3
             periodSeconds: 60
           readinessProbe:
-            httpGet:
-              path: /Plugin.Activate
+            tcpSocket:
               port: {{ .Values.network.kuryr.bind_port }}
             initialDelaySeconds: 15
-            timeoutSeconds: 15
+            timeoutSeconds: 5
+            periodSeconds: 10
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp

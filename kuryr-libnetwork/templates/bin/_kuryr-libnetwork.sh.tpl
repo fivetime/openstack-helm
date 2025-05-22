@@ -34,11 +34,13 @@ fi
 BIND_HOST="{{ .Values.network.kuryr.bind_host }}"
 BIND_PORT="{{ .Values.network.kuryr.bind_port }}"
 UWSGI_PROCESSES="{{ .Values.network.kuryr.uwsgi_processes }}"
+UWSGI_THREADS="{{ .Values.network.kuryr.uwsgi_threads }}"
 
 echo "=== Kuryr uwsgi Configuration ==="
 echo "Bind Host: ${BIND_HOST}"
 echo "Bind Port: ${BIND_PORT}"
 echo "Processes: ${UWSGI_PROCESSES}"
+echo "Threads: ${UWSGI_THREADS}"
 
 # Create kuryr spec file for Docker
 cat > ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec << EOF
@@ -58,9 +60,12 @@ fi
 
 echo "Starting kuryr via uwsgi..."
 exec uwsgi \
+    --plugins python \
     --http-socket ${BIND_HOST}:${BIND_PORT} \
-    -w kuryr_libnetwork.server:app \
+    --wsgi kuryr_libnetwork.server:app \
+    --pyargv "--config-file /etc/kuryr/kuryr.conf" \
     --master \
+    --need-app \
     --processes ${UWSGI_PROCESSES} \
-    --die-on-term \
-    --lazy-apps
+    --threads ${UWSGI_THREADS} \
+    --die-on-term

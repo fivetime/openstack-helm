@@ -56,6 +56,7 @@ network:
     bind_host: "0.0.0.0"
     bind_port: 23750
     uwsgi_processes: 2
+    uwsgi_threads: 1
 
 endpoints:
   cluster_domain_suffix: cluster.local

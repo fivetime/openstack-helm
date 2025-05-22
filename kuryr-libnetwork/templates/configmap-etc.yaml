@@ -1,0 +1,66 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+{{- if (.Values.global).subchart_release_name }}
+{{- $_ := set . "deployment_name" .Chart.Name }}
+{{- else }}
+{{- $_ := set . "deployment_name" .Release.Name }}
+{{- end }}
+
+{{- define "kuryr.configmap.etc" }}
+{{- $configMapName := index . 0 }}
+{{- $envAll := index . 1 }}
+{{- with $envAll }}
+
+{{- if empty .Values.conf.kuryr.neutron.auth_url -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.kuryr.neutron "auth_url" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.kuryr.neutron.www_authenticate_uri -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.kuryr.neutron "www_authenticate_uri" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.kuryr.neutron.username -}}
+{{- $_ := set .Values.conf.kuryr.neutron "username" .Values.endpoints.identity.auth.kuryr.username -}}
+{{- end -}}
+{{- if empty .Values.conf.kuryr.neutron.password -}}
+{{- $_ := set .Values.conf.kuryr.neutron "password" .Values.endpoints.identity.auth.kuryr.password -}}
+{{- end -}}
+{{- if empty .Values.conf.kuryr.neutron.project_name -}}
+{{- $_ := set .Values.conf.kuryr.neutron "project_name" .Values.endpoints.identity.auth.kuryr.project_name -}}
+{{- end -}}
+{{- if empty .Values.conf.kuryr.neutron.user_domain_name -}}
+{{- $_ := set .Values.conf.kuryr.neutron "user_domain_name" .Values.endpoints.identity.auth.kuryr.user_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.kuryr.neutron.project_domain_name -}}
+{{- $_ := set .Values.conf.kuryr.neutron "project_domain_name" .Values.endpoints.identity.auth.kuryr.project_domain_name -}}
+{{- end -}}
+
+{{- if empty .Values.conf.kuryr.neutron.endpoint_url -}}
+{{- $_ := tuple "network" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.kuryr.neutron "endpoint_url" -}}
+{{- end -}}
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $configMapName }}
+type: Opaque
+data:
+  kuryr.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.kuryr | b64enc }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.manifests.configmap_etc }}
+{{- list "kuryr-etc" . | include "kuryr.configmap.etc" }}
+{{- end }}

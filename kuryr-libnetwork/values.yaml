@@ -1,0 +1,196 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+release_group: null
+
+labels:
+  kuryr:
+    node_selector_key: kuryr-libnetwork
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+helm3_hook: true
+
+images:
+  pull_policy: IfNotPresent
+  tags:
+    kuryr_libnetwork: kolla/kuryr-libnetwork:2025.1-ubuntu-noble
+    dep_check: 'quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy'
+    ks_user: quay.io/airshipit/heat:2025.1-ubuntu_jammy
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+secrets:
+  identity:
+    admin: kuryr-keystone-admin
+    kuryr: kuryr-keystone-user
+  tls:
+    kuryr:
+      kuryr:
+        public: kuryr-tls-public
+        internal: kuryr-tls-internal
+
+tls:
+  identity: false
+
+network:
+  kuryr:
+    docker_socket_path: /var/run/docker.sock
+    plugins_dir: /usr/lib/docker/plugins/kuryr
+    external_policy_local: false
+
+endpoints:
+  cluster_domain_suffix: cluster.local
+  identity:
+    name: keystone
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      kuryr:
+        role: admin
+        region_name: RegionOne
+        username: kuryr
+        password: password
+        project_name: service
+        user_domain_name: default
+        project_domain_name: default
+    hosts:
+      default: keystone
+      internal: keystone-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+  network:
+    name: neutron
+    hosts:
+      default: neutron
+      internal: neutron-server
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme:
+      default: http
+    port:
+      api:
+        default: 9696
+        internal: 9696
+
+pod:
+  security_context:
+    kuryr:
+      pod:
+        runAsUser: 0
+      container:
+        kuryr:
+          privileged: true
+          runAsUser: 0
+          readOnlyRootFilesystem: false
+  mounts:
+    kuryr:
+      init_container: null
+      kuryr:
+        volumes:
+        volumeMounts:
+  tolerations:
+    kuryr:
+      enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+  resources:
+    enabled: false
+    kuryr:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    jobs:
+      ks_user:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - kuryr-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    kuryr:
+      jobs:
+        - kuryr-ks-user
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: network
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+
+conf:
+  kuryr:
+    DEFAULT:
+      bindir: /usr/libexec/kuryr
+      log_dir: /var/log/kolla/kuryr
+      debug: true
+    neutron:
+      project_name: service
+      auth_type: password
+    binding:
+      driver: kuryr.lib.binding.drivers.veth
+      link_iface: eth0
+    oslo_concurrency:
+      lock_path: /var/lib/kuryr/tmp
+
+manifests:
+  certificates: false
+  configmap_etc: true
+  configmap_bin: true
+  daemonset: true
+  secret_keystone: true
+  job_ks_user: true
+  service: true
+...

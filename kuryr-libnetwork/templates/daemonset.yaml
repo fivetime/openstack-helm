@@ -1,0 +1,153 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.daemonset }}
+{{- $envAll := . }}
+
+{{- $mounts_kuryr := .Values.pod.mounts.kuryr.kuryr }}
+{{- $mounts_kuryr_init := .Values.pod.mounts.kuryr.init_container }}
+
+{{- $serviceAccountName := "kuryr-libnetwork" }}
+{{ tuple $envAll "kuryr" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kuryr-libnetwork
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "kuryr" "libnetwork" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll "kuryr" "libnetwork" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "kuryr" "libnetwork" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "kuryr" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+{{ dict "envAll" $envAll "application" "kuryr" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.kuryr.node_selector_key }}: {{ .Values.labels.kuryr.node_selector_value }}
+{{- if .Values.pod.tolerations.kuryr.enabled }}
+{{ tuple $envAll "kuryr" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{- end}}
+      initContainers:
+{{ tuple $envAll "kuryr" $mounts_kuryr_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        - name: kuryr-docker-check
+{{ tuple $envAll "kuryr_libnetwork" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "kuryr" "container" "kuryr" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/docker-check.sh
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: kuryr-bin
+              mountPath: /tmp/docker-check.sh
+              subPath: docker-check.sh
+              readOnly: true
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+              readOnly: true
+      containers:
+        - name: kuryr-libnetwork
+{{ tuple $envAll "kuryr_libnetwork" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "kuryr" "container" "kuryr" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.kuryr | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+          command:
+            - /tmp/kuryr-libnetwork.sh
+          ports:
+            - name: kuryr-api
+              containerPort: 23750
+              hostPort: 23750
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 23750
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 3
+            periodSeconds: 60
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 23750
+            initialDelaySeconds: 15
+            timeoutSeconds: 15
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: kuryr-etc
+              mountPath: /etc/kuryr/kuryr.conf
+              subPath: kuryr.conf
+              readOnly: true
+            - name: kuryr-bin
+              mountPath: /tmp/kuryr-libnetwork.sh
+              subPath: kuryr-libnetwork.sh
+              readOnly: true
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: docker-plugins
+              mountPath: /usr/lib/docker/plugins
+            - name: kuryr-log
+              mountPath: /var/log/kolla/kuryr
+            - name: run-openvswitch
+              mountPath: /run/openvswitch
+            - name: etc-openvswitch
+              mountPath: /etc/openvswitch
+{{ if $mounts_kuryr.volumeMounts }}{{ toYaml $mounts_kuryr.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: kuryr-etc
+          secret:
+            secretName: kuryr-etc
+            defaultMode: 0444
+        - name: kuryr-bin
+          configMap:
+            name: kuryr-bin
+            defaultMode: 0555
+        - name: docker-socket
+          hostPath:
+            path: {{ .Values.network.kuryr.docker_socket_path }}
+            type: Socket
+        - name: docker-plugins
+          hostPath:
+            path: {{ .Values.network.kuryr.plugins_dir }}
+            type: DirectoryOrCreate
+        - name: kuryr-log
+          hostPath:
+            path: /var/log/kolla/kuryr
+            type: DirectoryOrCreate
+        - name: run-openvswitch
+          hostPath:
+            path: /run/openvswitch
+            type: DirectoryOrCreate
+        - name: etc-openvswitch
+          hostPath:
+            path: /etc/openvswitch
+            type: DirectoryOrCreate
+{{ if $mounts_kuryr.volumes}}{{ toYaml $mounts_kuryr.volumes | indent 8 }}{{ end }}
+{{- end }}

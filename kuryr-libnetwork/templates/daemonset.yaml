@@ -87,7 +87,7 @@ spec:
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /
+              path: /Plugin.Activate
               port: {{ .Values.network.kuryr.bind_port }}
             initialDelaySeconds: 30
             timeoutSeconds: 30
@@ -95,7 +95,7 @@ spec:
             periodSeconds: 60
           readinessProbe:
             httpGet:
-              path: /
+              path: /Plugin.Activate
               port: {{ .Values.network.kuryr.bind_port }}
             initialDelaySeconds: 15
             timeoutSeconds: 15

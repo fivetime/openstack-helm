@@ -1,0 +1,658 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+release_group: null
+
+labels:
+  api:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  compute:
+    node_selector_key: openstack-compute-node
+    node_selector_value: enabled
+  cni_daemon:
+    node_selector_key: openstack-compute-node
+    node_selector_value: enabled
+  wsproxy:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+helm3_hook: true
+
+images:
+  pull_policy: IfNotPresent
+  tags:
+    db_sync: kolla/zun-api:2025.1-ubuntu-noble
+    zun_api: kolla/zun-api:2025.1-ubuntu-noble
+    zun_compute: kolla/zun-compute:2025.1-ubuntu-noble
+    zun_cni_daemon: kolla/zun-cni-daemon:2025.1-ubuntu-noble
+    zun_wsproxy: kolla/zun-wsproxy:2025.1-ubuntu-noble
+    db_init: quay.io/airshipit/heat:2025.1-ubuntu_jammy
+    dep_check: 'quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy'
+    ks_user: quay.io/airshipit/heat:2025.1-ubuntu_jammy
+    ks_service: quay.io/airshipit/heat:2025.1-ubuntu_jammy
+    ks_endpoints: quay.io/airshipit/heat:2025.1-ubuntu_jammy
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+secrets:
+  identity:
+    admin: zun-keystone-admin
+    zun: zun-keystone-user
+  oslo_db:
+    admin: zun-db-admin
+    zun: zun-db-user
+  oslo_messaging:
+    admin: zun-rabbitmq-admin
+    zun: zun-rabbitmq-user
+  tls:
+    container:
+      zun:
+        public: zun-tls-public
+        internal: zun-tls-internal
+    compute:
+      metadata:
+        internal: zun-tls-metadata
+    websocket_proxy:
+      public: zun-tls-wsproxy-public
+
+tls:
+  identity: false
+  oslo_db: false
+  oslo_messaging: false
+
+network:
+  api:
+    ingress:
+      public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
+      annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /
+    external_policy_local: false
+    node_port:
+      enabled: false
+      port: 30960
+  wsproxy:
+    ingress:
+      public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
+      annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /
+    external_policy_local: false
+    node_port:
+      enabled: false
+      port: 30961
+
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: glance
+    namespace: openstack
+    hosts:
+      default: localhost
+      internal: glance-reg
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  oslo_db:
+    auth:
+      admin:
+        username: root
+        password: password
+        secret:
+          tls:
+            internal: mariadb-tls-direct
+      zun:
+        username: zun
+        password: password
+    hosts:
+      default: mariadb
+    host_fqdn_override:
+      default: null
+    path: /zun
+    scheme:
+      default: mysql+pymysql
+      zun: mysql
+    port:
+      mysql:
+        default: 3306
+  oslo_messaging:
+    auth:
+      admin:
+        username: rabbitmq
+        password: password
+      zun:
+        username: zun
+        password: password
+    statefulset:
+      replicas: 2
+      name: rabbitmq-rabbitmq
+    hosts:
+      default: rabbitmq
+    host_fqdn_override:
+      default: null
+    path: /zun
+    scheme:
+      default: rabbit
+    port:
+      amqp:
+        default: 5672
+      http:
+        default: 15672
+  identity:
+    name: keystone
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      zun:
+        role: admin
+        region_name: RegionOne
+        username: zun
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: keystone
+      internal: keystone-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+  container:
+    name: zun
+    hosts:
+      default: zun-api
+      public: zun
+    host_fqdn_override:
+      default: null
+    scheme:
+      default: 'http'
+      service: 'http'
+    port:
+      api:
+        default: 9517
+        public: 80
+  websocket_proxy:
+    name: zun-wsproxy
+    hosts:
+      default: zun-wsproxy
+      public: zun-wsproxy
+    host_fqdn_override:
+      default: null
+    scheme:
+      default: 'http'
+      service: 'http'
+    port:
+      wsproxy:
+        default: 6784
+        public: 80
+
+pod:
+  replicas:
+    api: 2
+    wsproxy: 1
+  lifecycle:
+    upgrades:
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 1
+          max_surge: 1
+      daemonsets:
+        pod_replacement_strategy: RollingUpdate
+        zun_compute:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+        zun_cni_daemon:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+  security_context:
+    zun_api:
+      pod:
+        runAsUser: 42424
+      container:
+        zun_api:
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+    zun_compute:
+      pod:
+        runAsUser: 0
+      container:
+        zun_compute:
+          readOnlyRootFilesystem: false
+          privileged: true
+          allowPrivilegeEscalation: true
+    zun_cni_daemon:
+      pod:
+        runAsUser: 0
+      container:
+        zun_cni_daemon:
+          readOnlyRootFilesystem: false
+          privileged: true
+          allowPrivilegeEscalation: true
+    zun_wsproxy:
+      pod:
+        runAsUser: 42424
+      container:
+        zun_wsproxy:
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+  mounts:
+    zun_api:
+      init_container: null
+      zun_api:
+        volumes:
+        volumeMounts:
+    zun_compute:
+      init_container: null
+      zun_compute:
+        volumes:
+          - name: docker-socket
+            hostPath:
+              path: /var/run/docker.sock
+          - name: docker-binary
+            hostPath:
+              path: /usr/bin/docker
+          - name: dev
+            hostPath:
+              path: /dev
+          - name: sys-fs-cgroup
+            hostPath:
+              path: /sys/fs/cgroup
+          - name: var-lib-docker
+            hostPath:
+              path: /var/lib/docker
+        volumeMounts:
+          - name: docker-socket
+            mountPath: /var/run/docker.sock
+          - name: docker-binary
+            mountPath: /usr/bin/docker
+          - name: dev
+            mountPath: /dev
+          - name: sys-fs-cgroup
+            mountPath: /sys/fs/cgroup
+          - name: var-lib-docker
+            mountPath: /var/lib/docker
+    zun_cni_daemon:
+      init_container: null
+      zun_cni_daemon:
+        volumes:
+          - name: run
+            hostPath:
+              path: /run
+          - name: var-lib-docker
+            hostPath:
+              path: /var/lib/docker
+          - name: etc-cni
+            hostPath:
+              path: /etc/cni
+          - name: opt-cni-bin
+            hostPath:
+              path: /opt/cni/bin
+        volumeMounts:
+          - name: run
+            mountPath: /run
+          - name: var-lib-docker
+            mountPath: /var/lib/docker
+          - name: etc-cni
+            mountPath: /etc/cni
+          - name: opt-cni-bin
+            mountPath: /opt/cni/bin
+    zun_wsproxy:
+      init_container: null
+      zun_wsproxy:
+        volumes:
+        volumeMounts:
+  tolerations:
+    zun:
+      enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+
+resources:
+  enabled: false
+  api:
+    requests:
+      memory: "256Mi"
+      cpu: "500m"
+    limits:
+      memory: "1024Mi"
+      cpu: "2000m"
+  compute:
+    requests:
+      memory: "512Mi"
+      cpu: "1000m"
+    limits:
+      memory: "2048Mi"
+      cpu: "4000m"
+  cni_daemon:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+  wsproxy:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "1000m"
+  jobs:
+    db_init:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    db_sync:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    ks_user:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    ks_service:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    ks_endpoints:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - zun-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    api:
+      jobs:
+        - zun-db-sync
+        - zun-ks-user
+        - zun-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    compute:
+      jobs:
+        - zun-db-sync
+        - zun-ks-user
+        - zun-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    cni_daemon:
+      jobs:
+        - zun-ks-user
+      services:
+        - endpoint: internal
+          service: identity
+    wsproxy:
+      jobs:
+        - zun-ks-user
+      services:
+        - endpoint: internal
+          service: identity
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_sync:
+      jobs:
+        - zun-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_endpoints:
+      jobs:
+        - zun-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+
+conf:
+  zun:
+    DEFAULT:
+      debug: true
+      log_dir: /var/log/zun
+      host: zun-compute
+      container_driver: docker.driver.DockerDriver
+      rpc_response_timeout: 60
+      transport_url: null
+    api:
+      host_ip: 0.0.0.0
+      port: 9517
+      workers: 4
+    compute:
+      host_shared_with_nova: false
+    database:
+      connection: null
+      max_retries: -1
+    keystone_auth:
+      auth_type: password
+      auth_version: v3
+      memcache_use_advanced_pool: true
+    keystone_authtoken:
+      auth_type: password
+      auth_version: v3
+      memcache_use_advanced_pool: true
+      memcached_servers: null
+    oslo_messaging_notifications:
+      driver: noop
+    oslo_messaging_rabbit:
+      heartbeat_in_pthread: true
+      rabbit_quorum_queue: false
+    websocket_proxy:
+      wsproxy_host: 0.0.0.0
+      wsproxy_port: 6784
+      base_url: ws://localhost:6784/
+    neutron:
+      endpoint_type: internal
+    nova:
+      endpoint_type: internal
+    glance:
+      endpoint_type: internal
+    cinder:
+      endpoint_type: internal
+    docker:
+      docker_remote_api_version: 1.44
+      docker_remote_api_host: unix:///var/run/docker.sock
+      sandbox_image: "k8s.gcr.io/pause:3.2"
+      sandbox_image_driver: docker
+      sandbox_image_pull_policy: ifnotpresent
+    cni:
+      cni_config_dir: /etc/cni/net.d
+      cni_bin_dir: /opt/cni/bin
+      cni_default_network: ""
+    network:
+      driver: kuryr
+  zun_api_paste:
+    composite:main:
+      use: "egg:Paste#urlmap"
+      /: zun_api_v1
+      /v1: zun_api_v1
+    app:zun_api_v1:
+      paste.app_factory: "zun.api.app:app_factory"
+    filter:authtoken:
+      paste.filter_factory: "keystonemiddleware.auth_token:filter_factory"
+    filter:request_id:
+      paste.filter_factory: "oslo_middleware.request_id:RequestIdMiddleware.factory"
+    filter:cors:
+      paste.filter_factory: "oslo_middleware.cors:filter_factory"
+      oslo_config_project: zun
+    pipeline:zun_api_v1:
+      pipeline: "cors request_id authtoken zun_api_v1"
+  logging:
+    loggers:
+      keys:
+        - root
+        - zun
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: "null"
+    logger_zun:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: zun
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: "()"
+    handler_stdout:
+      class: StreamHandler
+      args: "(sys.stdout,)"
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: "(sys.stderr,)"
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+      datefmt: "%Y-%m-%d %H:%M:%S"
+    formatter_default:
+      format: "%(message)s"
+      datefmt: "%Y-%m-%d %H:%M:%S"
+
+manifests:
+  certificates: false
+  configmap_bin: true
+  configmap_etc: true
+  daemonset_compute: true
+  daemonset_cni_daemon: true
+  deployment_api: true
+  deployment_wsproxy: true
+  ingress_api: true
+  ingress_wsproxy: true
+  job_bootstrap: false
+  job_db_init: true
+  job_db_sync: true
+  job_db_drop: false
+  job_image_repo_sync: true
+  job_ks_endpoints: true
+  job_ks_service: true
+  job_ks_user: true
+  pdb_api: true
+  secret_db: true
+  secret_keystone: true
+  secret_rabbitmq: true
+  service_api: true
+  service_ingress_api: true
+  service_ingress_wsproxy: true
+  service_wsproxy: true
+  network_policy: false
+
+volume:
+  chown_on_start: true
+  enabled: true
+  class_name: general
+  size: 5Gi

@@ -1,0 +1,101 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- define "zun.configmap.etc" }}
+{{- $configMapName := index . 0 }}
+{{- $envAll := index . 1 }}
+{{- with $envAll }}
+
+{{- if empty .Values.conf.zun.database.connection -}}
+{{- $connection := tuple "oslo_db" "internal" "zun" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" -}}
+{{- if .Values.manifests.certificates -}}
+{{- $_ := (printf "%s?charset=utf8&ssl_ca=/etc/mysql/certs/ca.crt&ssl_key=/etc/mysql/certs/tls.key&ssl_cert=/etc/mysql/certs/tls.crt&ssl_verify_cert" $connection ) | set .Values.conf.zun.database "connection" -}}
+{{- else -}}
+{{- $_ := set .Values.conf.zun.database "connection" $connection -}}
+{{- end -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.DEFAULT.transport_url -}}
+{{- $_ := tuple "oslo_messaging" "internal" "zun" "amqp" . | include "helm-toolkit.endpoints.authenticated_transport_endpoint_uri_lookup" | set .Values.conf.zun.DEFAULT "transport_url" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.keystone_authtoken.memcached_servers -}}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set .Values.conf.zun.keystone_authtoken "memcached_servers" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.keystone_authtoken.www_authenticate_uri -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.zun.keystone_authtoken "www_authenticate_uri" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.keystone_authtoken.auth_url -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.zun.keystone_authtoken "auth_url" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.keystone_authtoken.region_name -}}
+{{- $_ := set .Values.conf.zun.keystone_authtoken "region_name" .Values.endpoints.identity.auth.zun.region_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_authtoken.project_name -}}
+{{- $_ := set .Values.conf.zun.keystone_authtoken "project_name" .Values.endpoints.identity.auth.zun.project_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_authtoken.project_domain_name -}}
+{{- $_ := set .Values.conf.zun.keystone_authtoken "project_domain_name" .Values.endpoints.identity.auth.zun.project_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_authtoken.user_domain_name -}}
+{{- $_ := set .Values.conf.zun.keystone_authtoken "user_domain_name" .Values.endpoints.identity.auth.zun.user_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_authtoken.username -}}
+{{- $_ := set .Values.conf.zun.keystone_authtoken "username" .Values.endpoints.identity.auth.zun.username -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_authtoken.password -}}
+{{- $_ := set .Values.conf.zun.keystone_authtoken "password" .Values.endpoints.identity.auth.zun.password -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.keystone_auth.auth_url -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.zun.keystone_auth "auth_url" -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_auth.region_name -}}
+{{- $_ := set .Values.conf.zun.keystone_auth "region_name" .Values.endpoints.identity.auth.zun.region_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_auth.project_name -}}
+{{- $_ := set .Values.conf.zun.keystone_auth "project_name" .Values.endpoints.identity.auth.zun.project_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_auth.project_domain_name -}}
+{{- $_ := set .Values.conf.zun.keystone_auth "project_domain_name" .Values.endpoints.identity.auth.zun.project_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_auth.user_domain_name -}}
+{{- $_ := set .Values.conf.zun.keystone_auth "user_domain_name" .Values.endpoints.identity.auth.zun.user_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_auth.username -}}
+{{- $_ := set .Values.conf.zun.keystone_auth "username" .Values.endpoints.identity.auth.zun.username -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_auth.password -}}
+{{- $_ := set .Values.conf.zun.keystone_auth "password" .Values.endpoints.identity.auth.zun.password -}}
+{{- end -}}
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $configMapName }}
+type: Opaque
+data:
+  zun.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.zun | b64enc }}
+  api-paste.ini: {{ include "helm-toolkit.utils.to_ini" .Values.conf.zun_api_paste | b64enc }}
+  logging.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.logging | b64enc }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.manifests.configmap_etc }}
+{{- list "zun-etc" . | include "zun.configmap.etc" }}
+{{- end }}

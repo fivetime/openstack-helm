@@ -1,0 +1,135 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.daemonset_cni_daemon }}
+{{- $envAll := . }}
+
+{{- $mounts_zun_cni_daemon := .Values.pod.mounts.zun_cni_daemon.zun_cni_daemon }}
+{{- $mounts_zun_cni_daemon_init := .Values.pod.mounts.zun_cni_daemon.init_container }}
+
+{{- $serviceAccountName := "zun-cni-daemon" }}
+{{ tuple $envAll "cni-daemon" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: zun-cni-daemon
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "zun" "cni-daemon" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll "zun" "cni-daemon" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll "cni_daemon" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "zun" "cni-daemon" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "zun_cni_daemon" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "zun_cni_daemon" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.cni_daemon.node_selector_key }}: {{ .Values.labels.cni_daemon.node_selector_value }}
+{{- if .Values.pod.tolerations.zun.enabled }}
+{{ tuple $envAll "zun" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{- end }}
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.cni_daemon.timeout | default "600" }}
+      initContainers:
+{{ tuple $envAll "cni-daemon" $mounts_zun_cni_daemon_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: zun-cni-daemon
+{{ tuple $envAll "zun_cni_daemon" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.cni_daemon | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "zun_cni_daemon" "container" "zun_cni_daemon" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/zun-cni-daemon.sh
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: pod-var-zun
+              mountPath: /var/lib/zun
+            - name: pod-var-log
+              mountPath: /var/log
+            - name: zun-bin
+              mountPath: /tmp/zun-cni-daemon.sh
+              subPath: zun-cni-daemon.sh
+              readOnly: true
+            - name: zun-etc
+              mountPath: /etc/zun/zun.conf
+              subPath: zun.conf
+              readOnly: true
+            - name: zun-etc
+              mountPath: /etc/zun/logging.conf
+              subPath: logging.conf
+              readOnly: true
+            # CNI related mounts
+            - name: run
+              mountPath: /run
+            - name: var-lib-docker
+              mountPath: /var/lib/docker
+            - name: etc-cni
+              mountPath: /etc/cni
+            - name: opt-cni-bin
+              mountPath: /opt/cni/bin
+            - name: var-lib-cni
+              mountPath: /var/lib/cni
+{{ if $mounts_zun_cni_daemon.volumeMounts }}{{ toYaml $mounts_zun_cni_daemon.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: pod-var-zun
+          emptyDir: {}
+        - name: pod-var-log
+          emptyDir: {}
+        - name: zun-bin
+          configMap:
+            name: zun-bin
+            defaultMode: 0555
+        - name: zun-etc
+          secret:
+            secretName: zun-etc
+            defaultMode: 0444
+        # Host mounts for CNI
+        - name: run
+          hostPath:
+            path: /run
+        - name: var-lib-docker
+          hostPath:
+            path: /var/lib/docker
+        - name: etc-cni
+          hostPath:
+            path: /etc/cni
+        - name: opt-cni-bin
+          hostPath:
+            path: /opt/cni/bin
+        - name: var-lib-cni
+          hostPath:
+            path: /var/lib/cni
+{{ if $mounts_zun_cni_daemon.volumes }}{{ toYaml $mounts_zun_cni_daemon.volumes | indent 8 }}{{ end }}
+{{- end }}

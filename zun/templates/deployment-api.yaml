@@ -1,0 +1,118 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.deployment_api }}
+{{- $envAll := . }}
+
+{{- $mounts_zun_api := .Values.pod.mounts.zun_api.zun_api }}
+{{- $mounts_zun_api_init := .Values.pod.mounts.zun_api.init_container }}
+
+{{- $serviceAccountName := "zun-api" }}
+{{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zun-api
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  replicas: {{ .Values.pod.replicas.api }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "zun_api" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "zun_api" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
+{{- if .Values.pod.tolerations.zun.enabled }}
+{{ tuple $envAll "zun" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{- end }}
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "600" }}
+      initContainers:
+{{ tuple $envAll "api" $mounts_zun_api_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: zun-api
+{{ tuple $envAll "zun_api" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.api | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "zun_api" "container" "zun_api" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/zun-api.sh
+          ports:
+            - name: zun-api
+              containerPort: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+          readinessProbe:
+            httpGet:
+              scheme: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_scheme_lookup" | upper }}
+              path: /
+              port: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              scheme: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_scheme_lookup" | upper }}
+              path: /
+              port: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+            initialDelaySeconds: 50
+            periodSeconds: 10
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: pod-var-zun
+              mountPath: /var/lib/zun
+            - name: zun-bin
+              mountPath: /tmp/zun-api.sh
+              subPath: zun-api.sh
+              readOnly: true
+            - name: zun-etc
+              mountPath: /etc/zun/zun.conf
+              subPath: zun.conf
+              readOnly: true
+            - name: zun-etc
+              mountPath: /etc/zun/api-paste.ini
+              subPath: api-paste.ini
+              readOnly: true
+            - name: zun-etc
+              mountPath: /etc/zun/logging.conf
+              subPath: logging.conf
+              readOnly: true
+{{ if $mounts_zun_api.volumeMounts }}{{ toYaml $mounts_zun_api.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: pod-var-zun
+          emptyDir: {}
+        - name: zun-bin
+          configMap:
+            name: zun-bin
+            defaultMode: 0555
+        - name: zun-etc
+          secret:
+            secretName: zun-etc
+            defaultMode: 0444
+{{ if $mounts_zun_api.volumes }}{{ toYaml $mounts_zun_api.volumes | indent 8 }}{{ end }}
+{{- end }}

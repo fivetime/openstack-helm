@@ -25,9 +25,9 @@ spec:
   clusterIP: None
   ports:
     - name: kuryr-api
-      port: 23750
+      port: {{ .Values.network.kuryr.bind_port }}
       protocol: TCP
-      targetPort: 23750
+      targetPort: {{ .Values.network.kuryr.bind_port }}
   selector:
 {{ tuple . "kuryr" "libnetwork" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 {{- end }}

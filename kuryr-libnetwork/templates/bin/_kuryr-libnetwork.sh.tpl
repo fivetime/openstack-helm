@@ -31,22 +31,36 @@ if [[ ! -d "${KURYR_DOCKER_PLUGINS_DIR}" ]]; then
     mkdir -p ${KURYR_DOCKER_PLUGINS_DIR}
 fi
 
+BIND_HOST="{{ .Values.network.kuryr.bind_host }}"
+BIND_PORT="{{ .Values.network.kuryr.bind_port }}"
+UWSGI_PROCESSES="{{ .Values.network.kuryr.uwsgi_processes }}"
+
+echo "=== Kuryr uwsgi Configuration ==="
+echo "Bind Host: ${BIND_HOST}"
+echo "Bind Port: ${BIND_PORT}"
+echo "Processes: ${UWSGI_PROCESSES}"
+
 # Create kuryr spec file for Docker
 cat > ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec << EOF
-http://127.0.0.1:23750
+http://127.0.0.1:${BIND_PORT}
 EOF
 
 echo "Created kuryr spec file at ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec"
-cat ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec
 
 # Add kolla venv to PATH
 export PATH="/var/lib/kolla/venv/bin:$PATH"
 
-# Start kuryr-server (the actual kuryr-libnetwork service)
-echo "Starting kuryr-server..."
+if ! command -v uwsgi >/dev/null 2>&1; then
+    echo "ERROR: uwsgi is required but not found in PATH"
+    echo "Please ensure uwsgi is installed in the container image"
+    exit 1
+fi
 
-# 设置Flask环境变量来控制监听地址和端口
-export FLASK_RUN_HOST=0.0.0.0
-export FLASK_RUN_PORT=23750
-
-exec kuryr-server --config-file /etc/kuryr/kuryr.conf
+echo "Starting kuryr via uwsgi..."
+exec uwsgi \
+    --http-socket ${BIND_HOST}:${BIND_PORT} \
+    -w kuryr_libnetwork.server:app \
+    --master \
+    --processes ${UWSGI_PROCESSES} \
+    --die-on-term \
+    --lazy-apps

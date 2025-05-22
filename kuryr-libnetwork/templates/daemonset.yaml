@@ -82,13 +82,13 @@ spec:
             - /tmp/kuryr-libnetwork.sh
           ports:
             - name: kuryr-api
-              containerPort: 23750
-              hostPort: 23750
+              containerPort: {{ .Values.network.kuryr.bind_port }}
+              hostPort: {{ .Values.network.kuryr.bind_port }}
               protocol: TCP
           livenessProbe:
             httpGet:
               path: /
-              port: 23750
+              port: {{ .Values.network.kuryr.bind_port }}
             initialDelaySeconds: 30
             timeoutSeconds: 30
             failureThreshold: 3
@@ -96,7 +96,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /
-              port: 23750
+              port: {{ .Values.network.kuryr.bind_port }}
             initialDelaySeconds: 15
             timeoutSeconds: 15
           volumeMounts:

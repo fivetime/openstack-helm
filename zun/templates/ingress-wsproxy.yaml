@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.ingress_wsproxy .Values.network.wsproxy.ingress.public }}
+{{- if and .Values.manifests.ingress_wsproxy .Values.network.websocket_proxy.ingress.public }}
 {{- $envAll := . -}}
 {{- $ingressOpts := dict "envAll" $envAll "backendService" "websocket_proxy" "backendServiceType" "websocket_proxy" "backendPort" "wsproxy" -}}
 {{- $secretName := $envAll.Values.secrets.tls.websocket_proxy.public -}}

@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.service_ingress_wsproxy .Values.network.wsproxy.ingress.public }}
+{{- if and .Values.manifests.service_ingress_wsproxy .Values.network.websocket_proxy.ingress.public }}
 {{- $serviceIngressOpts := dict "envAll" . "backendServiceType" "websocket_proxy" -}}
 {{ $serviceIngressOpts | include "helm-toolkit.manifests.service_ingress" }}
 {{- end }}

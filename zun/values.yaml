@@ -244,6 +244,18 @@ pod:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
+    disruption_budget:
+      api:
+        max_unavailable: 1
+    termination_grace_period:
+      api:
+        timeout: 600
+      wsproxy:
+        timeout: 600
+      compute:
+        timeout: 600
+      cni_daemon:
+        timeout: 600
   security_context:
     zun_api:
       pod:

@@ -357,6 +357,16 @@ endpoints:
     port:
       registry:
         node: 5000
+  oslo_cache:
+    auth:
+      memcache_secret_key: null
+    hosts:
+      default: memcached
+    host_fqdn_override:
+      default: null
+    port:
+      memcache:
+        default: 11211
   oslo_db:
     auth:
       admin:

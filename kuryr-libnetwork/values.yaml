@@ -57,6 +57,9 @@ network:
     bind_port: 23750
     uwsgi_processes: 2
     uwsgi_threads: 1
+    sriov:
+      enabled: false
+      supported_vnic_types: "normal,direct,direct-physical,macvtap"
 
 endpoints:
   cluster_domain_suffix: cluster.local
@@ -122,7 +125,21 @@ pod:
       init_container: null
       kuryr:
         volumes:
+          - name: sys-bus-pci
+            hostPath:
+              path: /sys/bus/pci
+              type: Directory
+          - name: sys-class-net
+            hostPath:
+              path: /sys/class/net
+              type: Directory
         volumeMounts:
+          - name: sys-bus-pci
+            mountPath: /sys/bus/pci
+            readOnly: true
+          - name: sys-class-net
+            mountPath: /sys/class/net
+            readOnly: true
   tolerations:
     kuryr:
       enabled: false
@@ -178,14 +195,18 @@ conf:
   kuryr:
     DEFAULT:
       debug: false
+      enabled_port_drivers:
+        - kuryr_libnetwork.port_driver.drivers.veth
       bindir: /usr/libexec/kuryr
       log_dir: /var/log/kolla/kuryr
     neutron:
       project_name: service
       auth_type: password
     binding:
-      driver: kuryr.lib.binding.drivers.veth
       link_iface: eth0
+      enabled_drivers:
+        - kuryr.lib.binding.drivers.veth
+        - kuryr.lib.binding.drivers.hw_veb
     oslo_concurrency:
       lock_path: /var/lib/kuryr/tmp
 

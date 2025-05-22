@@ -50,6 +50,14 @@ limitations under the License.
 {{- $_ := tuple "network" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.kuryr.neutron "endpoint_url" -}}
 {{- end -}}
 
+{{/* SR-IOV configuration logic */}}
+{{- if .Values.network.kuryr.sriov.enabled -}}
+{{- $enabledPortDrivers := list -}}
+{{- $enabledPortDrivers = append $enabledPortDrivers "kuryr_libnetwork.port_driver.drivers.veth" -}}
+{{- $enabledPortDrivers = append $enabledPortDrivers "kuryr_libnetwork.port_driver.drivers.sriov" -}}
+{{- $setPortDrivers := set .Values.conf.kuryr.DEFAULT "enabled_port_drivers" $enabledPortDrivers -}}
+{{- end -}}
+
 ---
 apiVersion: v1
 kind: Secret

@@ -173,15 +173,20 @@ dependencies:
 conf:
   kuryr:
     DEFAULT:
+      debug: true
       bindir: /usr/libexec/kuryr
       log_dir: /var/log/kolla/kuryr
-      debug: true
+      log_file: kuryr.log
     neutron:
       project_name: service
       auth_type: password
+      region_name: RegionOne
     binding:
       driver: kuryr.lib.binding.drivers.veth
       link_iface: eth0
+    kuryr_libnetwork:
+      server_host: 0.0.0.0
+      server_port: 23750
     oslo_concurrency:
       lock_path: /var/lib/kuryr/tmp
 

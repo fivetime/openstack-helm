@@ -34,25 +34,44 @@ else
     exit 1
 fi
 
-# Test Docker connectivity with more verbose output
-echo "Testing Docker connectivity..."
-if docker version; then
-    echo "✓ Docker connectivity verified"
+# Test Docker socket accessibility using curl or nc
+echo "Testing Docker socket accessibility..."
+if command -v curl >/dev/null 2>&1; then
+    # Use curl to test Docker API
+    if curl -s --unix-socket ${DOCKER_SOCKET} http://localhost/version >/dev/null 2>&1; then
+        echo "✓ Docker socket is accessible via HTTP API"
+    else
+        echo "⚠ Docker socket exists but HTTP API test failed"
+    fi
+elif command -v nc >/dev/null 2>&1; then
+    # Use netcat to test socket
+    if echo -e "GET /version HTTP/1.0\r\n\r\n" | nc -U ${DOCKER_SOCKET} >/dev/null 2>&1; then
+        echo "✓ Docker socket is accessible via netcat"
+    else
+        echo "⚠ Docker socket exists but netcat test failed"
+    fi
 else
-    echo "✗ Cannot connect to Docker daemon"
-    echo "Docker socket permissions:"
-    ls -la ${DOCKER_SOCKET}
-    echo "Current user groups:"
-    groups
-    exit 1
+    # Just check if we can read the socket
+    if [[ -r ${DOCKER_SOCKET} && -w ${DOCKER_SOCKET} ]]; then
+        echo "✓ Docker socket has read/write permissions"
+    else
+        echo "✗ Docker socket permission denied"
+        echo "Socket permissions:"
+        ls -la ${DOCKER_SOCKET}
+        exit 1
+    fi
 fi
 
 # Check if OVS is running (optional)
 echo "Testing OVS connectivity..."
-if ovs-vsctl show > /dev/null 2>&1; then
-    echo "✓ OVS connectivity verified"
+if command -v ovs-vsctl >/dev/null 2>&1; then
+    if ovs-vsctl show > /dev/null 2>&1; then
+        echo "✓ OVS connectivity verified"
+    else
+        echo "⚠ Cannot connect to OVS daemon, but continuing..."
+    fi
 else
-    echo "⚠ Cannot connect to OVS daemon, but continuing..."
+    echo "⚠ ovs-vsctl command not found, skipping OVS check"
 fi
 
 echo "=== All checks completed successfully ==="

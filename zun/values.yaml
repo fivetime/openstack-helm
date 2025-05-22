@@ -90,7 +90,7 @@ network:
     node_port:
       enabled: false
       port: 30960
-  wsproxy:
+  container:
     ingress:
       public: true
       classes:
@@ -98,14 +98,10 @@ network:
         cluster: "nginx-cluster"
       annotations:
         nginx.ingress.kubernetes.io/rewrite-target: /
-        nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-        nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-        nginx.ingress.kubernetes.io/connection-proxy-header: "upgrade"
-        nginx.ingress.kubernetes.io/upgrade-header: "websocket"
     external_policy_local: false
     node_port:
       enabled: false
-      port: 30961
+      port: 30960
   websocket_proxy:
     ingress:
       public: true
@@ -122,145 +118,6 @@ network:
     node_port:
       enabled: false
       port: 30962
-
-endpoints:
-  cluster_domain_suffix: cluster.local
-  local_image_registry:
-    name: glance
-    namespace: openstack
-    hosts:
-      default: localhost
-      internal: glance-reg
-      node: localhost
-    host_fqdn_override:
-      default: null
-    port:
-      registry:
-        node: 5000
-  oslo_db:
-    auth:
-      admin:
-        username: root
-        password: password
-        secret:
-          tls:
-            internal: mariadb-tls-direct
-      zun:
-        username: zun
-        password: password
-    hosts:
-      default: mariadb
-    host_fqdn_override:
-      default: null
-    path: /zun
-    scheme:
-      default: mysql+pymysql
-      zun: mysql
-    port:
-      mysql:
-        default: 3306
-  oslo_messaging:
-    auth:
-      admin:
-        username: rabbitmq
-        password: password
-      zun:
-        username: zun
-        password: password
-    statefulset:
-      replicas: 2
-      name: rabbitmq-rabbitmq
-    hosts:
-      default: rabbitmq
-    host_fqdn_override:
-      default: null
-    path: /zun
-    scheme:
-      default: rabbit
-    port:
-      amqp:
-        default: 5672
-      http:
-        default: 15672
-  identity:
-    name: keystone
-    auth:
-      admin:
-        region_name: RegionOne
-        username: admin
-        password: password
-        project_name: admin
-        user_domain_name: default
-        project_domain_name: default
-      zun:
-        role: admin
-        region_name: RegionOne
-        username: zun
-        password: password
-        project_name: service
-        user_domain_name: service
-        project_domain_name: service
-    hosts:
-      default: keystone
-      internal: keystone-api
-    host_fqdn_override:
-      default: null
-    path:
-      default: /v3
-    scheme:
-      default: http
-    port:
-      api:
-        default: 80
-        internal: 5000
-  container:
-    name: zun
-    auth:
-      admin:
-        region_name: RegionOne
-        username: admin
-        password: password
-        project_name: admin
-        user_domain_name: default
-        project_domain_name: default
-      zun:
-        role: admin
-        region_name: RegionOne
-        username: zun
-        password: password
-        project_name: service
-        user_domain_name: service
-        project_domain_name: service
-    hosts:
-      default: zun-api
-      public: zun
-    host_fqdn_override:
-      default: null
-    path:
-      default: /
-    scheme:
-      default: 'http'
-      service: 'http'
-    port:
-      api:
-        default: 9517
-        public: 80
-  websocket_proxy:
-    name: zun-wsproxy
-    hosts:
-      default: zun-wsproxy
-      public: zun-wsproxy
-    host_fqdn_override:
-      default: null
-    path:
-      default: /
-    scheme:
-      default: 'http'
-      service: 'http'
-    port:
-      wsproxy:
-        default: 6784
-        public: 80
 
 pod:
   replicas:
@@ -469,6 +326,145 @@ pod:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
+
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: glance
+    namespace: openstack
+    hosts:
+      default: localhost
+      internal: glance-reg
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  oslo_db:
+    auth:
+      admin:
+        username: root
+        password: password
+        secret:
+          tls:
+            internal: mariadb-tls-direct
+      zun:
+        username: zun
+        password: password
+    hosts:
+      default: mariadb
+    host_fqdn_override:
+      default: null
+    path: /zun
+    scheme:
+      default: mysql+pymysql
+      zun: mysql
+    port:
+      mysql:
+        default: 3306
+  oslo_messaging:
+    auth:
+      admin:
+        username: rabbitmq
+        password: password
+      zun:
+        username: zun
+        password: password
+    statefulset:
+      replicas: 2
+      name: rabbitmq-rabbitmq
+    hosts:
+      default: rabbitmq
+    host_fqdn_override:
+      default: null
+    path: /zun
+    scheme:
+      default: rabbit
+    port:
+      amqp:
+        default: 5672
+      http:
+        default: 15672
+  identity:
+    name: keystone
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      zun:
+        role: admin
+        region_name: RegionOne
+        username: zun
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: keystone
+      internal: keystone-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+  container:
+    name: zun
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      zun:
+        role: admin
+        region_name: RegionOne
+        username: zun
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: zun-api
+      public: zun
+    host_fqdn_override:
+      default: null
+    path:
+      default: /
+    scheme:
+      default: 'http'
+      service: 'http'
+    port:
+      api:
+        default: 9517
+        public: 80
+  websocket_proxy:
+    name: zun-wsproxy
+    hosts:
+      default: zun-wsproxy
+      public: zun-wsproxy
+    host_fqdn_override:
+      default: null
+    path:
+      default: /
+    scheme:
+      default: 'http'
+      service: 'http'
+    port:
+      wsproxy:
+        default: 6784
+        public: 80
 
 dependencies:
   dynamic:

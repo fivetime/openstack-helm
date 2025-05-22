@@ -566,7 +566,7 @@ dependencies:
 conf:
   zun:
     DEFAULT:
-      debug: true
+      debug: false
       log_dir: /var/log/zun
       host: zun-compute
       container_driver: docker.driver.DockerDriver

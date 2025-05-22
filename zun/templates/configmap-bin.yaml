@@ -27,9 +27,9 @@ data:
   db-init.py: |
 {{- include "helm-toolkit.scripts.db_init" . | indent 4 }}
   db-sync.sh: |
-{{- include "zun.bin.db_sync" . | indent 4 }}
-  db-drop.sh: |
-{{- include "zun.bin.db_drop" . | indent 4 }}
+{{ tuple "bin/_db-sync.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  db-drop.py: |
+{{- include "helm-toolkit.scripts.db_drop" . | indent 4 }}
   ks-user.sh: |
 {{- include "helm-toolkit.scripts.keystone_user" . | indent 4 }}
   ks-service.sh: |
@@ -37,11 +37,11 @@ data:
   ks-endpoints.sh: |
 {{- include "helm-toolkit.scripts.keystone_endpoints" . | indent 4 }}
   zun-api.sh: |
-{{- include "zun.bin.zun_api" . | indent 4 }}
+{{ tuple "bin/_zun-api.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   zun-compute.sh: |
-{{- include "zun.bin.zun_compute" . | indent 4 }}
+{{ tuple "bin/_zun-compute.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   zun-cni-daemon.sh: |
-{{- include "zun.bin.zun_cni_daemon" . | indent 4 }}
+{{ tuple "bin/_zun-cni-daemon.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   zun-wsproxy.sh: |
-{{- include "zun.bin.zun_wsproxy" . | indent 4 }}
+{{ tuple "bin/_zun-wsproxy.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- end }}

@@ -44,4 +44,9 @@ export PATH="/var/lib/kolla/venv/bin:$PATH"
 
 # Start kuryr-server (the actual kuryr-libnetwork service)
 echo "Starting kuryr-server..."
+
+# 设置Flask环境变量来控制监听地址和端口
+export FLASK_RUN_HOST=0.0.0.0
+export FLASK_RUN_PORT=23750
+
 exec kuryr-server --config-file /etc/kuryr/kuryr.conf

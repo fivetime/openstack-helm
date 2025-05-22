@@ -256,6 +256,72 @@ pod:
         timeout: 600
       cni_daemon:
         timeout: 600
+  resources:
+    enabled: false
+    api:
+      requests:
+        memory: "256Mi"
+        cpu: "500m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    compute:
+      requests:
+        memory: "512Mi"
+        cpu: "1000m"
+      limits:
+        memory: "2048Mi"
+        cpu: "4000m"
+    cni_daemon:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "1000m"
+    wsproxy:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "1000m"
+    jobs:
+      db_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_user:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_service:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_endpoints:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
   security_context:
     zun_api:
       pod:
@@ -363,73 +429,6 @@ pod:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
-
-resources:
-  enabled: false
-  api:
-    requests:
-      memory: "256Mi"
-      cpu: "500m"
-    limits:
-      memory: "1024Mi"
-      cpu: "2000m"
-  compute:
-    requests:
-      memory: "512Mi"
-      cpu: "1000m"
-    limits:
-      memory: "2048Mi"
-      cpu: "4000m"
-  cni_daemon:
-    requests:
-      memory: "128Mi"
-      cpu: "100m"
-    limits:
-      memory: "512Mi"
-      cpu: "1000m"
-  wsproxy:
-    requests:
-      memory: "128Mi"
-      cpu: "100m"
-    limits:
-      memory: "512Mi"
-      cpu: "1000m"
-  jobs:
-    db_init:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "1024Mi"
-        cpu: "2000m"
-    db_sync:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "1024Mi"
-        cpu: "2000m"
-    ks_user:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "1024Mi"
-        cpu: "2000m"
-    ks_service:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "1024Mi"
-        cpu: "2000m"
-    ks_endpoints:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "1024Mi"
-        cpu: "2000m"
 
 dependencies:
   dynamic:

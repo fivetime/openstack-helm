@@ -26,9 +26,9 @@ helm3_hook: true
 images:
   pull_policy: IfNotPresent
   tags:
-    kuryr_libnetwork: kolla/kuryr-libnetwork:2025.1-ubuntu-noble
-    dep_check: 'quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy'
     ks_user: quay.io/airshipit/heat:2025.1-ubuntu_jammy
+    kuryr_libnetwork: docker.io/kolla/kuryr-libnetwork:2025.1-ubuntu-noble
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
   local_registry:
     active: false
     exclude:
@@ -189,8 +189,8 @@ manifests:
   certificates: false
   configmap_etc: true
   configmap_bin: true
-  daemonset: true
   secret_keystone: true
   job_ks_user: true
+  daemonset: true
   service: true
 ...

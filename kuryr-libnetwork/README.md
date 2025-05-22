@@ -62,9 +62,9 @@ conf:
 
 ### 3. 部署Chart
 ```bash
-helm install kuryr-libnetwork ./kuryr-libnetwork \
-  --namespace openstack \
-  --values values-override.yaml
+helm upgrade --install horizon openstack-helm/kuryr-libnetwork \
+    --namespace=openstack \
+    $(helm osh get-values-overrides -p ${OVERRIDES_DIR} -c kuryr-libnetwork values-override ${FEATURES})
 ```
 
 ## 验证安装
@@ -131,9 +131,9 @@ docker network create --driver=kuryr test-network
 ## 升级
 
 ```bash
-helm upgrade kuryr-libnetwork ./kuryr-libnetwork \
-  --namespace openstack \
-  --values values-override.yaml
+helm upgrade --install horizon openstack-helm/kuryr-libnetwork \
+    --namespace=openstack \
+    $(helm osh get-values-overrides -p ${OVERRIDES_DIR} -c kuryr-libnetwork values-override ${FEATURES})
 ```
 
 ## 卸载

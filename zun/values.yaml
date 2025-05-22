@@ -195,11 +195,29 @@ endpoints:
         internal: 5000
   container:
     name: zun
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      zun:
+        role: admin
+        region_name: RegionOne
+        username: zun
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
     hosts:
       default: zun-api
       public: zun
     host_fqdn_override:
       default: null
+    path:
+      default: /
     scheme:
       default: 'http'
       service: 'http'
@@ -214,6 +232,8 @@ endpoints:
       public: zun-wsproxy
     host_fqdn_override:
       default: null
+    path:
+      default: /
     scheme:
       default: 'http'
       service: 'http'

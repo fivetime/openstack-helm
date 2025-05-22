@@ -58,6 +58,9 @@ spec:
         - name: kuryr-docker-check
 {{ tuple $envAll "kuryr_libnetwork" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ dict "envAll" $envAll "application" "kuryr" "container" "kuryr" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          env:
+            - name: DOCKER_HOST
+              value: "unix:///var/run/docker.sock"
           command:
             - /tmp/docker-check.sh
           volumeMounts:

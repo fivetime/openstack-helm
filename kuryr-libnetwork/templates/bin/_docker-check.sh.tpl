@@ -16,24 +16,43 @@ limitations under the License.
 
 set -ex
 
-# Check if Docker socket is accessible
+# Debug information
+echo "=== Docker Check Debug Info ==="
+echo "Current user: $(whoami)"
+echo "Current UID: $(id -u)"
+echo "Docker socket path: {{ .Values.network.kuryr.docker_socket_path }}"
+
+# Check if Docker socket exists
 DOCKER_SOCKET={{ .Values.network.kuryr.docker_socket_path }}
-if [[ ! -S ${DOCKER_SOCKET} ]]; then
-    echo "ERROR: Docker socket not found at ${DOCKER_SOCKET}"
-    exit 1
-fi
-
-# Test Docker connectivity
-if ! docker version > /dev/null 2>&1; then
-    echo "ERROR: Cannot connect to Docker daemon"
-    exit 1
-fi
-
-echo "Docker connectivity verified"
-
-# Check if OVS is running
-if ! ovs-vsctl show > /dev/null 2>&1; then
-    echo "WARNING: Cannot connect to OVS daemon, but continuing..."
+if [[ -S ${DOCKER_SOCKET} ]]; then
+    echo "✓ Docker socket exists at ${DOCKER_SOCKET}"
+    ls -la ${DOCKER_SOCKET}
 else
-    echo "OVS connectivity verified"
+    echo "✗ Docker socket not found at ${DOCKER_SOCKET}"
+    echo "Contents of /var/run/:"
+    ls -la /var/run/ | head -10
+    exit 1
 fi
+
+# Test Docker connectivity with more verbose output
+echo "Testing Docker connectivity..."
+if docker version; then
+    echo "✓ Docker connectivity verified"
+else
+    echo "✗ Cannot connect to Docker daemon"
+    echo "Docker socket permissions:"
+    ls -la ${DOCKER_SOCKET}
+    echo "Current user groups:"
+    groups
+    exit 1
+fi
+
+# Check if OVS is running (optional)
+echo "Testing OVS connectivity..."
+if ovs-vsctl show > /dev/null 2>&1; then
+    echo "✓ OVS connectivity verified"
+else
+    echo "⚠ Cannot connect to OVS daemon, but continuing..."
+fi
+
+echo "=== All checks completed successfully ==="

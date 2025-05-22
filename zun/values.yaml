@@ -102,6 +102,22 @@ network:
     node_port:
       enabled: false
       port: 30960
+  wsproxy:
+    ingress:
+      public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
+      annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /
+        nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+        nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+        nginx.ingress.kubernetes.io/connection-proxy-header: "upgrade"
+        nginx.ingress.kubernetes.io/upgrade-header: "websocket"
+    external_policy_local: false
+    node_port:
+      enabled: false
+      port: 30961
   websocket_proxy:
     ingress:
       public: true

@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.ingress_api .Values.network.api.ingress.public }}
+{{- if and .Values.manifests.ingress_api .Values.network.container.ingress.public }}
 {{- $envAll := . -}}
 {{- $ingressOpts := dict "envAll" $envAll "backendService" "container" "backendServiceType" "container" "backendPort" "api" -}}
 {{- $secretName := $envAll.Values.secrets.tls.container.zun.public -}}

@@ -94,6 +94,10 @@ spec:
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp
+            - name: zun-logs
+              mountPath: /var/log/zun
+            - name: zun-lib
+              mountPath: /var/lib/zun
             - name: zun-bin
               mountPath: /tmp/zun-api.sh
               subPath: zun-api.sh
@@ -115,6 +119,10 @@ spec:
 {{ if $mounts_zun_api.volumeMounts }}{{ toYaml $mounts_zun_api.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: pod-tmp
+          emptyDir: {}
+        - name: zun-logs
+          emptyDir: {}
+        - name: zun-lib
           emptyDir: {}
         - name: zun-bin
           configMap:

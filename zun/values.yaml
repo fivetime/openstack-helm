@@ -35,20 +35,22 @@ helm3_hook: true
 images:
   pull_policy: IfNotPresent
   tags:
-    bootstrap: quay.io/airshipit/heat:2025.1-ubuntu_jammy
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
-    scripted_test: quay.io/airshipit/heat:2025.1-ubuntu_jammy
-    db_init: quay.io/airshipit/heat:2025.1-ubuntu_jammy
-    zun_db_sync: docker.io/kolla/zun-api:2025.1-ubuntu-noble
-    db_drop: quay.io/airshipit/heat:2025.1-ubuntu_jammy
-    ks_user: quay.io/airshipit/heat:2025.1-ubuntu_jammy
-    ks_service: quay.io/airshipit/heat:2025.1-ubuntu_jammy
-    ks_endpoints: quay.io/airshipit/heat:2025.1-ubuntu_jammy
+    bootstrap: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    db_init: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    db_drop: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    ks_user: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    ks_service: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    ks_endpoints: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    scripted_test: quay.io/airshipit/heat:2025.1-ubuntu_noble
+
     zun_api: docker.io/kolla/zun-api:2025.1-ubuntu-noble
+    zun_db_sync: docker.io/kolla/zun-api:2025.1-ubuntu-noble
+    zun_cni_daemon: docker.io/kolla/zun-cni-daemon:2025.1-ubuntu-noble
     zun_compute: docker.io/kolla/zun-compute:2025.1-ubuntu-noble
-    zun_cni_daemon: docker.io/kolla/zun-cni:2025.1-ubuntu-noble
     zun_wsproxy: docker.io/kolla/zun-wsproxy:2025.1-ubuntu-noble
+
     rabbit_init: docker.io/rabbitmq:3.13-management
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
   local_registry:
     active: false
     exclude:

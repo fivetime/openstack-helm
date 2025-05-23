@@ -16,8 +16,9 @@ limitations under the License.
 
 set -ex
 
-# Create log directory
+# Create necessary directories
 mkdir -p /var/log/zun
+mkdir -p /var/lib/zun
 
 exec zun-cni-daemon \
     --config-file /etc/zun/zun.conf

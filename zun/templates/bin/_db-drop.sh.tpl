@@ -16,27 +16,9 @@ limitations under the License.
 
 set -ex
 
-echo "WARNING: This will drop all Zun database tables!"
-echo "This operation cannot be undone."
-
-# Confirm database connection
-python3 -c "
-import sys
-from oslo_config import cfg
-from zun.conf import CONF
-
-cfg.CONF([], project='zun')
-
-db_url = CONF.database.connection
-if not db_url:
-    print('No database connection configured')
-    sys.exit(1)
-
-print(f'Database URL: {db_url}')
-"
-
-# Drop database tables
-echo "Dropping Zun database tables..."
-zun-db-manage drop_schema
-
-echo "Database drop completed"
+# This script will drop the database specified by environment variables
+mysql -h "${DB_HOST}" \
+      -P "${DB_PORT}" \
+      -u "${DB_ADMIN_USER}" \
+      -p"${DB_ADMIN_PASSWORD}" \
+      -e "DROP DATABASE IF EXISTS \`${DB_NAME}\`;"

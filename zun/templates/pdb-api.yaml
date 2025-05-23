@@ -19,14 +19,8 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: zun-api
-  labels:
-{{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
-{{- if (.Values.pod.lifecycle.disruption_budget.api).min_available }}
   minAvailable: {{ .Values.pod.lifecycle.disruption_budget.api.min_available }}
-{{- else }}
-  maxUnavailable: {{ .Values.pod.lifecycle.disruption_budget.api.max_unavailable | default 1 }}
-{{- end }}
   selector:
     matchLabels:
 {{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}

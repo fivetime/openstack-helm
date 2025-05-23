@@ -19,40 +19,26 @@ set -ex
 # Create log directory
 mkdir -p /var/log/zun
 
-# Set ownership and permissions
-chown zun:zun /var/log/zun
-chmod 755 /var/log/zun
-
-# Setup Docker group access
-if [ -S /var/run/docker.sock ]; then
-    echo "Setting up Docker socket access..."
-    gid=$(stat -c "%g" /var/run/docker.sock)
-
-    # Create docker group with the same GID as docker socket
-    if ! getent group docker > /dev/null 2>&1; then
-        groupadd --force --gid $gid docker
-    fi
-
-    # Add zun user to docker group
-    usermod -aG docker zun
-
-    # Verify docker access
-    if groups zun | grep -q docker; then
-        echo "Zun user successfully added to docker group"
-    else
-        echo "Warning: Failed to add zun user to docker group"
-    fi
-fi
-
 # Test Docker connectivity
 echo "Testing Docker connectivity..."
 if docker version > /dev/null 2>&1; then
-    echo "Docker connectivity test passed"
+    echo "✓ Docker connectivity verified"
+    docker version | head -5
 else
-    echo "Warning: Docker connectivity test failed"
+    echo "✗ Docker connectivity failed"
+    exit 1
 fi
 
-# Start the zun-compute service
+# Check for Kuryr network driver
+echo "Checking for Kuryr network driver..."
+if docker network ls --format "table {{.Driver}}" | grep -q kuryr; then
+    echo "✓ Kuryr network driver is available"
+    docker network ls | grep kuryr
+else
+    echo "⚠ Kuryr network driver not found, but continuing..."
+    echo "Available network drivers:"
+    docker network ls --format "table {{.Name}}\t{{.Driver}}"
+fi
+
 exec zun-compute \
-    --config-file /etc/zun/zun.conf \
-    --log-file /var/log/zun/zun-compute.log
+    --config-file /etc/zun/zun.conf

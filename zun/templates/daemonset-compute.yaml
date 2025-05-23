@@ -44,42 +44,38 @@ spec:
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "zun_compute" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
+{{ tuple "zun_compute" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "zun_compute" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
-{{ dict "envAll" $envAll "application" "zun_compute" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       nodeSelector:
         {{ .Values.labels.compute.node_selector_key }}: {{ .Values.labels.compute.node_selector_value }}
-{{- if .Values.pod.tolerations.zun.enabled }}
+{{ if $envAll.Values.pod.tolerations.zun.enabled }}
 {{ tuple $envAll "zun" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
-{{- end }}
+{{ end }}
       hostNetwork: true
       hostPID: true
       dnsPolicy: ClusterFirstWithHostNet
-      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.compute.timeout | default "600" }}
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.compute.timeout | default "60" }}
       initContainers:
 {{ tuple $envAll "compute" $mounts_zun_compute_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: zun-compute
 {{ tuple $envAll "zun_compute" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.compute | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
-{{ dict "envAll" $envAll "application" "zun_compute" "container" "zun_compute" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
-          command:
-            - /tmp/zun-compute.sh
+          securityContext:
+            privileged: true
+            runAsUser: 0
+            readOnlyRootFilesystem: false
           env:
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
+          command:
+            - /tmp/zun-compute.sh
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp
-            - name: pod-var-zun
-              mountPath: /var/lib/zun
-            - name: pod-var-log
-              mountPath: /var/log
             - name: zun-bin
               mountPath: /tmp/zun-compute.sh
               subPath: zun-compute.sh
@@ -88,35 +84,32 @@ spec:
               mountPath: /etc/zun/zun.conf
               subPath: zun.conf
               readOnly: true
+            {{- if .Values.conf.zun.DEFAULT.log_config_append }}
             - name: zun-etc
-              mountPath: /etc/zun/logging.conf
-              subPath: logging.conf
+              mountPath: {{ .Values.conf.zun.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.zun.DEFAULT.log_config_append }}
               readOnly: true
-            # Docker socket and related mounts
+            {{- end }}
+            - name: zun-etc
+              mountPath: /etc/zun/policy.yaml
+              subPath: policy.yaml
+              readOnly: true
             - name: docker-socket
               mountPath: /var/run/docker.sock
-            - name: docker-binary
-              mountPath: /usr/bin/docker
-              readOnly: true
-            - name: dev
+            - name: host-var-lib-zun
+              mountPath: /var/lib/zun
+            - name: host-var-log
+              mountPath: /var/log
+            - name: host-dev
               mountPath: /dev
-            - name: sys-fs-cgroup
-              mountPath: /sys/fs/cgroup
+            - name: host-sys
+              mountPath: /sys
+            - name: host-proc
+              mountPath: /host/proc
               readOnly: true
-            - name: var-lib-docker
-              mountPath: /var/lib/docker
-            - name: run
-              mountPath: /run
-            - name: var-lib-kubelet
-              mountPath: /var/lib/kubelet
-              mountPropagation: Bidirectional
 {{ if $mounts_zun_compute.volumeMounts }}{{ toYaml $mounts_zun_compute.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: pod-tmp
-          emptyDir: {}
-        - name: pod-var-zun
-          emptyDir: {}
-        - name: pod-var-log
           emptyDir: {}
         - name: zun-bin
           configMap:
@@ -126,27 +119,25 @@ spec:
           secret:
             secretName: zun-etc
             defaultMode: 0444
-        # Host mounts for Docker and container management
         - name: docker-socket
           hostPath:
             path: /var/run/docker.sock
-        - name: docker-binary
+            type: Socket
+        - name: host-var-lib-zun
           hostPath:
-            path: /usr/bin/docker
-        - name: dev
+            path: /var/lib/zun
+            type: DirectoryOrCreate
+        - name: host-var-log
+          hostPath:
+            path: /var/log
+        - name: host-dev
           hostPath:
             path: /dev
-        - name: sys-fs-cgroup
+        - name: host-sys
           hostPath:
-            path: /sys/fs/cgroup
-        - name: var-lib-docker
+            path: /sys
+        - name: host-proc
           hostPath:
-            path: /var/lib/docker
-        - name: run
-          hostPath:
-            path: /run
-        - name: var-lib-kubelet
-          hostPath:
-            path: /var/lib/kubelet
+            path: /proc
 {{ if $mounts_zun_compute.volumes }}{{ toYaml $mounts_zun_compute.volumes | indent 8 }}{{ end }}
 {{- end }}

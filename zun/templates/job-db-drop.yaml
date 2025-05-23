@@ -12,7 +12,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.service_ingress_api .Values.network.container.ingress.public }}
-{{- $serviceIngressOpts := dict "envAll" . "backendServiceType" "container" -}}
-{{ $serviceIngressOpts | include "helm-toolkit.manifests.service_ingress" }}
+{{- if .Values.manifests.job_db_drop }}
+{{- $dbDropJob := dict "envAll" . "serviceName" "zun" -}}
+{{- if .Values.pod.tolerations.zun.enabled -}}
+{{- $_ := set $dbDropJob "tolerationsEnabled" true -}}
+{{- end -}}
+{{ $dbDropJob | include "helm-toolkit.manifests.job_db_drop_mysql" }}
 {{- end }}

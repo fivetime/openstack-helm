@@ -14,16 +14,13 @@ limitations under the License.
 
 {{- define "metadata.annotations.job.ks_user" }}
 helm.sh/hook: post-install,post-upgrade
-helm.sh/hook-weight: "-3"
+helm.sh/hook-weight: "-1"
 {{- end }}
 
 {{- if .Values.manifests.job_ks_user }}
 {{- $ksUserJob := dict "envAll" . "serviceName" "zun" -}}
-{{- if or .Values.manifests.certificates .Values.tls.identity -}}
-{{- $_ := set $ksUserJob "tlsSecret" .Values.secrets.tls.container.zun.internal -}}
-{{- end -}}
 {{- if .Values.helm3_hook }}
-{{- $_ := set $ksUserJob "jobAnnotations" (include "metadata.annotations.job.ks_user" . | fromYaml) -}}
+{{- $_ := set $ksUserJob "jobAnnotations" (include "metadata.annotations.job.ks_user" . | fromYaml) }}
 {{- end }}
 {{- if .Values.pod.tolerations.zun.enabled -}}
 {{- $_ := set $ksUserJob "tolerationsEnabled" true -}}

@@ -15,15 +15,15 @@ limitations under the License.
 */}}
 
 set -ex
+COMMAND="${@:-start}"
 
-# Create log directory
-mkdir -p /var/log/zun
+function start () {
+  exec zun-api \
+        --config-file /etc/zun/zun.conf
+}
 
-# Set ownership and permissions
-chown zun:zun /var/log/zun
-chmod 755 /var/log/zun
+function stop () {
+  kill -TERM 1
+}
 
-# Start the zun-api service
-exec zun-api \
-    --config-file /etc/zun/zun.conf \
-    --log-file /var/log/zun/zun-api.log
+$COMMAND

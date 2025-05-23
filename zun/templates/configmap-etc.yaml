@@ -12,36 +12,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- define "zun.configmap.etc" }}
-{{- $configMapName := index . 0 }}
-{{- $envAll := index . 1 }}
-{{- with $envAll }}
+{{- if .Values.manifests.configmap_etc }}
+{{- $envAll := . }}
 
-{{- if empty .Values.conf.zun.database.connection -}}
-{{- $connection := tuple "oslo_db" "internal" "zun" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" -}}
-{{- if .Values.manifests.certificates -}}
-{{- $_ := (printf "%s?charset=utf8&ssl_ca=/etc/mysql/certs/ca.crt&ssl_key=/etc/mysql/certs/tls.key&ssl_cert=/etc/mysql/certs/tls.crt&ssl_verify_cert" $connection ) | set .Values.conf.zun.database "connection" -}}
-{{- else -}}
-{{- $_ := set .Values.conf.zun.database "connection" $connection -}}
+{{- if empty .Values.conf.zun.keystone_authtoken.auth_uri -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.zun.keystone_authtoken "auth_uri" -}}
 {{- end -}}
-{{- end -}}
-
-{{- if empty .Values.conf.zun.DEFAULT.transport_url -}}
-{{- $_ := tuple "oslo_messaging" "internal" "zun" "amqp" . | include "helm-toolkit.endpoints.authenticated_transport_endpoint_uri_lookup" | set .Values.conf.zun.DEFAULT "transport_url" -}}
-{{- end -}}
-
-{{- if empty .Values.conf.zun.keystone_authtoken.memcached_servers -}}
-{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set .Values.conf.zun.keystone_authtoken "memcached_servers" -}}
-{{- end -}}
-
-{{- if empty .Values.conf.zun.keystone_authtoken.www_authenticate_uri -}}
-{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.zun.keystone_authtoken "www_authenticate_uri" -}}
-{{- end -}}
-
 {{- if empty .Values.conf.zun.keystone_authtoken.auth_url -}}
-{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.zun.keystone_authtoken "auth_url" -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.zun.keystone_authtoken "auth_url" -}}
 {{- end -}}
-
 {{- if empty .Values.conf.zun.keystone_authtoken.region_name -}}
 {{- $_ := set .Values.conf.zun.keystone_authtoken "region_name" .Values.endpoints.identity.auth.zun.region_name -}}
 {{- end -}}
@@ -61,8 +40,15 @@ limitations under the License.
 {{- $_ := set .Values.conf.zun.keystone_authtoken "password" .Values.endpoints.identity.auth.zun.password -}}
 {{- end -}}
 
+{{- if empty .Values.conf.zun.keystone_authtoken.memcached_servers -}}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set .Values.conf.zun.keystone_authtoken "memcached_servers" -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.keystone_authtoken.memcache_secret_key -}}
+{{- $_ := set .Values.conf.zun.keystone_authtoken "memcache_secret_key" ( default ( randAlphaNum 64 ) .Values.endpoints.oslo_cache.auth.memcache_secret_key ) -}}
+{{- end -}}
+
 {{- if empty .Values.conf.zun.keystone_auth.auth_url -}}
-{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.zun.keystone_auth "auth_url" -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.zun.keystone_auth "auth_url" -}}
 {{- end -}}
 {{- if empty .Values.conf.zun.keystone_auth.region_name -}}
 {{- $_ := set .Values.conf.zun.keystone_auth "region_name" .Values.endpoints.identity.auth.zun.region_name -}}
@@ -83,19 +69,68 @@ limitations under the License.
 {{- $_ := set .Values.conf.zun.keystone_auth "password" .Values.endpoints.identity.auth.zun.password -}}
 {{- end -}}
 
+{{- if empty .Values.conf.zun.neutron_client.auth_url -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.zun.neutron_client "auth_url" -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.neutron_client.region_name -}}
+{{- $_ := set .Values.conf.zun.neutron_client "region_name" .Values.endpoints.identity.auth.zun.region_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.neutron_client.project_name -}}
+{{- $_ := set .Values.conf.zun.neutron_client "project_name" .Values.endpoints.identity.auth.zun.project_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.neutron_client.project_domain_name -}}
+{{- $_ := set .Values.conf.zun.neutron_client "project_domain_name" .Values.endpoints.identity.auth.zun.project_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.neutron_client.user_domain_name -}}
+{{- $_ := set .Values.conf.zun.neutron_client "user_domain_name" .Values.endpoints.identity.auth.zun.user_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.neutron_client.username -}}
+{{- $_ := set .Values.conf.zun.neutron_client "username" .Values.endpoints.identity.auth.zun.username -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.neutron_client.password -}}
+{{- $_ := set .Values.conf.zun.neutron_client "password" .Values.endpoints.identity.auth.zun.password -}}
+{{- end -}}
+{{- if empty .Values.conf.zun.neutron_client.endpoint_url -}}
+{{- $_ := tuple "network" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.zun.neutron_client "endpoint_url" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.database.connection -}}
+{{- $_ := tuple "oslo_db" "internal" "zun" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup"| set .Values.conf.zun.database "connection" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.DEFAULT.transport_url -}}
+{{- $_ := tuple "oslo_messaging" "internal" "zun" "amqp" . | include "helm-toolkit.endpoints.authenticated_transport_endpoint_uri_lookup" | set .Values.conf.zun.DEFAULT "transport_url" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.api.port -}}
+{{- $_ := set .Values.conf.zun.api "port" (tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup") -}}
+{{- end -}}
+
+{{- if empty .Values.conf.zun.websocket_proxy.wsproxy_port -}}
+{{- $_ := set .Values.conf.zun.websocket_proxy "wsproxy_port" (tuple "websocket_proxy" "internal" "wsproxy" . | include "helm-toolkit.endpoints.endpoint_port_lookup") -}}
+{{- end -}}
+
+{{- if and (empty .Values.conf.logging.handler_fluent) (has "fluent" .Values.conf.logging.handlers.keys) -}}
+{{- $fluentd_host := tuple "fluentd" "internal" $envAll | include "helm-toolkit.endpoints.hostname_namespaced_endpoint_lookup" }}
+{{- $fluentd_port := tuple "fluentd" "internal" "service" $envAll | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- $fluent_args := printf "('%s.%s', '%s', %s)" .Release.Namespace .Release.Name $fluentd_host $fluentd_port }}
+{{- $handler_fluent := dict "class" "fluent.handler.FluentHandler" "formatter" "fluent" "args" $fluent_args -}}
+{{- $_ := set .Values.conf.logging "handler_fluent" $handler_fluent -}}
+{{- end -}}
+
+{{- if and (empty .Values.conf.logging.formatter_fluent) (has "fluent" .Values.conf.logging.formatters.keys) -}}
+{{- $formatter_fluent := dict "class" "oslo_log.formatters.FluentFormatter" -}}
+{{- $_ := set .Values.conf.logging "formatter_fluent" $formatter_fluent -}}
+{{- end -}}
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ $configMapName }}
+  name: zun-etc
 type: Opaque
 data:
   zun.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.zun | b64enc }}
   api-paste.ini: {{ include "helm-toolkit.utils.to_ini" .Values.conf.zun_api_paste | b64enc }}
   logging.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.logging | b64enc }}
-{{- end }}
-{{- end }}
-
-{{- if .Values.manifests.configmap_etc }}
-{{- list "zun-etc" . | include "zun.configmap.etc" }}
+  policy.yaml: {{ toYaml .Values.conf.policy | b64enc }}
 {{- end }}

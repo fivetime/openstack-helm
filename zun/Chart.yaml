@@ -12,7 +12,7 @@
 
 ---
 apiVersion: v2
-appVersion: v1.0.0
+appVersion: v2025.1.0
 description: OpenStack-Helm Zun Container Service
 name: zun
 version: 2025.1.0
@@ -27,4 +27,9 @@ dependencies:
   - name: helm-toolkit
     repository: file://../helm-toolkit
     version: ">= 0.1.0"
-...
+
+keywords:
+  - openstack
+  - container
+  - zun
+  - docker

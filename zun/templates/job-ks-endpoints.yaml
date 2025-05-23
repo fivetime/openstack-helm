@@ -14,19 +14,16 @@ limitations under the License.
 
 {{- define "metadata.annotations.job.ks_endpoints" }}
 helm.sh/hook: post-install,post-upgrade
-helm.sh/hook-weight: "-1"
+helm.sh/hook-weight: "-2"
 {{- end }}
 
 {{- if .Values.manifests.job_ks_endpoints }}
-{{- $ksEndpointJob := dict "envAll" . "serviceName" "zun" "serviceTypes" ( tuple "container" ) -}}
-{{- if or .Values.manifests.certificates .Values.tls.identity -}}
-{{- $_ := set $ksEndpointJob "tlsSecret" .Values.secrets.tls.container.zun.internal -}}
-{{- end -}}
+{{- $ksEndpointsJob := dict "envAll" . "serviceName" "zun" "serviceTypes" ( tuple "container" ) -}}
 {{- if .Values.helm3_hook }}
-{{- $_ := set $ksEndpointJob "jobAnnotations" (include "metadata.annotations.job.ks_endpoints" . | fromYaml) -}}
+{{- $_ := set $ksEndpointsJob "jobAnnotations" (include "metadata.annotations.job.ks_endpoints" . | fromYaml) }}
 {{- end }}
 {{- if .Values.pod.tolerations.zun.enabled -}}
-{{- $_ := set $ksEndpointJob "tolerationsEnabled" true -}}
+{{- $_ := set $ksEndpointsJob "tolerationsEnabled" true -}}
 {{- end -}}
-{{ $ksEndpointJob | include "helm-toolkit.manifests.job_ks_endpoints" }}
+{{ $ksEndpointsJob | include "helm-toolkit.manifests.job_ks_endpoints" }}
 {{- end }}

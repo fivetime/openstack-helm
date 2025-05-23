@@ -45,45 +45,55 @@ spec:
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "zun_api" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
+{{ tuple "zun_api" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "zun_api" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
-{{ dict "envAll" $envAll "application" "zun_api" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      affinity:
+{{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
         {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
-{{- if .Values.pod.tolerations.zun.enabled }}
+{{ if $envAll.Values.pod.tolerations.zun.enabled }}
 {{ tuple $envAll "zun" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
-{{- end }}
-      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "600" }}
+{{ end }}
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "30" }}
       initContainers:
 {{ tuple $envAll "api" $mounts_zun_api_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: zun-api
 {{ tuple $envAll "zun_api" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.api | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
-{{ dict "envAll" $envAll "application" "zun_api" "container" "zun_api" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          securityContext:
+            runAsUser: 0
+            readOnlyRootFilesystem: false
           command:
             - /tmp/zun-api.sh
+            - start
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /tmp/zun-api.sh
+                  - stop
           ports:
-            - name: zun-api
-              containerPort: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+            - name: z-api
+              containerPort: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           readinessProbe:
             httpGet:
-              scheme: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_scheme_lookup" | upper }}
+              scheme: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_scheme_lookup" | upper }}
               path: /
-              port: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+              port: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              scheme: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_scheme_lookup" | upper }}
+              scheme: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_scheme_lookup" | upper }}
               path: /
-              port: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+              port: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
             initialDelaySeconds: 50
-            periodSeconds: 10
+            periodSeconds: 30
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp
-            - name: pod-var-zun
-              mountPath: /var/lib/zun
             - name: zun-bin
               mountPath: /tmp/zun-api.sh
               subPath: zun-api.sh
@@ -92,19 +102,19 @@ spec:
               mountPath: /etc/zun/zun.conf
               subPath: zun.conf
               readOnly: true
+            {{- if .Values.conf.zun.DEFAULT.log_config_append }}
             - name: zun-etc
-              mountPath: /etc/zun/api-paste.ini
-              subPath: api-paste.ini
+              mountPath: {{ .Values.conf.zun.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.zun.DEFAULT.log_config_append }}
               readOnly: true
+            {{- end }}
             - name: zun-etc
-              mountPath: /etc/zun/logging.conf
-              subPath: logging.conf
+              mountPath: /etc/zun/policy.yaml
+              subPath: policy.yaml
               readOnly: true
 {{ if $mounts_zun_api.volumeMounts }}{{ toYaml $mounts_zun_api.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: pod-tmp
-          emptyDir: {}
-        - name: pod-var-zun
           emptyDir: {}
         - name: zun-bin
           configMap:

@@ -23,19 +23,16 @@ metadata:
 {{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   ports:
-    - name: zun-api
-      port: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+    - name: z-api
+      port: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
       protocol: TCP
-      targetPort: {{ tuple "container" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-      {{ if .Values.network.api.node_port.enabled }}
+      targetPort: z-api
+    {{ if .Values.network.api.node_port.enabled }}
       nodePort: {{ .Values.network.api.node_port.port }}
-      {{ end }}
+    {{ end }}
   selector:
 {{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
   {{ if .Values.network.api.node_port.enabled }}
   type: NodePort
-  {{ if .Values.network.api.external_policy_local }}
-  externalTrafficPolicy: Local
-  {{ end }}
   {{ end }}
 {{- end }}

@@ -19,11 +19,5 @@ set -ex
 # Create log directory
 mkdir -p /var/log/zun
 
-# Set ownership and permissions
-chown zun:zun /var/log/zun
-chmod 755 /var/log/zun
-
-# Start the zun-wsproxy service
 exec zun-wsproxy \
-    --config-file /etc/zun/zun.conf \
-    --log-file /var/log/zun/zun-wsproxy.log
+    --config-file /etc/zun/zun.conf

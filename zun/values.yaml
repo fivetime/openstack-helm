@@ -138,6 +138,7 @@ endpoints:
         project_name: service
         user_domain_name: default
         project_domain_name: default
+        default_domain_id: default
     hosts:
       default: keystone
       internal: keystone-api
@@ -188,6 +189,9 @@ endpoints:
       admin:
         username: root
         password: password
+        secret:
+          tls:
+            internal: mariadb-tls-direct
       zun:
         username: zun
         password: password
@@ -204,19 +208,22 @@ endpoints:
         default: 3306
         internal: 3306
   oslo_messaging:
+    namespace: null
     auth:
       admin:
         username: rabbitmq
         password: password
+        secret:
+          tls:
+            internal: rabbitmq-tls-direct
       zun:
-        username: rabbitmq
+        username: zun
         password: password
     statefulset:
       replicas: 2
       name: rabbitmq-rabbitmq
     hosts:
       default: rabbitmq
-      internal: rabbitmq
     host_fqdn_override:
       default: null
     path: /zun
@@ -224,10 +231,8 @@ endpoints:
     port:
       amqp:
         default: 5672
-        internal: 5672
       http:
         default: 15672
-        internal: 15672
   oslo_cache:
     auth:
       memcache_secret_key: password
@@ -438,6 +443,10 @@ dependencies:
         services:
           - endpoint: node
             service: local_image_registry
+    rabbit_init:
+      services:
+        - service: oslo_messaging
+          endpoint: internal
   static:
     api:
       jobs:
@@ -512,10 +521,6 @@ dependencies:
       services:
         - endpoint: internal
           service: identity
-    rabbit_init:
-      services:
-        - endpoint: internal
-          service: oslo_messaging
 
 conf:
   zun:
@@ -644,7 +649,13 @@ conf:
       datefmt: "%Y-%m-%d %H:%M:%S"
   policy: {}
 
+tls:
+  identity: false
+  oslo_messaging: false
+  oslo_db: false
+
 manifests:
+  certificates: false
   configmap_bin: true
   configmap_etc: true
   deployment_api: true

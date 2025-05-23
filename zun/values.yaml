@@ -58,6 +58,9 @@ images:
       - image_repo_sync
 
 network:
+  docker:
+    plugins_dir: /usr/lib/docker/plugins
+    socket_path: /var/run/docker.sock
   api:
     ingress:
       public: true
@@ -532,6 +535,10 @@ conf:
       state_path: /var/lib/zun
       rootwrap_config: /etc/zun/rootwrap.conf
       transport_url: null
+      default_log_levels:
+        - "docker.client=DEBUG"
+        - "zun.container.docker.driver=DEBUG"
+        - "zun.network.kuryr_network=DEBUG"
     api:
       host_ip: 0.0.0.0
       port: 9517
@@ -562,9 +569,11 @@ conf:
       max_retries: -1
     docker:
       docker_remote_api_host: unix:///var/run/docker.sock
-      docker_remote_api_version: "1.41"
+      # docker_remote_api_version: "auto"
+      docker_remote_api_version: "1.45"
       docker_remote_api_insecure: false
       network_driver: kuryr
+      #network_driver: bridge
     neutron_client:
       auth_type: password
       auth_url: null

@@ -51,7 +51,7 @@ tls:
 network:
   kuryr:
     docker_socket_path: /var/run/docker.sock
-    plugins_dir: /usr/lib/docker/plugins/kuryr
+    plugins_dir: /usr/lib/docker/plugins
     external_policy_local: false
     bind_host: "0.0.0.0"
     bind_port: 23750

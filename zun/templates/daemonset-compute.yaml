@@ -76,7 +76,7 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
             - name: DOCKER_HOST
-              value: "unix:///var/run/docker.sock"
+              value: "unix://{{ .Values.network.docker.socket_path }}"
           command:
             - /tmp/zun-compute.sh
           volumeMounts:
@@ -102,7 +102,10 @@ spec:
               readOnly: true
             # Docker socket挂载
             - name: docker-socket
-              mountPath: /run/docker.sock
+              mountPath: {{ .Values.network.docker.socket_path }}
+            - name: docker-plugins
+              mountPath: {{ .Values.network.docker.plugins_dir }}
+              readOnly: false
             - name: var-run
               mountPath: /var/run
             - name: host-var-lib-zun
@@ -130,8 +133,12 @@ spec:
             defaultMode: 0444
         - name: docker-socket
           hostPath:
-            path: /run/docker.sock
+            path: {{ .Values.network.docker.socket_path }}
             type: Socket
+        - name: docker-plugins
+          hostPath:
+            path: {{ .Values.network.docker.plugins_dir }}
+            type: DirectoryOrCreate
         - name: var-run
           hostPath:
             path: /var/run

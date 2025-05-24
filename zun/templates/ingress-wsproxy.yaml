@@ -1,0 +1,71 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.ingress_wsproxy }}
+{{- $envAll := . }}
+{{- $ingressOpts := dict "envAll" . "backendService" "websocket_proxy" "backendServiceType" "websocket_proxy" "backendPort" "wsproxy" -}}
+{{- $secretName := "" -}}
+{{- if and $envAll.Values.secrets.tls.websocket_proxy (hasKey $envAll.Values.secrets.tls.websocket_proxy "wsproxy") -}}
+{{-   $secretName = $envAll.Values.secrets.tls.websocket_proxy.wsproxy.public -}}
+{{- end -}}
+{{- if and .Values.manifests.certificates $secretName -}}
+{{- $_ := set $ingressOpts "secretName" $secretName -}}
+{{- end -}}
+{{- if eq $envAll.Values.endpoints.websocket_proxy.scheme.default "https" -}}
+{{- $_ := set $ingressOpts "certIssuer" $envAll.Values.endpoints.websocket_proxy.host_fqdn_override.public.tls.issuerRef.name -}}
+{{- end -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ tuple "websocket_proxy" "public" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
+  annotations:
+    # WebSocket 特定注解
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "3600"
+    # 启用 WebSocket 支持
+    nginx.ingress.kubernetes.io/websocket-services: {{ tuple "websocket_proxy" "internal" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" | quote }}
+    # 配置升级头
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_http_version 1.1;
+      proxy_cache_bypass $http_upgrade;
+    # 增加缓冲区大小
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "64k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+{{ toYaml (index .Values.endpoints.websocket_proxy "ingress" "annotations") | indent 4 }}
+  labels:
+{{ tuple $envAll "zun" "wsproxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  ingressClassName: {{ .Values.endpoints.websocket_proxy.ingress.ingressClassName | default "nginx" }}
+  rules:
+    - host: {{ tuple "websocket_proxy" "public" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" }}
+      http:
+        paths:
+          - path: {{ .Values.endpoints.websocket_proxy.path.default }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ tuple "websocket_proxy" "internal" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
+                port:
+                  number: {{ tuple "websocket_proxy" "internal" "wsproxy" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- if and .Values.manifests.certificates $secretName }}
+  tls:
+    - secretName: {{ $secretName }}
+      hosts:
+        - {{ tuple "websocket_proxy" "public" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" }}
+{{- end }}
+{{- end }}

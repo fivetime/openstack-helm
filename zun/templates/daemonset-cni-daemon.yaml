@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.daemonset_cni_daemon }}
+{{- if and .Values.manifests.daemonset_cni_daemon (eq .Values.network.driver "cni") .Values.network.drivers.cni.deploy_daemon }}
 {{- $envAll := . }}
 
 {{- $mounts_zun_cni_daemon := .Values.pod.mounts.zun_cni_daemon.zun_cni_daemon }}
@@ -57,13 +57,45 @@ spec:
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.cni_daemon.timeout | default "60" }}
       initContainers:
 {{ tuple $envAll "cni_daemon" $mounts_zun_cni_daemon_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        - name: cni-plugins-install
+{{ tuple $envAll "zun_cni_daemon" | include "helm-toolkit.snippets.image" | indent 10 }}
+          securityContext:
+            runAsUser: 0
+            privileged: true
+            readOnlyRootFilesystem: false
+          command:
+            - /tmp/install-cni-plugins.sh
+          volumeMounts:
+            - name: zun-bin
+              mountPath: /tmp/install-cni-plugins.sh
+              subPath: install-cni-plugins.sh
+              readOnly: true
+            - name: cni-bin
+              mountPath: {{ .Values.network.drivers.cni.paths.bin_dir }}
+        - name: cni-config-setup
+{{ tuple $envAll "zun_cni_daemon" | include "helm-toolkit.snippets.image" | indent 10 }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Setting up CNI configuration..."
+              cp /tmp/10-zun-cni.conf {{ .Values.network.drivers.cni.paths.conf_dir }}/
+              chmod 644 {{ .Values.network.drivers.cni.paths.conf_dir }}/10-zun-cni.conf
+              echo "CNI configuration installed"
+          volumeMounts:
+            - name: cni-conf-template
+              mountPath: /tmp/10-zun-cni.conf
+              subPath: 10-zun-cni.conf
+              readOnly: true
+            - name: cni-conf
+              mountPath: {{ .Values.network.drivers.cni.paths.conf_dir }}
       containers:
         - name: zun-cni-daemon
 {{ tuple $envAll "zun_cni_daemon" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.cni_daemon | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
-            privileged: true
             runAsUser: 0
+            privileged: true
             readOnlyRootFilesystem: false
           env:
             - name: NODE_NAME
@@ -73,6 +105,9 @@ spec:
           command:
             - /tmp/zun-cni-daemon.sh
           volumeMounts:
+            # ═══════════════════════════════════════════════════════════
+            # 基本配置和脚本挂载
+            # ═══════════════════════════════════════════════════════════
             - name: pod-tmp
               mountPath: /tmp
             - name: zun-bin
@@ -93,15 +128,33 @@ spec:
               mountPath: /etc/zun/policy.yaml
               subPath: policy.yaml
               readOnly: true
+
+            # ═══════════════════════════════════════════════════════════
+            # 必要的数据和日志目录
+            # ═══════════════════════════════════════════════════════════
             - name: host-var-lib-zun
               mountPath: /var/lib/zun
             - name: host-var-log
               mountPath: /var/log
-            - name: host-netns
-              mountPath: /var/run/netns
-              mountPropagation: Bidirectional
+
+            # ═══════════════════════════════════════════════════════════
+            # CNI 相关目录（核心功能）
+            # ═══════════════════════════════════════════════════════════
+            - name: cni-conf
+              mountPath: {{ .Values.network.drivers.cni.paths.conf_dir }}
+              readOnly: true
+            - name: cni-bin
+              mountPath: {{ .Values.network.drivers.cni.paths.bin_dir }}
+              readOnly: true
+
+            # ═══════════════════════════════════════════════════════════
+            # 用户自定义挂载点
+            # ═══════════════════════════════════════════════════════════
 {{ if $mounts_zun_cni_daemon.volumeMounts }}{{ toYaml $mounts_zun_cni_daemon.volumeMounts | indent 12 }}{{ end }}
       volumes:
+        # ═══════════════════════════════════════════════════════════
+        # 基本配置卷
+        # ═══════════════════════════════════════════════════════════
         - name: pod-tmp
           emptyDir: {}
         - name: zun-bin
@@ -112,6 +165,10 @@ spec:
           secret:
             secretName: zun-etc
             defaultMode: 0444
+
+        # ═══════════════════════════════════════════════════════════
+        # 必要的宿主机目录
+        # ═══════════════════════════════════════════════════════════
         - name: host-var-lib-zun
           hostPath:
             path: /var/lib/zun
@@ -119,9 +176,26 @@ spec:
         - name: host-var-log
           hostPath:
             path: /var/log
-        - name: host-netns
+            type: Directory
+
+        # ═══════════════════════════════════════════════════════════
+        # CNI 配置和插件
+        # ═══════════════════════════════════════════════════════════
+        - name: cni-conf-template
+          configMap:
+            name: zun-cni-config
+            defaultMode: 0644
+        - name: cni-conf
           hostPath:
-            path: /var/run/netns
+            path: {{ .Values.network.drivers.cni.paths.conf_dir }}
             type: DirectoryOrCreate
+        - name: cni-bin
+          hostPath:
+            path: {{ .Values.network.drivers.cni.paths.bin_dir }}
+            type: DirectoryOrCreate
+
+        # ═══════════════════════════════════════════════════════════
+        # 用户自定义卷
+        # ═══════════════════════════════════════════════════════════
 {{ if $mounts_zun_cni_daemon.volumes }}{{ toYaml $mounts_zun_cni_daemon.volumes | indent 8 }}{{ end }}
 {{- end }}

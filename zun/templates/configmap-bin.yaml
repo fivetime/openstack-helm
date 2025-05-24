@@ -46,4 +46,12 @@ data:
 {{ tuple "bin/_zun-cni-daemon.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   zun-wsproxy.sh: |
 {{ tuple "bin/_zun-wsproxy.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  runtime-check.sh: |
+{{ tuple "bin/_runtime-check.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  nova-compat-check.sh: |
+{{ tuple "bin/_nova-compat-check.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- if and (eq .Values.network.driver "cni") .Values.network.drivers.cni.deploy_daemon }}
+  install-cni-plugins.sh: |
+{{ tuple "bin/_install-cni-plugins.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- end }}
 {{- end }}

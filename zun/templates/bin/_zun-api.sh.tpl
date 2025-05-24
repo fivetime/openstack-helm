@@ -15,15 +15,31 @@ limitations under the License.
 */}}
 
 set -ex
-COMMAND="${@:-start}"
 
-function start () {
-  exec zun-api \
+# Create necessary directories
+mkdir -p /var/log/zun
+mkdir -p /var/lib/zun
+mkdir -p /var/lib/zun/tmp
+
+echo "=== Starting Zun API ==="
+
+# Check configuration
+if [ -f /etc/zun/zun.conf ]; then
+    echo "Configuration file found"
+    # 显示关键配置（隐藏密码）
+    grep -E "^(host_ip|port|workers)" /etc/zun/zun.conf | grep -v password || true
+else
+    echo "Error: Configuration file not found"
+    exit 1
+fi
+
+# Check if running under Apache mod_wsgi or standalone
+if [ "${ENABLE_HTTPD_MOD_WSGI_SERVICES}" == "true" ]; then
+    echo "Running under Apache mod_wsgi"
+    # Apache will be started by the base image
+    exec httpd -DFOREGROUND
+else
+    echo "Running standalone WSGI server"
+    exec zun-api \
         --config-file /etc/zun/zun.conf
-}
-
-function stop () {
-  kill -TERM 1
-}
-
-$COMMAND
+fi

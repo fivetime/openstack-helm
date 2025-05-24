@@ -22,17 +22,12 @@ metadata:
   labels:
 {{ tuple $envAll "zun" "wsproxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
+  type: ClusterIP
   ports:
-    - name: z-wsproxy
+    - name: ws-zun-wsproxy
       port: {{ tuple "websocket_proxy" "internal" "wsproxy" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+      targetPort: {{ tuple "websocket_proxy" "internal" "wsproxy" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
       protocol: TCP
-      targetPort: z-wsproxy
-    {{ if .Values.network.wsproxy.node_port.enabled }}
-      nodePort: {{ .Values.network.wsproxy.node_port.port }}
-    {{ end }}
   selector:
 {{ tuple $envAll "zun" "wsproxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
-  {{ if .Values.network.wsproxy.node_port.enabled }}
-  type: NodePort
-  {{ end }}
 {{- end }}

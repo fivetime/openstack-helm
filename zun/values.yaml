@@ -1,40 +1,29 @@
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# ════════════════════════════════════════════════════════════════════
+# Zun (OpenStack Container Service) Helm Chart Configuration
+# ════════════════════════════════════════════════════════════════════
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# 这是 OpenStack Zun 服务的 Helm Chart 配置文件
+# Zun 是 OpenStack 的容器服务，提供容器生命周期管理
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# 配置文件结构：
+# 1. 镜像配置 (images)
+# 2. 节点选择器 (labels)
+# 3. 运行时配置 (container_runtime, network, image_driver, volume_driver)
+# 4. Pod 配置 (pod)
+# 5. 服务配置 (conf)
+# 6. 安全配置 (secrets)
+# 7. 依赖关系 (dependencies)
+# 8. 服务端点 (endpoints)
+# 9. 清单控制 (manifests)
+# ════════════════════════════════════════════════════════════════════
 
 ---
-release_group: null
-
-labels:
-  api:
-    node_selector_key: openstack-control-plane
-    node_selector_value: enabled
-  compute:
-    node_selector_key: openstack-compute-node
-    node_selector_value: enabled
-  cni_daemon:
-    node_selector_key: kuryr-libnetwork
-    node_selector_value: enabled
-  wsproxy:
-    node_selector_key: openstack-control-plane
-    node_selector_value: enabled
-  job:
-    node_selector_key: openstack-control-plane
-    node_selector_value: enabled
-
-helm3_hook: true
-
+# ════════════════════════════════════════════════════════════════════
+# 1. 镜像配置 (Images Configuration)
+# ════════════════════════════════════════════════════════════════════
 images:
-  pull_policy: IfNotPresent
   tags:
+    # OpenStack 基础服务镜像（用于初始化任务）
     bootstrap: quay.io/airshipit/heat:2025.1-ubuntu_noble
     db_init: quay.io/airshipit/heat:2025.1-ubuntu_noble
     db_drop: quay.io/airshipit/heat:2025.1-ubuntu_noble
@@ -43,237 +32,242 @@ images:
     ks_endpoints: quay.io/airshipit/heat:2025.1-ubuntu_noble
     scripted_test: quay.io/airshipit/heat:2025.1-ubuntu_noble
 
-    zun_api: docker.io/kolla/zun-api:2025.1-ubuntu-noble
-    zun_db_sync: docker.io/kolla/zun-api:2025.1-ubuntu-noble
-    zun_cni_daemon: docker.io/kolla/zun-cni-daemon:2025.1-ubuntu-noble
-    zun_compute: docker.io/kolla/zun-compute:2025.1-ubuntu-noble
-    zun_wsproxy: docker.io/kolla/zun-wsproxy:2025.1-ubuntu-noble
+    # Zun 服务镜像（主要业务组件）
+    zun_api: docker.io/kolla/zun-api:2025.1-ubuntu-noble                    # API 服务
+    zun_db_sync: docker.io/kolla/zun-api:2025.1-ubuntu-noble               # 数据库同步
+    zun_cni_daemon: docker.io/kolla/zun-cni-daemon:2025.1-ubuntu-noble     # CNI 网络守护进程
+    zun_compute: docker.io/kolla/zun-compute:2025.1-ubuntu-noble            # 计算节点服务
+    zun_wsproxy: docker.io/kolla/zun-wsproxy:2025.1-ubuntu-noble           # WebSocket 代理
 
-    rabbit_init: docker.io/rabbitmq:3.13-management
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+    # 依赖服务镜像
+    rabbit_init: docker.io/rabbitmq:3.13-management                        # RabbitMQ 初始化
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy # 依赖检查
+    image_repo_sync: docker.io/docker:28.1.1                              # 镜像仓库同步
+
+  # 镜像拉取策略
+  pull_policy: "IfNotPresent"
+
+  # 本地镜像仓库配置
   local_registry:
     active: false
     exclude:
       - dep_check
       - image_repo_sync
 
-network:
-  docker:
-    plugins_dir: /usr/lib/docker/plugins
-    socket_path: /var/run/docker.sock
+# ════════════════════════════════════════════════════════════════════
+# 2. 节点选择器配置 (Node Selector Labels)
+# ════════════════════════════════════════════════════════════════════
+labels:
+  # API 服务部署在控制平面节点
   api:
-    ingress:
-      public: true
-      classes:
-        namespace: "nginx"
-        cluster: "nginx-cluster"
-      annotations:
-        nginx.ingress.kubernetes.io/rewrite-target: /
-    external_policy_local: false
-    node_port:
-      enabled: false
-      port: 30511
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+  # 计算服务部署在计算节点
+  compute:
+    node_selector_key: openstack-compute-node
+    node_selector_value: enabled
+
+  # CNI 守护进程部署在计算节点
+  cni_daemon:
+    node_selector_key: openstack-compute-node
+    node_selector_value: enabled
+
+  # WebSocket 代理部署在控制平面节点
   wsproxy:
-    external_policy_local: false
-    node_port:
-      enabled: false
-      port: 30512
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
-secrets:
-  identity:
-    admin: zun-keystone-admin
-    zun: zun-keystone-user
-  oslo_db:
-    admin: zun-db-admin
-    zun: zun-db-user
-  oslo_messaging:
-    admin: zun-rabbitmq-admin
-    zun: zun-rabbitmq-user
-  oci_image_registry:
-    zun: zun-oci-image-registry
+  # 任务类 Pod 部署在控制平面节点
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
-endpoints:
-  cluster_domain_suffix: cluster.local
-  local_image_registry:
-    name: docker-registry
-    namespace: docker-registry
-    hosts:
-      default: localhost
-      internal: docker-registry
-      node: localhost
-    host_fqdn_override:
-      default: null
-    port:
-      registry:
-        node: 5000
-  oci_image_registry:
-    name: oci-image-registry
-    namespace: oci-image-registry
-    auth:
-      enabled: false
-      zun:
-        username: zun
-        password: password
-    hosts:
-      default: localhost
-      internal: docker-registry
-      node: localhost
-    host_fqdn_override:
-      default: null
-    port:
-      registry:
-        default: 5000
-        internal: 5000
-        node: 5000
-  identity:
-    name: keystone
-    auth:
-      admin:
-        region_name: RegionOne
-        username: admin
-        password: password
-        project_name: admin
-        user_domain_name: default
-        project_domain_name: default
-      zun:
-        role: admin
-        region_name: RegionOne
-        username: zun
-        password: password
-        project_name: service
-        user_domain_name: default
-        project_domain_name: default
-        default_domain_id: default
-    hosts:
-      default: keystone
-      internal: keystone-api
-    host_fqdn_override:
-      default: null
-    path:
-      default: /v3
-    scheme:
-      default: http
-    port:
-      api:
-        default: 80
-        internal: 5000
-  container:
-    name: zun
-    hosts:
-      default: zun-api
-      internal: zun-api
-    host_fqdn_override:
-      default: null
-    path:
-      default: /v1
-    scheme:
-      default: http
-    port:
-      api:
-        default: 9517
-        internal: 9517
-        service: 9517
-  websocket_proxy:
-    name: zun-wsproxy
-    hosts:
-      default: zun-wsproxy
-      internal: zun-wsproxy
-    host_fqdn_override:
-      default: null
-    path:
-      default: /
-    scheme:
-      default: http
-    port:
-      wsproxy:
-        default: 6784
-        internal: 6784
-        service: 6784
-  oslo_db:
-    auth:
-      admin:
-        username: root
-        password: password
-        secret:
-          tls:
-            internal: mariadb-tls-direct
-      zun:
-        username: zun
-        password: password
-        database: zun
-    hosts:
-      default: mariadb
-      internal: mariadb-server
-    host_fqdn_override:
-      default: null
-    path: /zun
-    scheme: mysql+pymysql
-    port:
-      mysql:
-        default: 3306
-        internal: 3306
-  oslo_messaging:
-    namespace: null
-    auth:
-      admin:
-        username: rabbitmq
-        password: password
-        secret:
-          tls:
-            internal: rabbitmq-tls-direct
-      zun:
-        username: zun
-        password: password
-    statefulset:
-      replicas: 2
-      name: rabbitmq-rabbitmq
-    hosts:
-      default: rabbitmq
-    host_fqdn_override:
-      default: null
-    path: /zun
-    scheme: rabbit
-    port:
-      amqp:
-        default: 5672
-      http:
-        default: 15672
-  oslo_cache:
-    auth:
-      memcache_secret_key: password
-    hosts:
-      default: memcached
-      internal: memcached
-    host_fqdn_override:
-      default: null
-    port:
-      memcache:
-        default: 11211
-        internal: 11211
-  network:
-    name: neutron
-    hosts:
-      default: neutron-server
-      internal: neutron-server
-    host_fqdn_override:
-      default: null
-    path:
-      default: null
-    scheme:
-      default: http
-    port:
-      api:
-        default: 9696
-        internal: 9696
+  # 测试 Pod 部署在控制平面节点
+  test:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+# ════════════════════════════════════════════════════════════════════
+# 3. 运行时配置 (Runtime Configuration)
+# ════════════════════════════════════════════════════════════════════
+
+# ────────────────────────────────────────────────────────────────────
+# 3.1 容器运行时配置
+# ────────────────────────────────────────────────────────────────────
+container_runtime:
+  # 支持的运行时类型: docker, cri
+  type: docker
+
+  # Docker 运行时配置
+  docker:
+    socket_group: docker                       # Docker socket 用户组
+    socket_path: /var/run/docker.sock          # Docker socket 路径
+    library_dir: /var/lib/docker               # Docker 类库目录
+    plugins_dir: /usr/lib/docker/plugins       # Docker 插件目录
+
+    # Docker API 配置
+    api_version: "1.26"                        # Docker API 版本
+    default_timeout: 60                        # 默认超时时间
+    execute_timeout: 5                         # 执行超时时间
+
+    # Registry 配置
+    default_registry: ""                       # 默认镜像仓库
+    default_registry_username: ""              # 仓库用户名
+    default_registry_password: ""              # 仓库密码
+
+  # CRI 运行时配置（用于 Kata Containers 等）
+  cri:
+    socket_path: /run/containerd/containerd.sock  # CRI socket 路径
+
+    # Kata Containers 配置
+    kata:
+      enabled: false                           # 是否启用 Kata
+      runtime_path: /usr/bin/kata-runtime      # Kata 运行时路径
+      runtime_type: "io.containerd.kata.v2"   # Kata 运行时类型
+
+# ────────────────────────────────────────────────────────────────────
+# 3.2 网络配置（最重要的配置部分）
+# ────────────────────────────────────────────────────────────────────
+network:
+  # 网络驱动选择: cni, kuryr, docker
+  driver: cni
+
+  drivers:
+    # CNI (Container Network Interface) 配置
+    cni:
+      deploy_daemon: true                      # 是否部署 CNI daemon
+
+      # CNI 路径配置
+      paths:
+        conf_dir: /etc/cni/net.d               # CNI 配置文件目录
+        bin_dir: /opt/cni/bin                  # CNI 二进制文件目录
+
+      # CNI 插件配置
+      plugins:
+        version: "v1.7.1"                     # CNI 插件版本
+        install:
+          main: true      # bridge, ipvlan, loopback, macvlan, ptp, vlan, host-device, dummy
+          ipam: true      # dhcp, host-local, static
+          meta: true      # tuning, portmap, bandwidth, sbr, firewall
+          windows: false  # win-bridge, win-overlay
+
+      # CNI 配置文件内容
+      config_file:
+        cniVersion: "0.4.0"
+        name: "zun-cni"
+        type: "zun-cni"
+
+      # CNI daemon 配置
+      daemon:
+        port: 9036                             # 监听端口
+        host: 127.0.0.1                       # 监听地址
+        worker_num: 30                         # 工作进程数
+        vif_active_timeout: 60                 # VIF 激活超时
+        pyroute2_timeout: 10                   # Pyroute2 超时
+        docker_mode: false                     # Docker 模式
+
+    # Kuryr (OpenStack Neutron 集成) 配置
+    kuryr:
+      enabled: false                           # 是否使用 Kuryr
+      driver_name: kuryr                       # Kuryr 插件名称
+      etcd_endpoints: "http://etcd:2379"       # etcd 端点
+
+    # Docker 原生网络配置
+    docker:
+      enabled: false                           # 是否使用 Docker bridge
+      bridge_name: docker0                     # Bridge 名称
+      options:
+        mtu: 1500                             # MTU 大小
+        icc: true                             # 容器间连接
+
+# ────────────────────────────────────────────────────────────────────
+# 3.3 镜像驱动配置
+# ────────────────────────────────────────────────────────────────────
+image_driver:
+  driver_list:
+    - glance                                   # OpenStack Glance
+    - docker                                   # Docker Hub/Registry
+  default: docker                             # 默认镜像驱动
+
+  # 沙箱容器配置（用于 Capsule/Pod）
+  sandbox:
+    image: "kubernetes/pause"                  # 暂停容器镜像
+    driver: docker                            # 沙箱驱动
+    pull_policy: ifnotpresent                 # 拉取策略
+
+# ────────────────────────────────────────────────────────────────────
+# 3.4 卷驱动配置
+# ────────────────────────────────────────────────────────────────────
+volume_driver:
+  driver_list:
+    - cinder                                   # OpenStack Cinder
+    - local                                    # 本地存储
+
+  # 卷配置
+  volume_dir: /var/lib/zun/volumes            # 卷目录
+  fstype: ext4                               # 文件系统类型
+  use_multipath: false                       # 是否使用多路径
+  timeout_wait_volume_available: 60          # 卷可用等待超时
+  timeout_wait_volume_deleted: 60            # 卷删除等待超时
+
+# ────────────────────────────────────────────────────────────────────
+# 3.5 Capsule 驱动配置
+# ────────────────────────────────────────────────────────────────────
+capsule_driver:
+  # 支持的 capsule 驱动: docker, cri
+  type: cri
+
+# ════════════════════════════════════════════════════════════════════
+# 4. Pod 配置 (Pod Configuration)
+# ════════════════════════════════════════════════════════════════════
 
 pod:
+  # ────────────────────────────────────────────────────────────────────
+  # 4.1 安全上下文配置
+  # ────────────────────────────────────────────────────────────────────
   security_context:
-    zun:
+    # API 服务安全配置
+    zun_api:
       pod:
-        runAsUser: 42424
+        runAsUser: 42436
       container:
-        runAsUser: 0
-        readOnlyRootFilesystem: false
+        zun_api:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+
+    # 计算服务安全配置（需要特权模式）
+    zun_compute:
+      pod:
+        runAsUser: 42436
+      container:
+        zun_compute:
+          privileged: true                     # 需要特权访问 Docker
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+
+    # CNI 守护进程安全配置（需要特权模式）
+    zun_cni_daemon:
+      pod:
+        runAsUser: 0                          # root 用户
+      container:
+        zun_cni_daemon:
+          privileged: true                     # 需要网络权限
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+
+    # WebSocket 代理安全配置
+    zun_wsproxy:
+      pod:
+        runAsUser: 42436
+      container:
+        zun_wsproxy:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+
+  # ────────────────────────────────────────────────────────────────────
+  # 4.2 Pod 调度和容忍配置
+  # ────────────────────────────────────────────────────────────────────
   affinity:
     anti:
       type:
@@ -282,6 +276,21 @@ pod:
         default: kubernetes.io/hostname
       weight:
         default: 10
+
+  tolerations:
+    zun:
+      enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+
+  # ────────────────────────────────────────────────────────────────────
+  # 4.3 卷挂载配置（预留扩展点）
+  # ────────────────────────────────────────────────────────────────────
   mounts:
     zun_api:
       init_container: null
@@ -303,13 +312,31 @@ pod:
       zun_wsproxy:
         volumeMounts:
         volumes:
+    zun_bootstrap:
+      init_container: null
+      zun_bootstrap:
+        volumeMounts:
+        volumes:
     zun_db_sync:
       zun_db_sync:
         volumeMounts:
         volumes:
+    zun_tests:
+      init_container: null
+      zun_tests:
+        volumeMounts:
+        volumes:
+
+  # ────────────────────────────────────────────────────────────────────
+  # 4.4 副本数配置
+  # ────────────────────────────────────────────────────────────────────
   replicas:
-    api: 2
-    wsproxy: 2
+    api: 1                                     # API 服务副本数
+    wsproxy: 1                                 # WebSocket 代理副本数
+
+  # ────────────────────────────────────────────────────────────────────
+  # 4.5 生命周期管理
+  # ────────────────────────────────────────────────────────────────────
   lifecycle:
     upgrades:
       deployments:
@@ -319,33 +346,94 @@ pod:
           max_unavailable: 1
           max_surge: 3
       daemonsets:
-        pod_replacement_strategy: RollingUpdate
-        rolling_update:
+        compute:
+          enabled: true
+          min_ready_seconds: 0
           max_unavailable: 1
+        cni_daemon:
+          enabled: true
+          min_ready_seconds: 10
+          max_unavailable: 1
+
     disruption_budget:
       api:
         min_available: 0
-    termination_grace_period:
-      api:
-        timeout: 600
-      compute:
-        timeout: 600
-      cni_daemon:
-        timeout: 600
       wsproxy:
-        timeout: 600
-  tolerations:
-    zun:
-      enabled: false
-      tolerations:
-        - key: node-role.kubernetes.io/master
-          operator: Exists
-          effect: NoSchedule
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
-          effect: NoSchedule
+        min_available: 0
+
+    termination_grace_period:
+      compute:
+        timeout: 60
+      cni_daemon:
+        timeout: 60
+      api:
+        timeout: 30
+      wsproxy:
+        timeout: 30
+
+  # ────────────────────────────────────────────────────────────────────
+  # 4.6 优先级和探针配置
+  # ────────────────────────────────────────────────────────────────────
+  priority_class:
+    name: ""                                   # 自定义优先级类名
+    value: 10                                  # 优先级值
+
+  probes:
+    # 计算服务探针
+    compute:
+      compute:
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+
+    # API 服务探针
+    api:
+      api:
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            timeoutSeconds: 5
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            timeoutSeconds: 5
+
+    # WebSocket 代理探针
+    wsproxy:
+      wsproxy:
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            timeoutSeconds: 5
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 60
+            timeoutSeconds: 5
+
+  # ────────────────────────────────────────────────────────────────────
+  # 4.7 资源限制配置
+  # ────────────────────────────────────────────────────────────────────
   resources:
-    enabled: false
+    enabled: false                             # 是否启用资源限制
+
+    # API 服务资源
     api:
       requests:
         memory: "128Mi"
@@ -353,6 +441,8 @@ pod:
       limits:
         memory: "1024Mi"
         cpu: "2000m"
+
+    # 计算服务资源
     compute:
       requests:
         memory: "128Mi"
@@ -360,13 +450,8 @@ pod:
       limits:
         memory: "1024Mi"
         cpu: "2000m"
-    cni_daemon:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "1024Mi"
-        cpu: "2000m"
+
+    # WebSocket 代理资源
     wsproxy:
       requests:
         memory: "128Mi"
@@ -374,6 +459,17 @@ pod:
       limits:
         memory: "1024Mi"
         cpu: "2000m"
+
+    # CNI 守护进程资源
+    cni_daemon:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "1000m"
+
+    # 各种任务的资源配置
     jobs:
       bootstrap:
         requests:
@@ -438,257 +534,841 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+
+# ════════════════════════════════════════════════════════════════════
+# 5. 服务配置 (Service Configuration)
+# ════════════════════════════════════════════════════════════════════
+
+conf:
+  # ────────────────────────────────────────────────────────────────────
+  # 5.1 测试和审计配置
+  # ────────────────────────────────────────────────────────────────────
+  rally_tests:
+    tests: {}                                  # Rally 测试配置
+
+  api_audit_map: {}                           # API 审计映射配置
+
+  policy: {}                                  # 策略配置
+
+  # ────────────────────────────────────────────────────────────────────
+  # 5.2 WSGI 配置
+  # ────────────────────────────────────────────────────────────────────
+  paste:
+    pipeline:zun-api:
+      pipeline: cors request_id osprofiler authtoken api_v1
+    app:api_v1:
+      paste.app_factory: zun.api.app:app_factory
+    filter:authtoken:
+      acl_public_routes: /, /v1
+      paste.filter_factory: zun.api.middleware.auth_token:AuthTokenMiddleware.factory
+    filter:osprofiler:
+      paste.filter_factory: zun.common.profiler:WsgiMiddleware.factory
+    filter:cors:
+      paste.filter_factory: oslo_middleware.cors:filter_factory
+      oslo_config_project: zun
+    filter:request_id:
+      paste.filter_factory: oslo_middleware:RequestId.factory
+
+  # ────────────────────────────────────────────────────────────────────
+  # 5.3 Zun 主要服务配置
+  # ────────────────────────────────────────────────────────────────────
+  zun:
+    # === 基本配置 ===
+    DEFAULT:
+      debug: false                             # 调试模式
+      use_syslog: false                        # 使用系统日志
+      use_forwarded_for: true                  # 使用转发头
+
+      # 容器运行时配置
+      container_driver: docker                 # 容器驱动
+      capsule_driver: cri                      # Capsule 驱动
+      container_runtime: runc                  # 容器运行时
+
+      # 默认可用区
+      default_availability_zone: nova
+
+      # 时间配置
+      default_sleep_time: 1                    # 默认睡眠时间
+      default_timeout: 600                     # 默认超时时间
+
+      # 资源限制配置
+      default_memory_swap: -1                  # 默认内存交换
+      minimum_memory: 4                        # 最小内存（MB）
+      maximum_memory: 8192                     # 最大内存（MB）
+      minimum_cpus: 0.1                        # 最小 CPU 核数
+      maximum_cpus: 16.0                       # 最大 CPU 核数
+      minimum_disk: 1                          # 最小磁盘（GB）
+      maximum_disk: 160                        # 最大磁盘（GB）
+      default_memory: 512                      # 默认内存（MB）
+      default_cpu: 1.0                         # 默认 CPU 核数
+      default_disk: 10                         # 默认磁盘（GB）
+
+      # 镜像驱动配置
+      image_driver_list: glance,docker         # 镜像驱动列表
+      default_image_driver: docker             # 默认镜像驱动
+
+      # 沙箱容器配置
+      sandbox_image: kubernetes/pause          # 沙箱镜像
+      sandbox_image_driver: docker             # 沙箱驱动
+      sandbox_image_pull_policy: ifnotpresent  # 拉取策略
+
+      # 路径配置
+      state_path: /var/lib/zun                 # 状态路径
+
+      # 周期性任务配置
+      periodic_interval_max: 60                # 周期任务最大间隔
+      service_down_time: 180                   # 服务下线时间
+      sync_container_state_interval: 60        # 容器状态同步间隔
+
+      # Rootwrap 配置
+      rootwrap_config: /etc/zun/rootwrap.conf  # Rootwrap 配置文件
+
+      # 加密密钥
+      auth_encryption_key: "notgood but just long enough i t"
+
+    # === 数据库配置 ===
+    database:
+      max_retries: -1                          # 最大重试次数
+
+    # === Keystone 认证配置 ===
+    keystone_authtoken:
+      auth_type: password                      # 认证类型
+      auth_version: v3                         # 认证版本
+      memcache_security_strategy: ENCRYPT      # Memcache 安全策略
+      service_type: container                  # 服务类型
+      service_token_roles_required: true       # 需要服务令牌角色
+
+    keystone_auth:
+      auth_type: password                      # 认证类型
+      auth_version: v3                         # 认证版本
+
+    # === API 服务配置 ===
+    api:
+      port: 9517                              # API 端口
+      host_ip: 0.0.0.0                       # 监听地址
+      enable_ssl_api: false                   # 启用 SSL
+      workers: 1                              # 工作进程数
+      max_limit: 1000                         # 最大限制
+      api_paste_config: api-paste.ini         # API paste 配置
+      enable_image_validation: false          # 启用镜像验证
+
+    # === WebSocket 代理配置 ===
+    websocket_proxy:
+      wsproxy_port: 6784                      # WebSocket 端口
+      wsproxy_host: 0.0.0.0                  # WebSocket 地址
+      base_url: ws://0.0.0.0:6784/           # 基础 URL
+      allowed_origins: []                     # 允许的源
+      ssl_only: false                         # 仅 SSL
+
+    # === Docker 配置 ===
+    docker:
+      docker_remote_api_version: "1.26"       # Docker API 版本
+      default_timeout: 60                     # 默认超时
+      api_url: unix:///var/run/docker.sock   # API URL
+      docker_remote_api_port: 2375            # Docker API 端口
+      api_insecure: false                     # API 不安全模式
+      execute_timeout: 5                      # 执行超时
+
+    # === 计算服务配置 ===
+    compute:
+      topic: zun-compute                      # 消息队列主题
+      unique_container_name_scope: ""         # 容器名称唯一性范围
+      resume_container_state: false           # 恢复容器状态
+      remount_container_volume: true          # 重新挂载容器卷
+      reserve_disk_for_image: 0.2             # 为镜像预留磁盘
+      enable_cpu_pinning: false               # 启用 CPU 绑定
+      resource_provider_association_refresh: 300  # 资源提供者关联刷新
+      host_shared_with_nova: false            # 与 Nova 共享主机
+
+      # 资源预留配置
+      reserved_host_disk_mb: 0                # 预留磁盘（MB）
+      reserved_host_memory_mb: 512            # 预留内存（MB）
+      reserved_host_cpus: 0                   # 预留 CPU
+
+      # 资源分配比率
+      cpu_allocation_ratio: 16.0              # CPU 分配比率
+      ram_allocation_ratio: 1.5               # 内存分配比率
+      disk_allocation_ratio: 1.0              # 磁盘分配比率
+      initial_cpu_allocation_ratio: 16.0      # 初始 CPU 分配比率
+      initial_ram_allocation_ratio: 1.5       # 初始内存分配比率
+      initial_disk_allocation_ratio: 1.0      # 初始磁盘分配比率
+
+    # === 网络配置（自动从顶级配置同步）===
+    network: {}                               # 保持空，让模板自动填充
+
+    # === CNI 守护进程配置（自动从顶级配置同步）===
+    cni_daemon: {}                            # 保持空，让模板自动填充
+
+    # === Neutron 配置 ===
+    neutron:
+      ovs_bridge: br-int                      # OVS 网桥
+
+    # === 客户端配置 ===
+    cinder_client:
+      endpoint_type: publicURL                # 端点类型
+      api_version: "3"                        # API 版本
+      insecure: false                         # 不安全模式
+
+    glance:
+      images_directory: /var/lib/zun/images   # 镜像目录
+
+    glance_client:
+      endpoint_type: publicURL                # 端点类型
+      api_version: "2"                        # API 版本
+      insecure: false                         # 不安全模式
+
+    neutron_client:
+      endpoint_type: publicURL                # 端点类型
+      insecure: false                         # 不安全模式
+
+    placement_client:
+      endpoint_type: publicURL                # 端点类型
+      insecure: false                         # 不安全模式
+
+    zun_client:
+      endpoint_type: publicURL                # 端点类型
+      insecure: false                         # 不安全模式
+
+    # === 卷配置 ===
+    volume:
+      driver_list: cinder,local               # 卷驱动列表
+      volume_dir: /var/lib/zun/volumes        # 卷目录
+      fstype: ext4                           # 文件系统类型
+      use_multipath: false                   # 使用多路径
+      timeout_wait_volume_available: 60      # 卷可用等待超时
+      timeout_wait_volume_deleted: 60        # 卷删除等待超时
+
+    # === 调度器配置 ===
+    scheduler:
+      driver: filter_scheduler                # 调度器驱动
+      available_filters: zun.scheduler.filters.all_filters  # 可用过滤器
+      enabled_filters: AvailabilityZoneFilter,ComputeFilter,RuntimeFilter  # 启用过滤器
+      max_placement_results: 1000             # 最大放置结果
+
+    # === 配额配置 ===
+    quota:
+      containers: 40                          # 容器配额
+      memory: 51200                          # 内存配额（MB）
+      cpu: 20                                # CPU 配额
+      disk: 100                              # 磁盘配额（GB）
+      driver: zun.common.quota.DbQuotaDriver  # 配额驱动
+
+    # === PCI 配置 ===
+    pci:
+      alias: "{}"                            # PCI 别名
+      passthrough_whitelist: "[]"            # PCI 直通白名单
+
+    # === Oslo 库配置 ===
+    oslo_concurrency:
+      lock_path: /var/lib/zun/tmp             # 锁文件路径
+
+    oslo_messaging_notifications:
+      driver: messagingv2                     # 通知驱动
+      topics: notifications                   # 通知主题
+
+  # ────────────────────────────────────────────────────────────────────
+  # 5.4 日志配置
+  # ────────────────────────────────────────────────────────────────────
+  logging:
+    # 日志记录器配置
+    loggers:
+      keys:
+        - root
+        - zun
+
+    # 日志处理器配置
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+
+    # 日志格式器配置
+    formatters:
+      keys:
+        - context
+        - default
+
+    # 根日志记录器
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+
+    # Zun 日志记录器
+    logger_zun:
+      level: INFO
+      handlers:
+        - stdout
+        - stderr
+      qualname: zun
+
+    # 其他组件日志记录器
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+
+    # 日志处理器定义
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+
+    # 日志格式器定义
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+      datefmt: "%Y-%m-%d %H:%M:%S"
+
+    formatter_default:
+      format: "%(message)s"
+      datefmt: "%Y-%m-%d %H:%M:%S"
+
+# ════════════════════════════════════════════════════════════════════
+# 6. 安全配置 (Security Configuration)
+# ════════════════════════════════════════════════════════════════════
+
+secrets:
+  # Keystone 身份认证密钥
+  identity:
+    admin: zun-keystone-admin                 # 管理员密钥
+    zun: zun-keystone-user                    # Zun 用户密钥
+
+  # 数据库连接密钥
+  oslo_db:
+    admin: zun-db-admin                       # 数据库管理员密钥
+    zun: zun-db-user                          # Zun 数据库用户密钥
+
+  # 消息队列连接密钥
+  oslo_messaging:
+    admin: zun-rabbitmq-admin                 # RabbitMQ 管理员密钥
+    zun: zun-rabbitmq-user                    # Zun RabbitMQ 用户密钥
+
+  # TLS 证书配置
+  tls:
+    identity:
+      api:
+        public: zun-tls-public                # 公共 TLS 证书
+        internal: zun-tls-internal            # 内部 TLS 证书
+    container:
+      api:
+        public: zun-api-tls-public            # API 公共 TLS 证书
+        internal: zun-api-tls-internal        # API 内部 TLS 证书
+    websocket_proxy:
+      wsproxy:
+        public: zun-wsproxy-tls-public        # WebSocket 公共 TLS 证书
+        internal: zun-wsproxy-tls-internal    # WebSocket 内部 TLS 证书
+
+# ════════════════════════════════════════════════════════════════════
+# 7. 依赖关系配置 (Dependencies Configuration)
+# ════════════════════════════════════════════════════════════════════
 
 dependencies:
-  dynamic:
-    common:
-      local_image_registry:
-        jobs:
-          - zun-image-repo-sync
-        services:
-          - endpoint: node
-            service: local_image_registry
-    rabbit_init:
-      services:
-        - service: oslo_messaging
-          endpoint: internal
   static:
+    # API 服务依赖
     api:
       jobs:
-        - zun-db-sync
-        - zun-ks-user
-        - zun-ks-service
-        - zun-ks-endpoints
+        - zun-db-sync                         # 数据库同步任务
+        - zun-ks-user                         # Keystone 用户创建
+        - zun-ks-endpoints                    # Keystone 端点创建
+        - zun-rabbit-init                     # RabbitMQ 初始化
       services:
         - endpoint: internal
-          service: oslo_db
+          service: oslo_db                    # 数据库服务
         - endpoint: internal
-          service: oslo_messaging
+          service: identity                   # 身份认证服务
         - endpoint: internal
-          service: identity
+          service: oslo_messaging             # 消息队列服务
+
+    # 计算服务依赖
     compute:
       jobs:
-        - zun-db-sync
-        - zun-ks-user
+        - zun-db-sync                         # 数据库同步任务
+        - zun-rabbit-init                     # RabbitMQ 初始化
       services:
         - endpoint: internal
-          service: oslo_db
+          service: identity                   # 身份认证服务
         - endpoint: internal
-          service: oslo_messaging
+          service: container                  # 容器服务
         - endpoint: internal
-          service: identity
+          service: oslo_messaging             # 消息队列服务
         - endpoint: internal
-          service: network
+          service: oslo_db                    # 数据库服务
+
+    # CNI 守护进程依赖（无依赖）
     cni_daemon:
-      jobs:
-        - zun-ks-user
-      services:
-        - endpoint: internal
-          service: identity
-        - endpoint: internal
-          service: network
+      jobs: []
+      services: []
+
+    # WebSocket 代理依赖
     wsproxy:
       jobs:
-        - zun-db-sync
-        - zun-ks-user
+        - zun-db-sync                         # 数据库同步任务
+        - zun-ks-user                         # Keystone 用户创建
+        - zun-ks-endpoints                    # Keystone 端点创建
+        - zun-rabbit-init                     # RabbitMQ 初始化
+      services:
+        - endpoint: internal
+          service: oslo_db                    # 数据库服务
+        - endpoint: internal
+          service: identity                   # 身份认证服务
+        - endpoint: internal
+          service: container                  # 容器服务
+
+    # 各种任务的依赖关系
+    db_drop:
       services:
         - endpoint: internal
           service: oslo_db
-        - endpoint: internal
-          service: oslo_messaging
-        - endpoint: internal
-          service: identity
+
     db_init:
       services:
         - endpoint: internal
           service: oslo_db
+
     db_sync:
       jobs:
         - zun-db-init
       services:
         - endpoint: internal
           service: oslo_db
-    db_drop:
-      services:
-        - endpoint: internal
-          service: oslo_db
+
     ks_endpoints:
       jobs:
         - zun-ks-service
       services:
         - endpoint: internal
           service: identity
+
     ks_service:
       services:
         - endpoint: internal
           service: identity
+
     ks_user:
       services:
         - endpoint: internal
           service: identity
 
-conf:
-  zun:
-    DEFAULT:
-      debug: true
-      log_dir: /var/log/zun
-      state_path: /var/lib/zun
-      rootwrap_config: /etc/zun/rootwrap.conf
-      transport_url: null
-      default_log_levels:
-        - "docker.client=DEBUG"
-        - "zun.container.docker.driver=DEBUG"
-        - "zun.network.kuryr_network=DEBUG"
-    api:
-      host_ip: 0.0.0.0
-      port: 9517
-      workers: 1
-    keystone_authtoken:
-      auth_version: v3
-      auth_type: password
-      memcached_servers: null
-      www_authenticate_uri: null
-      auth_url: null
-      region_name: null
-      project_name: null
-      project_domain_name: null
-      user_domain_name: null
-      username: null
-      password: null
-    keystone_auth:
-      auth_type: password
-      auth_url: null
-      region_name: null
-      project_name: null
-      project_domain_name: null
-      user_domain_name: null
-      username: null
-      password: null
-    database:
-      connection: null
-      max_retries: -1
-    docker:
-      docker_remote_api_host: unix:///var/run/docker.sock
-      # docker_remote_api_version: "auto"
-      docker_remote_api_version: "1.45"
-      docker_remote_api_insecure: false
-      network_driver: kuryr
-      #network_driver: bridge
-    neutron_client:
-      auth_type: password
-      auth_url: null
-      region_name: null
-      project_name: null
-      project_domain_name: null
-      user_domain_name: null
-      username: null
-      password: null
-      endpoint_url: null
-    websocket_proxy:
-      wsproxy_host: 0.0.0.0
-      wsproxy_port: 6784
-      base_url: ws://localhost:6784/
-    compute:
-      host_shared_with_nova: false
-    cni:
-      cni_daemon: true
-      cni_daemon_root_helper: sudo zun-rootwrap /etc/zun/rootwrap.conf
-  zun_api_paste:
-    composite:osapi_container:
-      use: call:zun.api:setup_app
-    app:container_api:
-      paste.app_factory: zun.api.app:app_factory
-  logging:
-    loggers:
-      keys:
-        - root
-        - zun
-    handlers:
-      keys:
-        - stdout
-        - stderr
-        - "null"
-    formatters:
-      keys:
-        - context
-        - default
-    logger_root:
-      level: WARNING
-      handlers: "null"
-    logger_zun:
-      level: INFO
-      handlers:
-        - stdout
-      qualname: zun
-    logger_amqp:
-      level: WARNING
-      handlers: stderr
-      qualname: amqp
-    logger_amqplib:
-      level: WARNING
-      handlers: stderr
-      qualname: amqplib
-    logger_eventletstats:
-      level: WARNING
-      handlers: stderr
-      qualname: eventlet.stats
-    logger_iso8601:
-      level: WARNING
-      handlers: stderr
-      qualname: iso8601
-    logger_urllib3:
-      level: WARNING
-      handlers: stderr
-      qualname: urllib3.connectionpool
-    handler_null:
-      class: logging.NullHandler
-      formatter: default
-      args: ()
-    handler_stdout:
-      class: StreamHandler
-      args: (sys.stdout,)
-      formatter: context
-    handler_stderr:
-      class: StreamHandler
-      args: (sys.stderr,)
-      formatter: context
-    formatter_context:
-      class: oslo_log.formatters.ContextFormatter
-      datefmt: "%Y-%m-%d %H:%M:%S"
-    formatter_default:
-      format: "%(message)s"
-      datefmt: "%Y-%m-%d %H:%M:%S"
-  policy: {}
+    rabbit_init:
+      services:
+        - endpoint: internal
+          service: oslo_messaging
 
-tls:
-  identity: false
-  oslo_messaging: false
-  oslo_db: false
+    tests:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: container
+
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+
+# ════════════════════════════════════════════════════════════════════
+# 8. 服务端点配置 (Endpoints Configuration)
+# ════════════════════════════════════════════════════════════════════
+
+endpoints:
+  cluster_domain_suffix: cluster.local
+
+  # ────────────────────────────────────────────────────────────────────
+  # 8.1 基础设施服务端点
+  # ────────────────────────────────────────────────────────────────────
+
+  # 本地镜像仓库
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+
+  # Keystone 身份认证服务
+  identity:
+    name: keystone
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      zun:
+        role: admin
+        region_name: RegionOne
+        username: zun
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: keystone
+      internal: keystone-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+
+  # ────────────────────────────────────────────────────────────────────
+  # 8.2 Zun 服务端点
+  # ────────────────────────────────────────────────────────────────────
+
+  # Zun 容器服务
+  container:
+    name: zun
+    hosts:
+      default: zun-api
+      # public: zun.example.com
+    host_fqdn_override:
+      default: null
+      # public: zun.example.com
+    path:
+      default: /v1
+    scheme:
+      default: http
+      # public: https
+    port:
+      api:
+        default: 9517
+        # public: 443
+    ingress:
+      ingressClassName: nginx
+      annotations:
+        nginx.ingress.kubernetes.io/enable-cors: "true"
+
+  # Zun WebSocket 代理
+  websocket_proxy:
+    name: zun-wsproxy
+    hosts:
+      default: zun-wsproxy
+      public: zun-console
+    host_fqdn_override:
+      default: null
+      public: null
+    path:
+      default: /
+    scheme:
+      default: ws
+      public: wss
+    port:
+      wsproxy:
+        default: 6784
+        public: 443
+    ingress:
+      ingressClassName: nginx
+      annotations:
+        nginx.ingress.kubernetes.io/websocket-services: "zun-wsproxy"
+
+  # ────────────────────────────────────────────────────────────────────
+  # 8.3 OpenStack 服务端点
+  # ────────────────────────────────────────────────────────────────────
+
+  # 数据库服务
+  oslo_db:
+    auth:
+      admin:
+        username: root
+        password: password
+        secret:
+          tls:
+            internal: mariadb-tls-direct
+      zun:
+        username: zun
+        password: password
+    hosts:
+      default: mariadb
+    host_fqdn_override:
+      default: null
+    path: /zun
+    scheme: mysql+pymysql
+    port:
+      mysql:
+        default: 3306
+
+  # 缓存服务
+  oslo_cache:
+    auth:
+      memcache_secret_key: null
+    hosts:
+      default: memcached
+    host_fqdn_override:
+      default: null
+    port:
+      memcache:
+        default: 11211
+
+  # 消息队列服务
+  oslo_messaging:
+    auth:
+      admin:
+        username: rabbitmq
+        password: password
+        secret:
+          tls:
+            internal: rabbitmq-tls-direct
+      zun:
+        username: zun
+        password: password
+    statefulset:
+      replicas: 2
+      name: rabbitmq-rabbitmq
+    hosts:
+      default: rabbitmq
+    host_fqdn_override:
+      default: null
+    path: /zun
+    scheme: rabbit
+    port:
+      amqp:
+        default: 5672
+      http:
+        default: 15672
+
+  # Neutron 网络服务
+  network:
+    name: neutron
+    hosts:
+      default: neutron-server
+      public: neutron
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme:
+      default: http
+    port:
+      api:
+        default: 9696
+        public: 80
+
+  # Glance 镜像服务
+  image:
+    name: glance
+    hosts:
+      default: glance-api
+      public: glance
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme:
+      default: http
+    port:
+      api:
+        default: 9292
+        public: 80
+
+  # Glance Registry 服务
+  image_registry:
+    name: glance-registry
+    hosts:
+      default: glance-registry
+      public: glance-reg
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme:
+      default: 'http'
+    port:
+      api:
+        default: 9191
+        public: 80
+
+  # Cinder 卷服务
+  volume:
+    name: cinder
+    hosts:
+      default: cinder-api
+      public: cinder
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3/%(tenant_id)s
+    scheme:
+      default: http
+    port:
+      api:
+        default: 8776
+        public: 80
+
+  volumev2:
+    name: cinderv2
+    hosts:
+      default: cinder-api
+      public: cinder
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v2/%(tenant_id)s
+    scheme:
+      default: http
+    port:
+      api:
+        default: 8776
+        public: 80
+
+  volumev3:
+    name: cinderv3
+    hosts:
+      default: cinder-api
+      public: cinder
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3/%(tenant_id)s
+    scheme:
+      default: http
+    port:
+      api:
+        default: 8776
+        public: 80
+
+  # Placement 服务
+  placement:
+    name: placement
+    hosts:
+      default: placement-api
+      public: placement
+    host_fqdn_override:
+      default: null
+    path:
+      default: /
+    scheme:
+      default: http
+    port:
+      api:
+        default: 8778
+        public: 80
+
+  # Fluentd 日志服务
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
+
+# ════════════════════════════════════════════════════════════════════
+# 9. 清单控制配置 (Manifests Control)
+# ════════════════════════════════════════════════════════════════════
+# 控制哪些 Kubernetes 资源会被创建
 
 manifests:
-  certificates: false
-  configmap_bin: true
-  configmap_etc: true
-  deployment_api: true
-  deployment_wsproxy: true
-  daemonset_compute: true
-  daemonset_cni_daemon: true
-  ingress_api: true
-  job_bootstrap: false
-  job_db_init: true
-  job_db_sync: true
-  job_db_drop: false
-  job_image_repo_sync: true
-  job_ks_endpoints: true
-  job_ks_service: true
-  job_ks_user: true
-  job_rabbit_init: true
-  network_policy: false
-  pdb_api: true
-  secret_db: true
-  secret_keystone: true
-  secret_rabbitmq: true
-  secret_registry: true
-  service_api: true
-  service_ingress_api: false
-  service_wsproxy: true
+  # ────────────────────────────────────────────────────────────────────
+  # 9.1 配置映射和密钥
+  # ────────────────────────────────────────────────────────────────────
+  configmap_bin: true                         # 二进制文件配置映射
+  configmap_etc: true                         # 配置文件配置映射
+  configmap_cni: true                         # CNI 配置映射
+
+  # ────────────────────────────────────────────────────────────────────
+  # 9.2 工作负载
+  # ────────────────────────────────────────────────────────────────────
+  daemonset_compute: true                     # 计算服务守护进程集
+  daemonset_cni_daemon: true                  # CNI 守护进程集
+  deployment_api: true                        # API 服务部署
+  deployment_wsproxy: true                    # WebSocket 代理部署
+
+  # ────────────────────────────────────────────────────────────────────
+  # 9.3 网络和入口
+  # ────────────────────────────────────────────────────────────────────
+  ingress_api: false                          # API 服务入口
+  ingress_wsproxy: true                       # WebSocket 代理入口
+
+  # ────────────────────────────────────────────────────────────────────
+  # 9.4 任务
+  # ────────────────────────────────────────────────────────────────────
+  job_bootstrap: true                         # 引导任务
+  job_db_init: true                           # 数据库初始化任务
+  job_db_sync: true                           # 数据库同步任务
+  job_db_drop: false                          # 数据库删除任务（默认禁用）
+  job_image_repo_sync: true                   # 镜像仓库同步任务
+  job_rabbit_init: true                       # RabbitMQ 初始化任务
+  job_ks_endpoints: true                      # Keystone 端点创建任务
+  job_ks_service: true                        # Keystone 服务创建任务
+  job_ks_user: true                           # Keystone 用户创建任务
+
+  # ────────────────────────────────────────────────────────────────────
+  # 9.5 服务和策略
+  # ────────────────────────────────────────────────────────────────────
+  pdb_api: true                               # API 服务 Pod 中断预算
+  pod_test: true                              # 测试 Pod
+  network_policy: false                       # 网络策略（默认禁用）
+
+  # ────────────────────────────────────────────────────────────────────
+  # 9.6 密钥和服务
+  # ────────────────────────────────────────────────────────────────────
+  secret_db: true                             # 数据库连接密钥
+  secret_keystone: true                       # Keystone 认证密钥
+  secret_rabbitmq: true                       # RabbitMQ 连接密钥
+  secret_ingress_tls: true                    # 入口 TLS 证书密钥
+
+  service_ingress_api: true                   # API 入口服务
+  service_api: true                           # API 服务
+  service_wsproxy: true                       # WebSocket 代理服务
+
+# ════════════════════════════════════════════════════════════════════
+# 配置文件结束
+# ════════════════════════════════════════════════════════════════════

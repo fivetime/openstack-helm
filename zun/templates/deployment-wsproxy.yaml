@@ -70,6 +70,22 @@ spec:
           ports:
             - name: z-wsproxy
               containerPort: {{ tuple "websocket_proxy" "internal" "wsproxy" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+          {{- if .Values.pod.probes.wsproxy.wsproxy.readiness.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: z-wsproxy
+            initialDelaySeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.initialDelaySeconds }}
+            periodSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.periodSeconds }}
+            timeoutSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.timeoutSeconds }}
+          {{- end }}
+          {{- if .Values.pod.probes.wsproxy.wsproxy.liveness.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: z-wsproxy
+            initialDelaySeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.initialDelaySeconds }}
+            periodSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.periodSeconds }}
+            timeoutSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.timeoutSeconds }}
+          {{- end }}
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp

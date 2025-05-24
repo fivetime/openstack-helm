@@ -22,17 +22,12 @@ metadata:
   labels:
 {{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
+  type: ClusterIP
   ports:
     - name: z-api
       port: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+      targetPort: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
       protocol: TCP
-      targetPort: z-api
-    {{ if .Values.network.api.node_port.enabled }}
-      nodePort: {{ .Values.network.api.node_port.port }}
-    {{ end }}
   selector:
 {{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
-  {{ if .Values.network.api.node_port.enabled }}
-  type: NodePort
-  {{ end }}
 {{- end }}

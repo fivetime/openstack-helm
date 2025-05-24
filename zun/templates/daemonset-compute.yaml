@@ -47,9 +47,6 @@ spec:
 {{ tuple "zun_compute" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
 {{ tuple "zun_compute" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
-      securityContext:
-        fsGroup: 107
-        supplementalGroups: [107]
       nodeSelector:
         {{ .Values.labels.compute.node_selector_key }}: {{ .Values.labels.compute.node_selector_value }}
 {{ if $envAll.Values.pod.tolerations.zun.enabled }}
@@ -66,20 +63,24 @@ spec:
 {{ tuple $envAll "zun_compute" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.compute | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
-            privileged: true
             runAsUser: 0
-            runAsGroup: 107
+            privileged: true
             readOnlyRootFilesystem: false
           env:
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            {{- if eq .Values.container_runtime.type "docker" }}
             - name: DOCKER_HOST
-              value: "unix://{{ .Values.network.docker.socket_path }}"
+              value: "unix://{{ .Values.container_runtime.docker.socket_path }}"
+            {{- end }}
           command:
             - /tmp/zun-compute.sh
           volumeMounts:
+            # ═══════════════════════════════════════════════════════════
+            # 基本配置和脚本挂载
+            # ═══════════════════════════════════════════════════════════
             - name: pod-tmp
               mountPath: /tmp
             - name: zun-bin
@@ -100,27 +101,59 @@ spec:
               mountPath: /etc/zun/policy.yaml
               subPath: policy.yaml
               readOnly: true
-            # Docker socket挂载
-            - name: docker-socket
-              mountPath: {{ .Values.network.docker.socket_path }}
-            - name: docker-plugins
-              mountPath: {{ .Values.network.docker.plugins_dir }}
-              readOnly: false
-            - name: var-run
-              mountPath: /var/run
+            - name: zun-etc
+              mountPath: /etc/zun/rootwrap.conf
+              subPath: rootwrap.conf
+              readOnly: true
+            - name: zun-etc
+              mountPath: /etc/zun/rootwrap.d/zun.filters
+              subPath: zun.filters
+              readOnly: true
+
+            # ═══════════════════════════════════════════════════════════
+            # 必要的数据和运行时目录
+            # ═══════════════════════════════════════════════════════════
             - name: host-var-lib-zun
               mountPath: /var/lib/zun
             - name: host-var-log
               mountPath: /var/log
-            - name: host-dev
-              mountPath: /dev
-            - name: host-sys
-              mountPath: /sys
-            - name: host-proc
-              mountPath: /host/proc
+            - name: host-run
+              mountPath: /var/run
+
+            # ═══════════════════════════════════════════════════════════
+            # 容器运行时 socket
+            # ═══════════════════════════════════════════════════════════
+            {{- if eq .Values.container_runtime.type "docker" }}
+            - name: docker-socket
+              mountPath: {{ .Values.container_runtime.docker.socket_path }}
+            - name: docker-lib
+              mountPath: {{ .Values.container_runtime.docker.library_dir }}
               readOnly: true
+            {{- else if eq .Values.container_runtime.type "cri" }}
+            - name: cri-socket
+              mountPath: {{ .Values.container_runtime.cri.socket_path }}
+            {{- end }}
+
+            # ═══════════════════════════════════════════════════════════
+            # 网络相关（仅在特定网络驱动下）
+            # ═══════════════════════════════════════════════════════════
+            {{- if eq .Values.network.driver "cni" }}
+            - name: cni-bin
+              mountPath: {{ .Values.network.drivers.cni.paths.bin_dir }}
+              readOnly: true
+            - name: cni-conf
+              mountPath: {{ .Values.network.drivers.cni.paths.conf_dir }}
+              readOnly: true
+            {{- end }}
+
+            # ═══════════════════════════════════════════════════════════
+            # 用户自定义挂载点
+            # ═══════════════════════════════════════════════════════════
 {{ if $mounts_zun_compute.volumeMounts }}{{ toYaml $mounts_zun_compute.volumeMounts | indent 12 }}{{ end }}
       volumes:
+        # ═══════════════════════════════════════════════════════════
+        # 基本配置卷
+        # ═══════════════════════════════════════════════════════════
         - name: pod-tmp
           emptyDir: {}
         - name: zun-bin
@@ -131,18 +164,10 @@ spec:
           secret:
             secretName: zun-etc
             defaultMode: 0444
-        - name: docker-socket
-          hostPath:
-            path: {{ .Values.network.docker.socket_path }}
-            type: Socket
-        - name: docker-plugins
-          hostPath:
-            path: {{ .Values.network.docker.plugins_dir }}
-            type: DirectoryOrCreate
-        - name: var-run
-          hostPath:
-            path: /var/run
-            type: Directory
+
+        # ═══════════════════════════════════════════════════════════
+        # 必要的宿主机目录
+        # ═══════════════════════════════════════════════════════════
         - name: host-var-lib-zun
           hostPath:
             path: /var/lib/zun
@@ -150,14 +175,47 @@ spec:
         - name: host-var-log
           hostPath:
             path: /var/log
-        - name: host-dev
+            type: Directory
+        - name: host-run
           hostPath:
-            path: /dev
-        - name: host-sys
+            path: /var/run
+            type: Directory
+
+        # ═══════════════════════════════════════════════════════════
+        # 容器运行时 socket
+        # ═══════════════════════════════════════════════════════════
+        {{- if eq .Values.container_runtime.type "docker" }}
+        - name: docker-socket
           hostPath:
-            path: /sys
-        - name: host-proc
+            path: {{ .Values.container_runtime.docker.socket_path }}
+            type: Socket
+        - name: docker-lib
           hostPath:
-            path: /proc
+            path: {{ .Values.container_runtime.docker.library_dir }}
+            type: Directory
+        {{- else if eq .Values.container_runtime.type "cri" }}
+        - name: cri-socket
+          hostPath:
+            path: {{ .Values.container_runtime.cri.socket_path }}
+            type: Socket
+        {{- end }}
+
+        # ═══════════════════════════════════════════════════════════
+        # CNI 网络插件（仅在 CNI 模式下）
+        # ═══════════════════════════════════════════════════════════
+        {{- if eq .Values.network.driver "cni" }}
+        - name: cni-bin
+          hostPath:
+            path: {{ .Values.network.drivers.cni.paths.bin_dir }}
+            type: DirectoryOrCreate
+        - name: cni-conf
+          hostPath:
+            path: {{ .Values.network.drivers.cni.paths.conf_dir }}
+            type: DirectoryOrCreate
+        {{- end }}
+
+        # ═══════════════════════════════════════════════════════════
+        # 用户自定义卷
+        # ═══════════════════════════════════════════════════════════
 {{ if $mounts_zun_compute.volumes }}{{ toYaml $mounts_zun_compute.volumes | indent 8 }}{{ end }}
 {{- end }}

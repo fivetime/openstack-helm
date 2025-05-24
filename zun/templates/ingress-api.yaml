@@ -12,7 +12,67 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.ingress_api .Values.network.api.ingress.public }}
-{{- $ingressOpts := dict "envAll" . "backendServiceType" "container" "backendPort" "z-api" -}}
-{{ $ingressOpts | include "helm-toolkit.manifests.ingress" }}
+{{- if .Values.manifests.ingress_api }}
+{{- $envAll := . }}
+{{- $ingressOpts := dict "envAll" . "backendService" "container" "backendServiceType" "container" "backendPort" "api" -}}
+{{- $secretName := "" -}}
+{{- if and $envAll.Values.secrets.tls.container (hasKey $envAll.Values.secrets.tls.container "api") -}}
+{{-   $secretName = $envAll.Values.secrets.tls.container.api.public -}}
+{{- end -}}
+{{- if and .Values.manifests.certificates $secretName -}}
+{{- $_ := set $ingressOpts "secretName" $secretName -}}
+{{- end -}}
+{{- if eq $envAll.Values.endpoints.container.scheme.default "https" -}}
+{{- $_ := set $ingressOpts "certIssuer" $envAll.Values.endpoints.container.host_fqdn_override.public.tls.issuerRef.name -}}
+{{- end -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ tuple "container" "public" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
+  annotations:
+    # 基本配置
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"  # 允许大的容器镜像上传
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    # API 速率限制（可选）
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "3"
+    # CORS 配置（如果需要）
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, PUT, POST, DELETE, PATCH, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,X-Auth-Token"
+    # 重写规则（如果需要）
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+{{ toYaml (index .Values.endpoints.container "ingress" "annotations") | indent 4 }}
+  labels:
+{{ tuple $envAll "zun" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  ingressClassName: {{ .Values.endpoints.container.ingress.ingressClassName | default "nginx" }}
+  rules:
+    - host: {{ tuple "container" "public" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" }}
+      http:
+        paths:
+          - path: /v1/?(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ tuple "container" "internal" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
+                port:
+                  number: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+          # 健康检查路径
+          - path: /healthcheck
+            pathType: Exact
+            backend:
+              service:
+                name: {{ tuple "container" "internal" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
+                port:
+                  number: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- if and .Values.manifests.certificates $secretName }}
+  tls:
+    - secretName: {{ $secretName }}
+      hosts:
+        - {{ tuple "container" "public" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" }}
+{{- end }}
 {{- end }}

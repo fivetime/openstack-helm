@@ -8,85 +8,14 @@ Licensed under the Apache License, Version 2.0 (the "License");
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: nexus-initial-config
-  labels:
-{{ tuple $envAll "nexus" "initial-config" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
-data:
-  nginx-default.conf: |
-    # 默认Nginx配置 - 等待服务发现
-    server {
-        listen {{ .Values.proxy.ports.http }} default_server;
-        server_name _;
-
-        location /nginx-health {
-            access_log off;
-            return 200 "healthy\n";
-            add_header Content-Type text/plain;
-        }
-
-        location / {
-            return 503 "Service discovery in progress";
-            add_header Content-Type text/plain;
-        }
-    }
-
-    {{- if .Values.proxy.ssl.enabled }}
-    server {
-        listen {{ .Values.proxy.ports.https }} ssl default_server;
-        server_name _;
-
-        ssl_certificate /etc/nginx/ssl/tls.crt;
-        ssl_certificate_key /etc/nginx/ssl/tls.key;
-
-        location /nginx-health {
-            access_log off;
-            return 200 "healthy\n";
-            add_header Content-Type text/plain;
-        }
-
-        location / {
-            return 503 "Service discovery in progress";
-            add_header Content-Type text/plain;
-        }
-    }
-    {{- end }}
-
-  dnsmasq-default.conf: |
-    # 默认DNSMasq配置 - 等待服务发现
-    port=53
-    domain-needed
-    bogus-priv
-    no-resolv
-    no-poll
-    bind-interfaces
-
-    {{- range .Values.dns.upstream_dns }}
-    server={{ . }}
-    {{- end }}
-
-    cache-size={{ .Values.dns.cache_size }}
-    neg-ttl={{ .Values.dns.neg_ttl }}
-
-    {{- if .Values.dns.log_queries }}
-    log-queries
-    log-facility={{ .Values.dns.log_file }}
-    {{- end }}
-
-    interface=*
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
   name: nexus-etc
   labels:
 {{ tuple $envAll "nexus" "etc" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 data:
   nginx.conf: |
-    user nginx;
     worker_processes {{ .Values.proxy.worker_processes }};
     error_log /var/log/nginx/error.log warn;
-    pid /var/run/nginx.pid;
+    pid /run/nginx.pid;
 
     events {
         worker_connections {{ .Values.proxy.worker_connections }};
@@ -113,6 +42,24 @@ data:
         proxy_buffering off;
         proxy_request_buffering off;
 
+        # 默认 server 块，等待服务发现
+        server {
+            listen {{ .Values.proxy.ports.http }} default_server;
+            server_name _;
+
+            location /nginx-health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+
+            location / {
+                return 503 "Service discovery in progress";
+                add_header Content-Type text/plain;
+            }
+        }
+
+        # 包含其他配置文件（服务发现会生成）
         include /etc/nginx/conf.d/*.conf;
     }
 
@@ -137,5 +84,7 @@ data:
     {{- end }}
 
     interface=*
+
+    # 包含其他配置文件（服务发现会生成）
     conf-dir=/etc/dnsmasq.d/,*.conf
 {{- end }}

@@ -70,6 +70,14 @@ spec:
 {{ toYaml .Values.pod.probes.proxy.proxy.readiness.params | indent 12 }}
 {{- end }}
           volumeMounts:
+            # PID 文件目录
+            - name: nginx-run
+              mountPath: /run
+            # 默认配置文件
+            - name: nexus-etc
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
             # 配置文件目录
             - name: shared-config
               mountPath: /etc/nginx/conf.d
@@ -88,6 +96,12 @@ spec:
             - name: PORT_HTTPS
               value: {{ .Values.proxy.ports.https | quote }}
       volumes:
+        - name: nginx-run
+          emptyDir: {}
+        - name: nexus-etc
+          configMap:
+            name: nexus-etc
+            defaultMode: 0444
         - name: shared-config
           persistentVolumeClaim:
             claimName: nexus-shared-config

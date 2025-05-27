@@ -39,23 +39,6 @@ spec:
 {{ end }}
       initContainers:
 {{ tuple $envAll "dns" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
-        - name: config-init
-{{ tuple $envAll "dns" | include "helm-toolkit.snippets.image" | indent 10 }}
-{{ dict "envAll" $envAll "application" "dns" "container" "config_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
-          command:
-            - /tmp/init-config.sh
-          volumeMounts:
-            - name: nexus-bin
-              mountPath: /tmp/init-config.sh
-              subPath: init-config.sh
-              readOnly: true
-            - name: nexus-initial-config
-              mountPath: /tmp/initial-config
-              readOnly: true
-            - name: shared-config
-              mountPath: /shared/config
-            - name: dnsmasq-logs
-              mountPath: /var/log/dnsmasq
       containers:
         - name: dns
 {{ tuple $envAll "dns" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -88,8 +71,13 @@ spec:
             - name: nexus-bin
               mountPath: /tmp
               readOnly: true
+            - name: nexus-etc
+              mountPath: /etc/dnsmasq.conf
+              subPath: dnsmasq.conf
+              readOnly: true
             - name: shared-config
               mountPath: /shared/config
+              readOnly: true
             - name: dnsmasq-logs
               mountPath: /var/log/dnsmasq
       volumes:
@@ -97,9 +85,9 @@ spec:
           configMap:
             name: nexus-bin
             defaultMode: 0555
-        - name: nexus-initial-config
+        - name: nexus-etc
           configMap:
-            name: nexus-initial-config
+            name: nexus-etc
             defaultMode: 0444
         - name: shared-config
           persistentVolumeClaim:

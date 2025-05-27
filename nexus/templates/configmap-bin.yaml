@@ -16,8 +16,6 @@ data:
   image-repo-sync.sh: |
 {{- include "helm-toolkit.scripts.image_repo_sync" . | indent 4 }}
 {{- end }}
-  init-config.sh: |
-{{ tuple "bin/_init-config.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   discover-services.sh: |
 {{ tuple "bin/_service-discover.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   generate-nginx-config.sh: |

@@ -39,23 +39,6 @@ spec:
 {{- end }}
       initContainers:
 {{ tuple $envAll "proxy" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
-        - name: config-init
-{{ tuple $envAll "proxy" | include "helm-toolkit.snippets.image" | indent 10 }}
-{{ dict "envAll" $envAll "application" "proxy" "container" "config_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
-          command:
-            - /tmp/init-config.sh
-          volumeMounts:
-            - name: nexus-bin
-              mountPath: /tmp/init-config.sh
-              subPath: init-config.sh
-              readOnly: true
-            - name: nexus-initial-config
-              mountPath: /tmp/initial-config
-              readOnly: true
-            - name: shared-config
-              mountPath: /shared/config
-            - name: nginx-logs
-              mountPath: /var/log/nginx
       containers:
         - name: proxy
 {{ tuple $envAll "proxy" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -95,8 +78,13 @@ spec:
             - name: nexus-bin
               mountPath: /tmp
               readOnly: true
+            - name: nexus-etc
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
             - name: shared-config
               mountPath: /shared/config
+              readOnly: true
             - name: nginx-logs
               mountPath: /var/log/nginx
 {{- if .Values.proxy.ssl.enabled }}
@@ -117,10 +105,11 @@ spec:
           configMap:
             name: nexus-bin
             defaultMode: 0555
-        - name: nexus-initial-config
+        - name: nexus-etc
           configMap:
-            name: nexus-initial-config
+            name: nexus-etc
             defaultMode: 0444
+        # 删除了 nexus-initial-config volume
         - name: shared-config
           persistentVolumeClaim:
             claimName: nexus-shared-config

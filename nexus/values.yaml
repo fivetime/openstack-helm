@@ -17,11 +17,11 @@ helm3_hook: true
 
 images:
   tags:
-    proxy: docker.io/nginx:1.21-alpine
-    dns: docker.io/strm/dnsmasq:latest
-    service_discovery: quay.io/airshipit/kubernetes-entrypoint:v1.0.0
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:v1.0.0
-    image_repo_sync: docker.io/docker:17.07.0
+    dns: ghcr.io/fivetime/nexus-dns:latest
+    proxy: ghcr.io/fivetime/nexus-proxy:latest
+    service_discovery: ghcr.io/fivetime/nexus-proxy:latest
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+    image_repo_sync: docker.io/docker:28.1.1
   pull_policy: "IfNotPresent"
   local_registry:
     active: false

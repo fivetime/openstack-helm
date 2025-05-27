@@ -94,7 +94,6 @@ dns:
     - "8.8.8.8"
     - "1.1.1.1"
   log_queries: true
-  log_file: "/var/log/dnsmasq/dnsmasq.log"
   # DNS缓存配置
   cache_size: 1000
   neg_ttl: 60

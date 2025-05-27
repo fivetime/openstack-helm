@@ -38,7 +38,7 @@ spec:
             {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value | quote }}
 {{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 10 }}
           initContainers:
-{{ tuple $envAll "service_discovery" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 12 }}
+{{ tuple $envAll "service_discovery" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 10 }}
 {{- if .Values.discovery.use_openstack_cli }}
             - name: keystone-auth-init
 {{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.image" | indent 14 }}
@@ -65,7 +65,7 @@ spec:
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.service_discovery | include "helm-toolkit.snippets.kubernetes_resources" | indent 14 }}
 {{ dict "envAll" $envAll "application" "service_discovery" "container" "service_discovery" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 14 }}
               command:
-                - /tmp/service-discovery-orchestrator.sh
+                - /tmp/orchestrator.sh
               volumeMounts:
                 - name: nexus-bin
                   mountPath: /tmp

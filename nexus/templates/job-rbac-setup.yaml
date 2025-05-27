@@ -41,8 +41,8 @@ spec:
 {{ tuple $envAll "rbac_setup" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: rbac-setup
-{{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.image" | indent 10 }}
-{{ tuple $envAll $envAll.Values.pod.resources.jobs.service_discovery | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ tuple $envAll "discovery" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.jobs.discovery | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
 {{ dict "envAll" $envAll "application" "rbac_setup" "container" "rbac_setup" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
           command:
             - /tmp/rbac-setup.sh

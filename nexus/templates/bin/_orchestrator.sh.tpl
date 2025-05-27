@@ -42,7 +42,7 @@ init_environment() {
 }
 
 # 执行服务发现
-run_service_discovery() {
+run_discovery() {
     log "Running service discovery..."
 
     if ! /tmp/discover-services.sh; then
@@ -154,7 +154,7 @@ main() {
 
     # 执行服务发现流程
     init_environment
-    run_service_discovery
+    run_discovery
     generate_configurations
     apply_configurations
     generate_summary

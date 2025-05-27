@@ -60,7 +60,7 @@ nexus/
 │   ├── pvc-shared-config.yaml          # 共享配置存储
 │   ├── secret-keystone.yaml            # OpenStack 认证密钥
 │   ├── secret-registry.yaml            # 镜像仓库密钥
-│   ├── service-discovery.yaml          # 服务发现 CronJob
+│   ├── discovery.yaml          # 服务发现 CronJob
 │   ├── service-dns.yaml                # DNS 服务
 │   ├── service-proxy.yaml              # 代理服务
 │   └── service-rbac.yaml               # RBAC 权限配置
@@ -86,7 +86,7 @@ nexus/
 
 #### Kubernetes 资源模板
 - **部署相关**: deployment-proxy.yaml, deployment-dns.yaml
-- **服务相关**: service-proxy.yaml, service-dns.yaml, service-discovery.yaml
+- **服务相关**: service-proxy.yaml, service-dns.yaml, discovery.yaml
 - **配置相关**: configmap-bin.yaml, configmap-etc.yaml, pvc-shared-config.yaml
 - **安全相关**: secret-keystone.yaml, service-rbac.yaml, network-policy.yaml
 - **任务相关**: job-image-repo-sync.yaml
@@ -285,14 +285,14 @@ kubectl logs -f deployment/nexus-proxy -n openstack-proxy
 kubectl logs -f deployment/nexus-dns -n openstack-proxy
 
 # 服务发现日志
-kubectl logs -l app=nexus,component=service-discovery -n openstack-proxy
+kubectl logs -l app=nexus,component=discovery -n openstack-proxy
 ```
 
 ### 手动触发服务发现
 
 ```bash
 # 创建手动Job
-kubectl create job --from=cronjob/nexus-service-discovery nexus-discovery-manual -n openstack-proxy
+kubectl create job --from=cronjob/nexus-discovery nexus-discovery-manual -n openstack-proxy
 
 # 查看执行结果
 kubectl logs job/nexus-discovery-manual -n openstack-proxy
@@ -365,8 +365,8 @@ helm upgrade nexus . \
 
 ```bash
 # 检查RBAC权限
-kubectl auth can-i get services --as=system:serviceaccount:openstack-proxy:nexus-service-discovery -n openstack
-kubectl auth can-i list services --as=system:serviceaccount:openstack-proxy:nexus-service-discovery -n openstack
+kubectl auth can-i get services --as=system:serviceaccount:openstack-proxy:nexus-discovery -n openstack
+kubectl auth can-i list services --as=system:serviceaccount:openstack-proxy:nexus-discovery -n openstack
 
 # 检查OpenStack命名空间
 kubectl get ns openstack
@@ -389,8 +389,8 @@ kubectl exec -it deployment/nexus-proxy -n openstack-proxy -- ls -la /shared/con
 kubectl exec -it deployment/nexus-proxy -n openstack-proxy -- cat /shared/config/nginx/default.conf
 
 # 强制重新生成配置
-kubectl delete job -l app=nexus,component=service-discovery -n openstack-proxy
-kubectl create job --from=cronjob/nexus-service-discovery nexus-discovery-force -n openstack-proxy
+kubectl delete job -l app=nexus,component=discovery -n openstack-proxy
+kubectl create job --from=cronjob/nexus-discovery nexus-discovery-force -n openstack-proxy
 ```
 
 #### 4. SSL证书问题
@@ -429,7 +429,7 @@ kubectl rollout restart deployment/nexus-proxy -n openstack-proxy
 kubectl rollout restart deployment/nexus-dns -n openstack-proxy
 
 # 强制重新发现服务
-kubectl delete job -l app=nexus,component=service-discovery -n openstack-proxy
+kubectl delete job -l app=nexus,component=discovery -n openstack-proxy
 ```
 
 ## 📚 开发和贡献

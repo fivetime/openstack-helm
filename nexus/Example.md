@@ -359,8 +359,8 @@ helm upgrade nexus ./nexus \
 
 ```bash
 # 检查RBAC权限
-kubectl auth can-i get services --as=system:serviceaccount:openstack-proxy:nexus-service-discovery -n openstack
-kubectl auth can-i list services --as=system:serviceaccount:openstack-proxy:nexus-service-discovery -n openstack
+kubectl auth can-i get services --as=system:serviceaccount:openstack-proxy:nexus-discovery -n openstack
+kubectl auth can-i list services --as=system:serviceaccount:openstack-proxy:nexus-discovery -n openstack
 
 # 检查OpenStack命名空间
 kubectl get ns openstack
@@ -383,8 +383,8 @@ kubectl exec -it deployment/nexus-proxy -n openstack-proxy -- ls -la /shared/con
 kubectl exec -it deployment/nexus-proxy -n openstack-proxy -- cat /shared/config/nginx/default.conf
 
 # 强制重新生成配置
-kubectl delete job -l app=nexus,component=service-discovery -n openstack-proxy
-kubectl create job --from=cronjob/nexus-service-discovery nexus-discovery-force -n openstack-proxy
+kubectl delete job -l app=nexus,component=discovery -n openstack-proxy
+kubectl create job --from=cronjob/nexus-discovery nexus-discovery-force -n openstack-proxy
 ```
 
 ### 问题4: SSL证书问题
@@ -433,7 +433,7 @@ spec:
 ```bash
 # 使用Fluentd收集日志
 kubectl logs -f -l app=nexus --tail=100 -n openstack-proxy | grep ERROR
-kubectl logs -f -l app=nexus,component=service-discovery --tail=50 -n openstack-proxy
+kubectl logs -f -l app=nexus,component=discovery --tail=50 -n openstack-proxy
 ```
 
 ## 🔒 安全最佳实践
@@ -470,7 +470,7 @@ spec:
 ```bash
 # 限制服务发现权限
 kubectl create role nexus-limited --verb=get,list --resource=services,endpoints -n openstack
-kubectl create rolebinding nexus-binding --role=nexus-limited --serviceaccount=openstack-proxy:nexus-service-discovery -n openstack
+kubectl create rolebinding nexus-binding --role=nexus-limited --serviceaccount=openstack-proxy:nexus-discovery -n openstack
 ```
 
 ### 高级配置示例

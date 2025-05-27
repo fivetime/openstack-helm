@@ -2,7 +2,7 @@
 Licensed under the Apache License, Version 2.0 (the "License");
 */}}
 
-{{- if and .Values.manifests.service_discovery .Values.discovery.enabled }}
+{{- if and .Values.manifests.discovery .Values.discovery.enabled }}
 {{- $envAll := . }}
 
 {{- $serviceAccountName := "nexus-service-discovery" }}
@@ -32,19 +32,19 @@ spec:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 12 }}
         spec:
           serviceAccountName: {{ $serviceAccountName }}
-{{ dict "envAll" $envAll "application" "service_discovery" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 10 }}
+{{ dict "envAll" $envAll "application" "discovery" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 10 }}
           restartPolicy: OnFailure
           nodeSelector:
             {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value | quote }}
-{{ if $envAll.Values.pod.tolerations.service_discovery.enabled }}
-{{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ if $envAll.Values.pod.tolerations.discovery.enabled }}
+{{ tuple $envAll "discovery" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
 {{ end }}
           initContainers:
-{{ tuple $envAll "service_discovery" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 10 }}
+{{ tuple $envAll "discovery" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 10 }}
 {{- if .Values.discovery.use_openstack_cli }}
             - name: keystone-auth-init
-{{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.image" | indent 14 }}
-{{ dict "envAll" $envAll "application" "service_discovery" "container" "keystone_auth" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 14 }}
+{{ tuple $envAll "discovery" | include "helm-toolkit.snippets.image" | indent 14 }}
+{{ dict "envAll" $envAll "application" "discovery" "container" "keystone_auth" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 14 }}
               command:
                 - /tmp/keystone-auth.sh
                 - verify
@@ -57,15 +57,15 @@ spec:
                   mountPath: /tmp/keystone-secrets
                   readOnly: true
               env:
-{{- with $env := dict "envAll" $envAll "application" "service_discovery" "container" "keystone_auth" }}
+{{- with $env := dict "envAll" $envAll "application" "discovery" "container" "keystone_auth" }}
 {{- include "helm-toolkit.snippets.keystone_openrc_env_vars" $env | indent 16 }}
 {{- end }}
 {{- end }}
           containers:
             - name: service-discovery
-{{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.image" | indent 14 }}
-{{ tuple $envAll $envAll.Values.pod.resources.jobs.service_discovery | include "helm-toolkit.snippets.kubernetes_resources" | indent 14 }}
-{{ dict "envAll" $envAll "application" "service_discovery" "container" "service_discovery" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 14 }}
+{{ tuple $envAll "discovery" | include "helm-toolkit.snippets.image" | indent 14 }}
+{{ tuple $envAll $envAll.Values.pod.resources.jobs.discovery | include "helm-toolkit.snippets.kubernetes_resources" | indent 14 }}
+{{ dict "envAll" $envAll "application" "discovery" "container" "discovery" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 14 }}
               command:
                 - /tmp/orchestrator.sh
               volumeMounts:
@@ -89,7 +89,7 @@ spec:
                 - name: USE_OPENSTACK_CLI
                   value: {{ .Values.discovery.use_openstack_cli | quote }}
 {{- if .Values.discovery.use_openstack_cli }}
-{{- with $env := dict "envAll" $envAll "application" "service_discovery" "container" "service_discovery" }}
+{{- with $env := dict "envAll" $envAll "application" "discovery" "container" "discovery" }}
 {{- include "helm-toolkit.snippets.keystone_openrc_env_vars" $env | indent 16 }}
 {{- end }}
 {{- end }}

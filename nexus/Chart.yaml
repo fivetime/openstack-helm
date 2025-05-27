@@ -23,7 +23,7 @@ keywords:
   - nginx
   - dns
   - loadbalancer
-  - service-discovery
+  - discovery
 home: https://github.com/openstack/openstack-helm
 sources:
   - https://github.com/openstack/openstack-helm

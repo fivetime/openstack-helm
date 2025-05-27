@@ -89,7 +89,7 @@ verify_service_account_permissions() {
 }
 
 # 测试服务发现功能
-test_service_discovery() {
+test_discovery() {
     log "Testing service discovery functionality..."
 
     # 检查OpenStack命名空间中是否有服务
@@ -163,7 +163,7 @@ run_rbac_verification() {
     verify_service_account_permissions
 
     # 测试功能
-    test_service_discovery
+    test_discovery
 
     log "RBAC verification completed successfully"
 }

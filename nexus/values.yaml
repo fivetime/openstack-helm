@@ -19,7 +19,7 @@ images:
   tags:
     dns: ghcr.io/fivetime/nexus-dns:latest
     proxy: ghcr.io/fivetime/nexus-proxy:latest
-    service_discovery: ghcr.io/fivetime/nexus-proxy:latest
+    discovery: ghcr.io/fivetime/nexus-proxy:latest
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
     image_repo_sync: docker.io/docker:28.1.1
   pull_policy: "IfNotPresent"
@@ -139,14 +139,14 @@ pod:
           runAsUser: 0
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
-    service_discovery:
+    discovery:
       pod:
         runAsUser: 65534
         runAsGroup: 65534
         runAsNonRoot: true
         fsGroup: 65534
       container:
-        service_discovery:
+        discovery:
           runAsUser: 65534
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
@@ -175,7 +175,7 @@ pod:
         - key: node-role.kubernetes.io/master
           operator: Exists
           effect: NoSchedule
-    service_discovery:
+    discovery:
       enabled: false
       tolerations:
         - key: node-role.kubernetes.io/master
@@ -198,7 +198,7 @@ pod:
         memory: "256Mi"
         cpu: "500m"
     jobs:
-      service_discovery:
+      discovery:
         requests:
           memory: "128Mi"
           cpu: "100m"
@@ -270,7 +270,7 @@ dependencies:
     dns:
       jobs:
         - nexus-rbac-setup
-    service_discovery:
+    discovery:
       jobs:
         - nexus-rbac-setup
       services:
@@ -433,7 +433,7 @@ manifests:
   configmap_etc: true
   deployment_proxy: true
   deployment_dns: true
-  service_discovery: true
+  discovery: true
   job_image_repo_sync: true
   service_rbac: true
   secret_registry: true

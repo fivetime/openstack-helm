@@ -53,70 +53,42 @@ spec:
               containerPort: {{ .Values.proxy.ports.https }}
               protocol: TCP
 {{- end }}
-            - name: health
-              containerPort: 8080
-              protocol: TCP
 {{- if .Values.pod.probes.proxy.proxy.liveness.enabled }}
           livenessProbe:
             httpGet:
-              path: {{ tuple "proxy" "internal" "healthcheck" . | include "helm-toolkit.endpoints.keystone_endpoint_path_lookup" }}
-              port: 8080
+              path: /
+              port: {{ .Values.proxy.ports.http }}
               scheme: HTTP
 {{ toYaml .Values.pod.probes.proxy.proxy.liveness.params | indent 12 }}
 {{- end }}
 {{- if .Values.pod.probes.proxy.proxy.readiness.enabled }}
           readinessProbe:
             httpGet:
-              path: {{ tuple "proxy" "internal" "healthcheck" . | include "helm-toolkit.endpoints.keystone_endpoint_path_lookup" }}
-              port: 8080
+              path: /
+              port: {{ .Values.proxy.ports.http }}
               scheme: HTTP
 {{ toYaml .Values.pod.probes.proxy.proxy.readiness.params | indent 12 }}
 {{- end }}
-          command:
-            - /tmp/proxy-start.sh
           volumeMounts:
-            - name: nexus-bin
-              mountPath: /tmp
-              readOnly: true
-            - name: nexus-etc
-              mountPath: /etc/nginx/nginx.conf
-              subPath: nginx.conf
-              readOnly: true
+            # 配置文件目录
             - name: shared-config
-              mountPath: /shared/config
+              mountPath: /etc/nginx/conf.d
+              subPath: nginx
               readOnly: true
-            - name: nginx-logs
-              mountPath: /var/log/nginx
 {{- if .Values.proxy.ssl.enabled }}
-            - name: ssl-certs
+            # SSL 证书目录
+            - name: shared-config
               mountPath: /etc/nginx/ssl
+              subPath: ssl
+              readOnly: true
 {{- end }}
           env:
             - name: PORT_HTTP
               value: {{ .Values.proxy.ports.http | quote }}
             - name: PORT_HTTPS
               value: {{ .Values.proxy.ports.https | quote }}
-            - name: WORKER_PROCESSES
-              value: {{ .Values.proxy.worker_processes | quote }}
-            - name: WORKER_CONNECTIONS
-              value: {{ .Values.proxy.worker_connections | quote }}
       volumes:
-        - name: nexus-bin
-          configMap:
-            name: nexus-bin
-            defaultMode: 0555
-        - name: nexus-etc
-          configMap:
-            name: nexus-etc
-            defaultMode: 0444
-        # 删除了 nexus-initial-config volume
         - name: shared-config
           persistentVolumeClaim:
             claimName: nexus-shared-config
-        - name: nginx-logs
-          emptyDir: {}
-{{- if .Values.proxy.ssl.enabled }}
-        - name: ssl-certs
-          emptyDir: {}
-{{- end }}
 {{- end }}

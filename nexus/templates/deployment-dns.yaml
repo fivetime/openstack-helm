@@ -65,33 +65,14 @@ spec:
                 - -c
                 - "nslookup kubernetes.default.svc.cluster.local localhost"
 {{ toYaml .Values.pod.probes.dns.dns.readiness.params | indent 12 }}
-          command:
-            - /tmp/dns-start.sh
           volumeMounts:
-            - name: nexus-bin
-              mountPath: /tmp
-              readOnly: true
-            - name: nexus-etc
-              mountPath: /etc/dnsmasq.conf
-              subPath: dnsmasq.conf
-              readOnly: true
+            # 配置文件目录
             - name: shared-config
-              mountPath: /shared/config
+              mountPath: /etc/dnsmasq.d
+              subPath: dnsmasq
               readOnly: true
-            - name: dnsmasq-logs
-              mountPath: /var/log/dnsmasq
       volumes:
-        - name: nexus-bin
-          configMap:
-            name: nexus-bin
-            defaultMode: 0555
-        - name: nexus-etc
-          configMap:
-            name: nexus-etc
-            defaultMode: 0444
         - name: shared-config
           persistentVolumeClaim:
             claimName: nexus-shared-config
-        - name: dnsmasq-logs
-          emptyDir: {}
 {{- end }}

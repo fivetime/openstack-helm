@@ -1,0 +1,64 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+*/}}
+
+{{- define "metadata.annotations.job.rbac_setup" }}
+helm.sh/hook: post-install,post-upgrade
+helm.sh/hook-weight: "-5"
+{{- end }}
+
+{{- if .Values.manifests.job_rbac_setup }}
+{{- $envAll := . }}
+
+{{- $serviceAccountName := "nexus-rbac-setup" }}
+{{ tuple $envAll "rbac-setup" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nexus-rbac-setup
+  labels:
+{{ tuple $envAll "nexus" "rbac-setup" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+  {{- if .Values.helm3_hook }}
+  annotations:
+{{ include "metadata.annotations.job.rbac_setup" . | indent 4 }}
+  {{- end }}
+spec:
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "nexus" "rbac-setup" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "rbac_setup" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      restartPolicy: OnFailure
+      nodeSelector:
+        {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value | quote }}
+{{- $tolerations := dict "envAll" $envAll "serviceName" "rbac_setup" }}
+{{ $tolerations | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+      initContainers:
+{{ tuple $envAll "rbac_setup" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: rbac-setup
+{{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.jobs.service_discovery | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "rbac_setup" "container" "rbac_setup" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/rbac-setup.sh
+          volumeMounts:
+            - name: nexus-bin
+              mountPath: /tmp
+              readOnly: true
+          env:
+            - name: OPENSTACK_NAMESPACE
+              value: {{ .Values.discovery.openstack_namespace | quote }}
+            - name: CURRENT_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+      volumes:
+        - name: nexus-bin
+          configMap:
+            name: nexus-bin
+            defaultMode: 0555
+{{- end }}

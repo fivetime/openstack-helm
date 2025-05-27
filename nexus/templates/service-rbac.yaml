@@ -1,0 +1,69 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+*/}}
+
+{{- if .Values.manifests.service_rbac }}
+{{- $envAll := . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nexus-service-discovery
+  labels:
+{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nexus-service-discovery
+  labels:
+{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nexus-service-discovery
+subjects:
+  - kind: ServiceAccount
+    name: nexus-service-discovery
+    namespace: {{ .Release.Namespace }}
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nexus-service-discovery
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nexus-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ tuple $envAll "nexus" "proxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+
+{{- if .Values.dns.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nexus-dns
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ tuple $envAll "nexus" "dns" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{- end }}
+{{- end }}

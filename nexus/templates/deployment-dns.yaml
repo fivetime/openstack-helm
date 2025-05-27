@@ -1,0 +1,108 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+*/}}
+
+{{- if and .Values.manifests.deployment_dns .Values.dns.enabled }}
+{{- $envAll := . }}
+
+{{- $serviceAccountName := "nexus-dns" }}
+{{ tuple $envAll "dns" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-dns
+  labels:
+{{ tuple $envAll "nexus" "dns" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  replicas: {{ .Values.pod.replicas.dns }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "nexus" "dns" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "nexus" "dns" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "dns" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      affinity:
+{{ tuple $envAll "nexus" "dns" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      nodeSelector:
+        {{ .Values.labels.dns.node_selector_key }}: {{ .Values.labels.dns.node_selector_value | quote }}
+{{- $tolerations := dict "envAll" $envAll "serviceName" "dns" }}
+{{ $tolerations | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+      initContainers:
+{{ tuple $envAll "dns" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        - name: config-init
+{{ tuple $envAll "dns" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "dns" "container" "config_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/init-config.sh
+          volumeMounts:
+            - name: nexus-bin
+              mountPath: /tmp/init-config.sh
+              subPath: init-config.sh
+              readOnly: true
+            - name: nexus-initial-config
+              mountPath: /tmp/initial-config
+              readOnly: true
+            - name: shared-config
+              mountPath: /shared/config
+            - name: dnsmasq-logs
+              mountPath: /var/log/dnsmasq
+      containers:
+        - name: dns
+{{ tuple $envAll "dns" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.dns | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "dns" "container" "dns" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          ports:
+            - name: dns-udp
+              containerPort: {{ .Values.dns.port }}
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: {{ .Values.dns.port }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "nslookup kubernetes.default.svc.cluster.local localhost"
+{{ toYaml .Values.pod.probes.dns.dns.liveness.params | indent 12 }}
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "nslookup kubernetes.default.svc.cluster.local localhost"
+{{ toYaml .Values.pod.probes.dns.dns.readiness.params | indent 12 }}
+          command:
+            - /tmp/dns-start.sh
+          volumeMounts:
+            - name: nexus-bin
+              mountPath: /tmp
+              readOnly: true
+            - name: shared-config
+              mountPath: /shared/config
+            - name: dnsmasq-logs
+              mountPath: /var/log/dnsmasq
+      volumes:
+        - name: nexus-bin
+          configMap:
+            name: nexus-bin
+            defaultMode: 0555
+        - name: nexus-initial-config
+          configMap:
+            name: nexus-initial-config
+            defaultMode: 0444
+        - name: shared-config
+          persistentVolumeClaim:
+            claimName: nexus-shared-config
+        - name: dnsmasq-logs
+          emptyDir: {}
+{{- end }}

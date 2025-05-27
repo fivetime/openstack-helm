@@ -1,0 +1,8 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+*/}}
+
+{{- if .Values.manifests.network_policy }}
+{{- $netpol_opts := dict "envAll" . "name" "application" "label" "nexus" -}}
+{{ $netpol_opts | include "helm-toolkit.manifests.kubernetes_network_policy" }}
+{{- end }}

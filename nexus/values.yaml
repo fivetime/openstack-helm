@@ -1,0 +1,438 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+
+---
+labels:
+  proxy:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  dns:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+release_group: null
+helm3_hook: true
+
+images:
+  tags:
+    proxy: docker.io/nginx:1.21-alpine
+    dns: docker.io/strm/dnsmasq:latest
+    service_discovery: quay.io/airshipit/kubernetes-entrypoint:v1.0.0
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:v1.0.0
+    image_repo_sync: docker.io/docker:17.07.0
+  pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+# 存储配置 - 使用PVC进行配置共享
+storage:
+  shared_config:
+    enabled: true
+    size: "1Gi"
+    # 支持ReadWriteMany的存储类 (如NFS, CephFS, EFS等)
+    class: "general-fs"
+    access_mode: "ReadWriteMany"
+    selector: {}
+
+# 服务发现配置
+discovery:
+  enabled: true
+  # 服务发现频率(分钟)
+  interval: 5
+  # OpenStack命名空间
+  openstack_namespace: openstack
+  # public-openstack服务名称
+  public_service_name: "public-openstack"
+  # 备用代理目标
+  fallback_target: "10.0.30.110"
+  # 是否使用OpenStack CLI进行服务发现 (需要认证)
+  use_openstack_cli: false
+  # 是否同时使用kubectl和OpenStack CLI
+  hybrid_discovery: true
+
+# 代理配置
+proxy:
+  service_type: LoadBalancer
+  loadbalancer_ip: ""
+  ports:
+    http: 80
+    https: 443
+  ssl:
+    enabled: true
+    auto_generate: true
+    cert: ""
+    key: ""
+  # Nginx优化配置
+  worker_processes: auto
+  worker_connections: 1024
+  client_max_body_size: "0"
+  proxy_timeouts:
+    connect: 600s
+    send: 600s
+    read: 600s
+  # 代理缓存配置
+  proxy_cache:
+    enabled: false
+    path: "/var/cache/nginx"
+    levels: "1:2"
+    keys_zone: "nexus_cache:10m"
+    max_size: "1g"
+    inactive: "60m"
+
+# DNS代理配置
+dns:
+  enabled: true
+  service_type: LoadBalancer
+  loadbalancer_ip: ""
+  port: 53
+  upstream_dns:
+    - "8.8.8.8"
+    - "1.1.1.1"
+  log_queries: true
+  log_file: "/var/log/dnsmasq/dnsmasq.log"
+  # DNS缓存配置
+  cache_size: 1000
+  neg_ttl: 60
+  # DNS转发配置
+  forward_zones: []
+    # - zone: "example.com"
+  #   servers: ["192.168.1.1", "192.168.1.2"]
+
+# Pod配置
+pod:
+  replicas:
+    proxy: 2
+    dns: 2
+  security_context:
+    proxy:
+      pod:
+        runAsUser: 101
+        runAsGroup: 101
+        runAsNonRoot: true
+        fsGroup: 101
+      container:
+        proxy:
+          runAsUser: 101
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+        config_init:
+          runAsUser: 101
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+    dns:
+      pod:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: false  # DNSMasq需要特权端口
+        fsGroup: 65534
+      container:
+        dns:
+          runAsUser: 0
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+        config_init:
+          runAsUser: 0
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+    service_discovery:
+      pod:
+        runAsUser: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        fsGroup: 65534
+      container:
+        service_discovery:
+          runAsUser: 65534
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        keystone_auth:
+          runAsUser: 65534
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+  affinity:
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
+      weight:
+        default: 10
+  tolerations:
+    proxy:
+      enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+    dns:
+      enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+  resources:
+    enabled: false
+    proxy:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "1024Mi"
+        cpu: "1000m"
+    dns:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
+    jobs:
+      service_discovery:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+  probes:
+    proxy:
+      proxy:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+    dns:
+      dns:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+
+# 网络配置
+network:
+  proxy:
+    ingress:
+      public: false
+    node_port:
+      enabled: false
+  dns:
+    node_port:
+      enabled: false
+
+# helm-toolkit标准依赖配置
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - nexus-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    proxy:
+      jobs:
+        - nexus-rbac-setup
+    dns:
+      jobs:
+        - nexus-rbac-setup
+    service_discovery:
+      jobs:
+        - nexus-rbac-setup
+      services:
+        - endpoint: internal
+          service: identity
+    rbac_setup:
+      services: null
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+
+# Secret配置
+secrets:
+  identity:
+    admin: nexus-keystone-admin
+    nexus: nexus-keystone-user
+  oci_image_registry:
+    nexus: nexus-oci-image-registry
+  tls:
+    proxy:
+      api:
+        public: nexus-tls-public
+
+# Endpoint配置
+endpoints:
+  cluster_domain_suffix: cluster.local
+
+  # 本地镜像仓库
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+
+  # OCI镜像仓库
+  oci_image_registry:
+    name: oci-image-registry
+    namespace: oci-image-registry
+    auth:
+      enabled: false
+      nexus:
+        username: nexus
+        password: password
+    hosts:
+      default: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        default: null
+
+  # OpenStack Identity (Keystone)
+  identity:
+    name: keystone
+    namespace: null
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      nexus:
+        role: service
+        region_name: RegionOne
+        username: nexus
+        password: nexus-password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: keystone
+      internal: keystone-api
+      public: keystone
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+      internal: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+
+  # Nexus代理服务
+  proxy:
+    name: nexus-proxy
+    hosts:
+      default: nexus-proxy
+      public: nexus-proxy
+    host_fqdn_override:
+      default: null
+    path:
+      default: /
+      healthcheck: /nginx-health
+    scheme:
+      default: http
+    port:
+      http:
+        default: 80
+      https:
+        default: 443
+
+  # Nexus DNS服务
+  dns:
+    name: nexus-dns
+    hosts:
+      default: nexus-dns
+      public: nexus-dns
+    host_fqdn_override:
+      default: null
+    scheme:
+      default: udp
+    port:
+      dns:
+        default: 53
+
+# 网络策略
+network_policy:
+  nexus:
+    ingress:
+      - {}
+    egress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                name: openstack
+        ports:
+          - protocol: TCP
+            port: 80
+          - protocol: TCP
+            port: 443
+      - {}
+
+# 监控配置
+monitoring:
+  enabled: false
+  prometheus:
+    enabled: false
+    port: 9113
+    path: /nginx_status
+  grafana:
+    enabled: false
+
+# 部署清单控制
+manifests:
+  certificates: false
+  configmap_bin: true
+  configmap_etc: true
+  deployment_proxy: true
+  deployment_dns: true
+  service_discovery: true
+  job_image_repo_sync: true
+  service_rbac: true
+  secret_registry: true
+  secret_keystone: true
+  service_proxy: true
+  service_dns: true
+  network_policy: false
+  pvc_shared_config: true

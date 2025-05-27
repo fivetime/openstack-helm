@@ -1,0 +1,135 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+*/}}
+
+{{- if .Values.manifests.deployment_proxy }}
+{{- $envAll := . }}
+
+{{- $serviceAccountName := "nexus-proxy" }}
+{{ tuple $envAll "proxy" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-proxy
+  labels:
+{{ tuple $envAll "nexus" "proxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  replicas: {{ .Values.pod.replicas.proxy }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "nexus" "proxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "nexus" "proxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "proxy" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      affinity:
+{{- if .Values.pod.anti_affinity.enabled }}
+{{ tuple $envAll "nexus" "proxy" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+{{- end }}
+      nodeSelector:
+        {{ .Values.labels.proxy.node_selector_key }}: {{ .Values.labels.proxy.node_selector_value | quote }}
+{{- if .Values.pod.tolerations.proxy.enabled }}
+{{ tuple $envAll "proxy" "proxy" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{- end }}
+      initContainers:
+{{ tuple $envAll "proxy" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        - name: config-init
+{{ tuple $envAll "proxy" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "proxy" "container" "config_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/init-config.sh
+          volumeMounts:
+            - name: nexus-bin
+              mountPath: /tmp/init-config.sh
+              subPath: init-config.sh
+              readOnly: true
+            - name: nexus-initial-config
+              mountPath: /tmp/initial-config
+              readOnly: true
+            - name: shared-config
+              mountPath: /shared/config
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+      containers:
+        - name: proxy
+{{ tuple $envAll "proxy" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.proxy | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "proxy" "container" "proxy" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.proxy.ports.http }}
+              protocol: TCP
+{{- if .Values.proxy.ssl.enabled }}
+            - name: https
+              containerPort: {{ .Values.proxy.ports.https }}
+              protocol: TCP
+{{- end }}
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+{{- if .Values.pod.probes.proxy.proxy.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ tuple "proxy" "internal" "healthcheck" . | include "helm-toolkit.endpoints.keystone_endpoint_path_lookup" }}
+              port: 8080
+              scheme: HTTP
+{{ toYaml .Values.pod.probes.proxy.proxy.liveness.params | indent 12 }}
+{{- end }}
+{{- if .Values.pod.probes.proxy.proxy.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ tuple "proxy" "internal" "healthcheck" . | include "helm-toolkit.endpoints.keystone_endpoint_path_lookup" }}
+              port: 8080
+              scheme: HTTP
+{{ toYaml .Values.pod.probes.proxy.proxy.readiness.params | indent 12 }}
+{{- end }}
+          command:
+            - /tmp/proxy-start.sh
+          volumeMounts:
+            - name: nexus-bin
+              mountPath: /tmp
+              readOnly: true
+            - name: shared-config
+              mountPath: /shared/config
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+{{- if .Values.proxy.ssl.enabled }}
+            - name: ssl-certs
+              mountPath: /etc/nginx/ssl
+{{- end }}
+          env:
+            - name: PORT_HTTP
+              value: {{ .Values.proxy.ports.http | quote }}
+            - name: PORT_HTTPS
+              value: {{ .Values.proxy.ports.https | quote }}
+            - name: WORKER_PROCESSES
+              value: {{ .Values.proxy.worker_processes | quote }}
+            - name: WORKER_CONNECTIONS
+              value: {{ .Values.proxy.worker_connections | quote }}
+      volumes:
+        - name: nexus-bin
+          configMap:
+            name: nexus-bin
+            defaultMode: 0555
+        - name: nexus-initial-config
+          configMap:
+            name: nexus-initial-config
+            defaultMode: 0444
+        - name: shared-config
+          persistentVolumeClaim:
+            claimName: nexus-shared-config
+        - name: nginx-logs
+          emptyDir: {}
+{{- if .Values.proxy.ssl.enabled }}
+        - name: ssl-certs
+          emptyDir: {}
+{{- end }}
+{{- end }}

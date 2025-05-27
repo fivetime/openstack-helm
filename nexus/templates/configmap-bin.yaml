@@ -1,0 +1,43 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+*/}}
+
+{{- if .Values.manifests.configmap_bin }}
+{{- $envAll := . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-bin
+  labels:
+{{ tuple $envAll "nexus" "bin" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+data:
+{{- if .Values.images.local_registry.active }}
+  image-repo-sync.sh: |
+{{- include "helm-toolkit.scripts.image_repo_sync" . | indent 4 }}
+{{- end }}
+  init-config.sh: |
+{{ tuple "bin/_init-config.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  discover-services.sh: |
+{{ tuple "bin/_service-discover.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  generate-nginx-config.sh: |
+{{ tuple "bin/_gen-nginx-config.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  generate-dns-config.sh: |
+{{ tuple "bin/_gen-dns-config.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  config-manager.sh: |
+{{ tuple "bin/_config-manager.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  rbac-setup.sh: |
+{{ tuple "bin/_rbac-setup.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  orchestrator.sh: |
+{{ tuple "bin/_orchestrator.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  proxy-start.sh: |
+{{ tuple "bin/_proxy-start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- if .Values.dns.enabled }}
+  dns-start.sh: |
+{{ tuple "bin/_dns-start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- end }}
+{{- if .Values.discovery.use_openstack_cli }}
+  keystone-auth.sh: |
+{{ tuple "bin/_keystone-auth.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- end }}
+{{- end }}

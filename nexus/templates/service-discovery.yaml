@@ -1,0 +1,109 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+*/}}
+
+{{- if and .Values.manifests.service_discovery .Values.discovery.enabled }}
+{{- $envAll := . }}
+
+{{- $serviceAccountName := "nexus-service-discovery" }}
+{{ tuple $envAll "service-discovery" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nexus-service-discovery
+  labels:
+{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  schedule: "*/{{ .Values.discovery.interval }} * * * *"
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      labels:
+{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+    spec:
+      template:
+        metadata:
+          labels:
+{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 12 }}
+          annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 12 }}
+        spec:
+          serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "service_discovery" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 10 }}
+          restartPolicy: OnFailure
+          nodeSelector:
+            {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value | quote }}
+{{- $tolerations := dict "envAll" $envAll "serviceName" "service_discovery" }}
+{{ $tolerations | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 10 }}
+          initContainers:
+{{ tuple $envAll "service_discovery" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 12 }}
+{{- if .Values.discovery.use_openstack_cli }}
+            - name: keystone-auth-init
+{{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.image" | indent 14 }}
+{{ dict "envAll" $envAll "application" "service_discovery" "container" "keystone_auth" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 14 }}
+              command:
+                - /tmp/keystone-auth.sh
+                - verify
+                - admin
+              volumeMounts:
+                - name: nexus-bin
+                  mountPath: /tmp
+                  readOnly: true
+                - name: nexus-keystone-admin
+                  mountPath: /tmp/keystone-secrets
+                  readOnly: true
+              env:
+{{- with $env := dict "envAll" $envAll "application" "service_discovery" "container" "keystone_auth" }}
+{{- include "helm-toolkit.snippets.keystone_openrc_env_vars" $env | indent 16 }}
+{{- end }}
+{{- end }}
+          containers:
+            - name: service-discovery
+{{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.image" | indent 14 }}
+{{ tuple $envAll $envAll.Values.pod.resources.jobs.service_discovery | include "helm-toolkit.snippets.kubernetes_resources" | indent 14 }}
+{{ dict "envAll" $envAll "application" "service_discovery" "container" "service_discovery" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 14 }}
+              command:
+                - /tmp/service-discovery-orchestrator.sh
+              volumeMounts:
+                - name: nexus-bin
+                  mountPath: /tmp
+                  readOnly: true
+                - name: shared-config
+                  mountPath: /shared/config
+{{- if .Values.discovery.use_openstack_cli }}
+                - name: nexus-keystone-admin
+                  mountPath: /tmp/keystone-secrets
+                  readOnly: true
+{{- end }}
+              env:
+                - name: OPENSTACK_NAMESPACE
+                  value: {{ .Values.discovery.openstack_namespace | quote }}
+                - name: PUBLIC_SERVICE_NAME
+                  value: {{ .Values.discovery.public_service_name | quote }}
+                - name: FALLBACK_TARGET
+                  value: {{ .Values.discovery.fallback_target | quote }}
+                - name: USE_OPENSTACK_CLI
+                  value: {{ .Values.discovery.use_openstack_cli | quote }}
+{{- if .Values.discovery.use_openstack_cli }}
+{{- with $env := dict "envAll" $envAll "application" "service_discovery" "container" "service_discovery" }}
+{{- include "helm-toolkit.snippets.keystone_openrc_env_vars" $env | indent 16 }}
+{{- end }}
+{{- end }}
+          volumes:
+            - name: nexus-bin
+              configMap:
+                name: nexus-bin
+                defaultMode: 0555
+            - name: shared-config
+              persistentVolumeClaim:
+                claimName: nexus-shared-config
+{{- if .Values.discovery.use_openstack_cli }}
+            - name: nexus-keystone-admin
+              secret:
+                secretName: {{ .Values.secrets.identity.admin }}
+                defaultMode: 0400
+{{- end }}
+{{- end }}

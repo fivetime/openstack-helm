@@ -1,0 +1,39 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+*/}}
+
+{{- if .Values.manifests.service_proxy }}
+{{- $envAll := . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ tuple "proxy" "public" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
+  labels:
+{{ tuple $envAll "nexus" "proxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+  {{- if .Values.proxy.loadbalancer_ip }}
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: {{ .Values.proxy.loadbalancer_ip }}
+  {{- end }}
+spec:
+  type: {{ .Values.proxy.service_type }}
+  {{- if .Values.proxy.loadbalancer_ip }}
+  loadBalancerIP: {{ .Values.proxy.loadbalancer_ip }}
+  {{- end }}
+  ports:
+    - name: http
+      port: {{ .Values.proxy.ports.http }}
+      targetPort: http
+      protocol: TCP
+{{- if .Values.proxy.ssl.enabled }}
+    - name: https
+      port: {{ .Values.proxy.ports.https }}
+      targetPort: https
+      protocol: TCP
+{{- end }}
+  selector:
+{{ tuple $envAll "nexus" "proxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+  {{- if eq .Values.proxy.service_type "LoadBalancer" }}
+  externalTrafficPolicy: Local
+  {{- end }}
+{{- end }}

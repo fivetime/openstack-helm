@@ -31,9 +31,7 @@ spec:
       serviceAccountName: {{ $serviceAccountName }}
 {{ dict "envAll" $envAll "application" "proxy" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       affinity:
-{{- if .Values.pod.anti_affinity.enabled }}
 {{ tuple $envAll "nexus" "proxy" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
-{{- end }}
       nodeSelector:
         {{ .Values.labels.proxy.node_selector_key }}: {{ .Values.labels.proxy.node_selector_value | quote }}
 {{- if .Values.pod.tolerations.proxy.enabled }}

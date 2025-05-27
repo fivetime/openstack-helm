@@ -433,8 +433,7 @@ manifests:
   configmap_etc: true
   deployment_proxy: true
   deployment_dns: true
-  discovery: true
-  job_image_repo_sync: true
+  service_discovery: true
   service_rbac: true
   secret_registry: true
   secret_keystone: true
@@ -442,3 +441,4 @@ manifests:
   service_dns: true
   network_policy: false
   pvc_shared_config: true
+  job_image_repo_sync: true

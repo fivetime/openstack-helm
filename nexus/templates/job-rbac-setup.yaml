@@ -36,8 +36,7 @@ spec:
       restartPolicy: OnFailure
       nodeSelector:
         {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value | quote }}
-{{- $tolerations := dict "envAll" $envAll "serviceName" "rbac_setup" }}
-{{ $tolerations | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ tuple $envAll "rbac_setup" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
       initContainers:
 {{ tuple $envAll "rbac_setup" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:

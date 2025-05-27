@@ -1,11 +1,13 @@
 # Nexus 部署示例和最佳实践
 
-## 🚀 快速部署示例
+## 🚀 典型部署场景
 
-### 1. 最小化部署（开发环境）
+### 1. 开发环境快速部署
+
+最小化配置，适合开发和测试环境：
 
 ```bash
-# 创建开发环境配置
+# dev-values.yaml
 cat > dev-values.yaml << 'EOF'
 # 开发环境 - 最小化配置
 proxy:
@@ -14,39 +16,34 @@ proxy:
     enabled: false
 
 dns:
-  enabled: false  # 开发环境可关闭DNS
+  enabled: false  # 开发环境可选
 
 discovery:
-  interval: 2  # 更频繁的发现间隔
-  openstack_namespace: "openstack"
+  interval: 2  # 更频繁的发现
   fallback_target: "10.0.30.110"
 
-# 单副本部署
 pod:
   replicas:
     proxy: 1
     dns: 1
 
-# 使用本地存储
 storage:
   shared_config:
-    class: "hostpath"
+    class: ""  # 使用默认存储类
     size: "500Mi"
-
-# 关闭不需要的功能
-manifests:
-  certificates: false
-  network_policy: false
 EOF
 
 # 部署
-helm install nexus ./nexus -f dev-values.yaml -n openstack-dev --create-namespace
+helm install nexus . -f dev-values.yaml -n openstack --create-namespace
+
+# 获取 NodePort
+kubectl get svc nexus-proxy -n openstack
 ```
 
-### 2. 生产环境部署
+### 2. 生产环境高可用部署
 
 ```bash
-# 创建生产环境配置
+# prod-values.yaml
 cat > prod-values.yaml << 'EOF'
 # 生产环境配置
 proxy:
@@ -57,8 +54,6 @@ proxy:
     auto_generate: true
   worker_processes: 4
   worker_connections: 2048
-  proxy_cache:
-    enabled: true
 
 dns:
   enabled: true
@@ -67,18 +62,12 @@ dns:
   upstream_dns:
     - "8.8.8.8"
     - "8.8.4.4"
-    - "1.1.1.1"
 
-# 服务发现配置
 discovery:
-  enabled: true
   interval: 5
   openstack_namespace: "openstack"
   public_service_name: "public-openstack"
-  fallback_target: "10.0.30.110"
-  use_openstack_cli: false
 
-# 高可用配置
 pod:
   replicas:
     proxy: 3
@@ -92,158 +81,163 @@ pod:
       limits:
         memory: "2Gi"
         cpu: "2000m"
-    dns:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "512Mi"
-        cpu: "1000m"
 
-# 生产级存储
+storage:
+  shared_config:
+    size: "2Gi"
+    class: "cephfs"  # 使用分布式存储
+EOF
+
+helm install nexus . -f prod-values.yaml -n openstack-proxy --create-namespace
+```
+
+### 3. 仅代理模式（无 DNS）
+
+```bash
+# proxy-only-values.yaml
+cat > proxy-only-values.yaml << 'EOF'
+dns:
+  enabled: false
+
+proxy:
+  service_type: LoadBalancer
+  ssl:
+    enabled: true
+
+discovery:
+  enabled: true
+  openstack_namespace: "openstack"
+EOF
+
+helm install nexus . -f proxy-only-values.yaml -n openstack-proxy --create-namespace
+```
+
+## 🔧 配置实例
+
+### 使用现有 SSL 证书
+
+```bash
+# 创建证书 Secret
+kubectl create secret tls nexus-tls \
+  --cert=path/to/tls.crt \
+  --key=path/to/tls.key \
+  -n openstack-proxy
+
+# ssl-values.yaml
+cat > ssl-values.yaml << 'EOF'
+proxy:
+  ssl:
+    enabled: true
+    auto_generate: false
+    secret_name: "nexus-tls"
+EOF
+
+helm install nexus . -f ssl-values.yaml -n openstack-proxy
+```
+
+### 自定义上游 DNS
+
+```bash
+# custom-dns-values.yaml
+cat > custom-dns-values.yaml << 'EOF'
+dns:
+  enabled: true
+  upstream_dns:
+    - "10.0.0.1"     # 内部 DNS
+    - "10.0.0.2"     # 备用内部 DNS
+    - "8.8.8.8"      # 公共 DNS 备份
+  
+  # 自定义转发区域
+  forward_zones:
+    - zone: "internal.company.com"
+      servers: ["10.0.0.1", "10.0.0.2"]
+EOF
+
+helm install nexus . -f custom-dns-values.yaml -n openstack-proxy
+```
+
+### 使用特定存储类
+
+```bash
+# storage-values.yaml
+cat > storage-values.yaml << 'EOF'
 storage:
   shared_config:
     enabled: true
-    size: "2Gi"
-    class: "nfs-client"  # 或其他支持ReadWriteMany的存储类
-    access_mode: "ReadWriteMany"
-
-# 启用网络策略
-network_policy:
-  nexus:
-    ingress:
-      - {}
-    egress:
-      - to:
-          - namespaceSelector:
-              matchLabels:
-                name: openstack
-        ports:
-          - protocol: TCP
-            port: 80
-          - protocol: TCP
-            port: 443
-
-manifests:
-  network_policy: true
-  certificates: true
+    size: "5Gi"
+    class: "nfs-client"
+    # 或者使用选择器
+    selector:
+      matchLabels:
+        type: "nexus-config"
 EOF
 
-# 部署
-helm install nexus ./nexus -f prod-values.yaml -n openstack-proxy --create-namespace
+helm install nexus . -f storage-values.yaml -n openstack-proxy
 ```
 
-### 3. 带OpenStack CLI认证的部署
+## 📊 客户端配置示例
+
+### OpenStack CLI 配置
 
 ```bash
-cat > auth-values.yaml << 'EOF'
-# 启用OpenStack CLI认证
-discovery:
-  enabled: true
-  use_openstack_cli: true
-  hybrid_discovery: true
-
-# 配置OpenStack认证
-endpoints:
-  identity:
-    auth:
-      admin:
-        region_name: RegionOne
-        username: admin
-        password: "your-admin-password"
-        project_name: admin
-        user_domain_name: default
-        project_domain_name: default
-
-manifests:
-  secret_keystone: true
-EOF
-
-helm install nexus ./nexus -f auth-values.yaml -n openstack-proxy --create-namespace
-```
-
-## 🔧 部署后配置
-
-### 获取服务地址
-
-```bash
-# 获取代理服务地址
+# 获取代理地址
 PROXY_IP=$(kubectl get svc nexus-proxy -n openstack-proxy -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-PROXY_PORT=$(kubectl get svc nexus-proxy -n openstack-proxy -o jsonpath='{.spec.ports[0].port}')
-echo "代理服务地址: http://${PROXY_IP}:${PROXY_PORT}"
 
-# 获取DNS服务地址
-DNS_IP=$(kubectl get svc nexus-dns -n openstack-proxy -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-echo "DNS服务地址: ${DNS_IP}:53"
-```
-
-### 配置OpenStack客户端
-
-#### 1. 使用HTTP代理
-
-```bash
-# 创建OpenStack配置
+# 方式1: 使用 clouds.yaml
 mkdir -p ~/.config/openstack
 cat > ~/.config/openstack/clouds.yaml << EOF
 clouds:
-  nexus-proxy:
-    region_name: RegionOne
-    identity_api_version: 3
+  nexus:
     auth:
-      username: 'admin'
-      password: 'your-password'
-      project_name: 'admin'
-      project_domain_name: 'default'
-      user_domain_name: 'default'
-      auth_url: 'http://${PROXY_IP}/v3'
-    interface: public
-    verify: false  # 如果使用自签名证书
+      auth_url: "http://${PROXY_IP}/v3"
+      project_name: "admin"
+      username: "admin"
+      password: "password"
+      user_domain_name: "Default"
+      project_domain_name: "Default"
+    region_name: "RegionOne"
+    interface: "public"
 EOF
 
-# 使用配置
-export OS_CLOUD=nexus-proxy
-openstack endpoint list
+export OS_CLOUD=nexus
 openstack server list
+
+# 方式2: 使用环境变量
+export OS_AUTH_URL="http://${PROXY_IP}/v3"
+export OS_PROJECT_NAME="admin"
+export OS_USERNAME="admin"
+export OS_PASSWORD="password"
+export OS_USER_DOMAIN_NAME="Default"
+export OS_PROJECT_DOMAIN_NAME="Default"
+
+openstack endpoint list
 ```
 
-#### 2. 配置DNS客户端
+### Python SDK 配置
 
-```bash
-# 在客户端机器上配置DNS
-echo "nameserver ${DNS_IP}" | sudo tee /etc/resolv.conf
+```python
+import openstack
 
-# 或者配置dnsmasq转发
-echo "server=/openstack.svc.cluster.local/${DNS_IP}" | sudo tee -a /etc/dnsmasq.conf
-sudo systemctl restart dnsmasq
+# 使用代理连接
+conn = openstack.connect(
+    auth_url=f'http://{proxy_ip}/v3',
+    project_name='admin',
+    username='admin',
+    password='password',
+    user_domain_name='Default',
+    project_domain_name='Default'
+)
 
-# 测试DNS解析
-nslookup keystone.openstack.svc.cluster.local ${DNS_IP}
+# 列出服务器
+for server in conn.compute.servers():
+    print(server.name)
 ```
 
-## 🧪 测试和验证
-
-### 基础连通性测试
+### cURL 测试
 
 ```bash
-# 1. 测试HTTP代理
-curl -H "Host: keystone.openstack.svc.cluster.local" http://${PROXY_IP}/v3
-
-# 2. 测试HTTPS代理（如果启用）
-curl -k -H "Host: keystone.openstack.svc.cluster.local" https://${PROXY_IP}/v3
-
-# 3. 测试DNS解析
-nslookup keystone.openstack.svc.cluster.local ${DNS_IP}
-nslookup nova-api.openstack.svc.cluster.local ${DNS_IP}
-
-# 4. 测试健康检查端点
-curl http://${PROXY_IP}:8080/nginx-health
-```
-
-### OpenStack API测试
-
-```bash
-# 获取认证token
-TOKEN=$(curl -i -X POST http://${PROXY_IP}/v3/auth/tokens \
+# 获取 Token
+TOKEN=$(curl -s -X POST http://${PROXY_IP}/v3/auth/tokens \
   -H "Content-Type: application/json" \
   -d '{
     "auth": {
@@ -253,7 +247,7 @@ TOKEN=$(curl -i -X POST http://${PROXY_IP}/v3/auth/tokens \
           "user": {
             "name": "admin",
             "domain": {"name": "Default"},
-            "password": "your-password"
+            "password": "password"
           }
         }
       },
@@ -264,360 +258,209 @@ TOKEN=$(curl -i -X POST http://${PROXY_IP}/v3/auth/tokens \
         }
       }
     }
-  }' 2>/dev/null | grep -i "X-Subject-Token" | cut -d' ' -f2 | tr -d '\r')
+  }' | grep -i x-subject-token | awk '{print $2}' | tr -d '\r')
 
-# 测试各个服务
+# 使用 Token 访问 API
 curl -H "X-Auth-Token: $TOKEN" http://${PROXY_IP}/v3/projects
-curl -H "X-Auth-Token: $TOKEN" http://${PROXY_IP}:8774/v2.1/servers
-curl -H "X-Auth-Token: $TOKEN" http://${PROXY_IP}:9696/v2.0/networks
+```
+
+## 🔍 监控和诊断
+
+### 健康检查
+
+```bash
+# Nginx 健康检查
+curl http://${PROXY_IP}:8080/nginx-health
+
+# DNS 健康检查
+dig @${DNS_IP} +short test.openstack.svc.cluster.local
+
+# 服务发现状态
+kubectl get cronjob nexus-discovery -n openstack-proxy
+kubectl get jobs -l app=nexus,component=discovery -n openstack-proxy
 ```
 
 ### 性能测试
 
 ```bash
-# DNS响应时间测试
-for i in {1..10}; do
-  time nslookup keystone.openstack.svc.cluster.local ${DNS_IP} >/dev/null
-done
+# HTTP 性能测试
+ab -n 1000 -c 10 -H "Host: keystone.openstack.svc.cluster.local" http://${PROXY_IP}/v3
 
-# HTTP响应时间测试
-for service in keystone nova-api neutron-server glance-api; do
-  echo "测试 $service:"
-  curl -o /dev/null -s -w "Time: %{time_total}s, Status: %{http_code}\n" \
-    -H "Host: $service.openstack.svc.cluster.local" \
-    http://${PROXY_IP}/
-done
-
-# 并发测试
-ab -n 100 -c 10 -H "Host: keystone.openstack.svc.cluster.local" http://${PROXY_IP}/v3/
+# DNS 性能测试
+for i in {1..100}; do
+  time dig @${DNS_IP} +short keystone.openstack.svc.cluster.local
+done | grep real
 ```
 
-## 🔄 运维操作指南
-
-### 配置更新
+### 日志分析
 
 ```bash
-# 更新配置
-helm upgrade nexus ./nexus -f prod-values.yaml -n openstack-proxy
+# 查看最近的错误
+kubectl logs deployment/nexus-proxy -n openstack-proxy | grep ERROR
 
-# 重启特定组件
-kubectl rollout restart deployment/nexus-proxy -n openstack-proxy
-kubectl rollout restart deployment/nexus-dns -n openstack-proxy
+# 查看服务发现历史
+kubectl logs -l app=nexus,component=discovery -n openstack-proxy --tail=100
+
+# 实时监控日志
+kubectl logs -f deployment/nexus-proxy -n openstack-proxy
+kubectl logs -f deployment/nexus-dns -n openstack-proxy
 ```
 
-### 扩容/缩容
+## 🐛 常见问题排查
+
+### 1. 服务发现不工作
 
 ```bash
-# 扩容代理服务
-kubectl scale deployment nexus-proxy --replicas=5 -n openstack-proxy
+# 检查 CronJob
+kubectl describe cronjob nexus-discovery -n openstack-proxy
 
-# 扩容DNS服务
-kubectl scale deployment nexus-dns --replicas=3 -n openstack-proxy
+# 手动运行服务发现
+kubectl create job --from=cronjob/nexus-discovery test-discovery -n openstack-proxy
+kubectl logs job/test-discovery -n openstack-proxy
 
-# 或者通过Helm更新
-helm upgrade nexus ./nexus \
-  --set pod.replicas.proxy=5 \
-  --set pod.replicas.dns=3 \
-  --reuse-values \
-  -n openstack-proxy
-```
-
-### 备份和恢复
-
-```bash
-# 备份配置
-kubectl get pvc nexus-shared-config -n openstack-proxy -o yaml > nexus-pvc-backup.yaml
-kubectl cp nexus-proxy-xxx:/shared/config ./config-backup -n openstack-proxy
-
-# 恢复配置
-kubectl apply -f nexus-pvc-backup.yaml
-kubectl cp ./config-backup nexus-proxy-xxx:/shared/config -n openstack-proxy
-```
-
-## 🐛 故障排除实例
-
-### 问题1: LoadBalancer IP一直Pending
-
-```bash
-# 检查LoadBalancer控制器
-kubectl get pods -n metallb-system
-kubectl logs -f deployment/controller -n metallb-system
-
-# 检查IP池配置
-kubectl get ipaddresspool -n metallb-system
-kubectl describe ipaddresspool -n metallb-system
-
-# 临时使用NodePort
-helm upgrade nexus ./nexus \
-  --set proxy.service_type=NodePort \
-  --set dns.service_type=NodePort \
-  --reuse-values \
-  -n openstack-proxy
-```
-
-### 问题2: 服务发现失败
-
-```bash
-# 检查RBAC权限
-kubectl auth can-i get services --as=system:serviceaccount:openstack-proxy:nexus-discovery -n openstack
+# 检查权限
 kubectl auth can-i list services --as=system:serviceaccount:openstack-proxy:nexus-discovery -n openstack
+```
 
-# 检查OpenStack命名空间
-kubectl get ns openstack
+### 2. DNS 解析失败
+
+```bash
+# 进入 DNS Pod 调试
+kubectl exec -it deployment/nexus-dns -n openstack-proxy -- /bin/bash
+
+# 在 Pod 内测试
+cat /etc/dnsmasq.conf
+dnsmasq --test
+nslookup keystone.openstack localhost
+
+# 检查配置文件
+kubectl exec deployment/nexus-dns -n openstack-proxy -- cat /etc/dnsmasq.d/openstack.conf
+```
+
+### 3. 代理返回 503
+
+```bash
+# 检查后端服务
 kubectl get svc -n openstack
 
-# 手动测试服务发现
-kubectl run debug --image=quay.io/airshipit/kubernetes-entrypoint:v1.0.0 --rm -it -- /bin/bash
-kubectl -n openstack get svc -o json
+# 检查代理配置
+kubectl exec deployment/nexus-proxy -n openstack-proxy -- cat /etc/nginx/conf.d/default.conf
+
+# 测试后端连接
+kubectl exec deployment/nexus-proxy -n openstack-proxy -- curl -I keystone.openstack.svc.cluster.local
 ```
 
-### 问题3: 配置更新不生效
+### 4. PVC 挂载问题
 
 ```bash
-# 检查PVC状态
+# 检查 PVC 状态
 kubectl get pvc -n openstack-proxy
 kubectl describe pvc nexus-shared-config -n openstack-proxy
 
-# 检查共享存储
-kubectl exec -it deployment/nexus-proxy -n openstack-proxy -- ls -la /shared/config/
-kubectl exec -it deployment/nexus-proxy -n openstack-proxy -- cat /shared/config/nginx/default.conf
+# 检查存储类
+kubectl get storageclass
+kubectl describe storageclass <your-storage-class>
 
-# 强制重新生成配置
-kubectl delete job -l app=nexus,component=discovery -n openstack-proxy
-kubectl create job --from=cronjob/nexus-discovery nexus-discovery-force -n openstack-proxy
+# 验证挂载
+kubectl exec deployment/nexus-proxy -n openstack-proxy -- df -h /shared/config
 ```
 
-### 问题4: SSL证书问题
+## 🔄 升级策略
+
+### 滚动升级
 
 ```bash
-# 检查证书
-kubectl exec -it deployment/nexus-proxy -n openstack-proxy -- ls -la /etc/nginx/ssl/
-kubectl exec -it deployment/nexus-proxy -n openstack-proxy -- openssl x509 -in /etc/nginx/ssl/tls.crt -text -noout
+# 更新镜像版本
+helm upgrade nexus . \
+  --set images.tags.proxy=nginx:1.28-alpine \
+  --set images.tags.dns=quay.io/openstack.kolla/dnsmasq:2025.1-ubuntu-noble \
+  --reuse-values \
+  -n openstack-proxy
 
-# 重新生成证书
-kubectl exec -it deployment/nexus-proxy -n openstack-proxy -- rm -f /etc/nginx/ssl/*
-kubectl rollout restart deployment/nexus-proxy -n openstack-proxy
+# 监控升级过程
+kubectl rollout status deployment/nexus-proxy -n openstack-proxy
+kubectl rollout status deployment/nexus-dns -n openstack-proxy
 ```
 
-## 📊 监控和告警
+### 配置热更新
 
-### Prometheus监控配置
+```bash
+# 更新配置后触发服务发现
+kubectl create job --from=cronjob/nexus-discovery force-update -n openstack-proxy
+
+# 监控配置更新
+kubectl logs job/force-update -n openstack-proxy -f
+```
+
+## 🎯 最佳实践
+
+### 生产环境建议
+
+1. **高可用部署**
+    - Proxy 至少 3 副本
+    - DNS 至少 2 副本
+    - 使用反亲和性规则分散到不同节点
+
+2. **存储选择**
+    - 使用支持 ReadWriteMany 的分布式存储
+    - 定期备份配置 PVC
+
+3. **监控告警**
+    - 监控服务可用性
+    - 设置日志聚合
+    - 配置性能指标采集
+
+4. **安全加固**
+    - 启用 SSL/TLS
+    - 配置网络策略
+    - 定期更新镜像
+
+### 性能优化
 
 ```yaml
-# prometheus-servicemonitor.yaml
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: nexus-monitoring
-  namespace: openstack-proxy
-spec:
-  selector:
-    matchLabels:
-      app: nexus
-  endpoints:
-    - port: metrics
-      path: /nginx_status
-      interval: 30s
-```
-
-### Grafana仪表板指标
-
-- Nginx连接数和请求数
-- DNS查询数量和响应时间
-- 服务发现成功/失败次数
-- Pod资源使用情况
-- LoadBalancer流量统计
-
-### 日志聚合
-
-```bash
-# 使用Fluentd收集日志
-kubectl logs -f -l app=nexus --tail=100 -n openstack-proxy | grep ERROR
-kubectl logs -f -l app=nexus,component=discovery --tail=50 -n openstack-proxy
-```
-
-## 🔒 安全最佳实践
-
-### 网络策略配置
-
-```yaml
-# 限制入站流量
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: nexus-ingress-policy
-  namespace: openstack-proxy
-spec:
-  podSelector:
-    matchLabels:
-      app: nexus
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: openstack
-      ports:
-        - protocol: TCP
-          port: 80
-        - protocol: TCP
-          port: 443
-```
-
-### 访问控制
-
-```bash
-# 限制服务发现权限
-kubectl create role nexus-limited --verb=get,list --resource=services,endpoints -n openstack
-kubectl create rolebinding nexus-binding --role=nexus-limited --serviceaccount=openstack-proxy:nexus-discovery -n openstack
-```
-
-### 高级配置示例
-
-#### 1. 多环境部署
-
-```bash
-# 预发布环境
-cat > staging-values.yaml << 'EOF'
+# performance-values.yaml
 proxy:
-  loadbalancer_ip: "192.168.1.200"
-  ssl:
-    enabled: true
-    
-discovery:
-  openstack_namespace: "openstack-staging"
-  fallback_target: "10.0.30.120"
-
-pod:
-  replicas:
-    proxy: 2
-    dns: 1
-EOF
-
-helm install nexus-staging ./nexus -f staging-values.yaml -n openstack-staging --create-namespace
-```
-
-#### 2. 多区域配置
-
-```bash
-# 区域A配置
-cat > region-a-values.yaml << 'EOF'
-proxy:
-  loadbalancer_ip: "192.168.1.100"
-  
-discovery:
-  openstack_namespace: "openstack-region-a"
-  public_service_name: "public-openstack-region-a"
-  
-endpoints:
-  identity:
-    auth:
-      admin:
-        region_name: RegionA
-EOF
-
-# 区域B配置  
-cat > region-b-values.yaml << 'EOF'
-proxy:
-  loadbalancer_ip: "192.168.1.110"
-  
-discovery:
-  openstack_namespace: "openstack-region-b"
-  public_service_name: "public-openstack-region-b"
-  
-endpoints:
-  identity:
-    auth:
-      admin:
-        region_name: RegionB
-EOF
-```
-
-#### 3. 混合云配置
-
-```bash
-# 支持多个OpenStack集群
-cat > hybrid-values.yaml << 'EOF'
-discovery:
-  enabled: true
-  multiple_clusters:
-    - name: "cluster-a"
-      namespace: "openstack-a"
-      priority: 1
-    - name: "cluster-b"  
-      namespace: "openstack-b"
-      priority: 2
-  
-proxy:
-    upstream_config:
-      backup_clusters:
-        - "cluster-b.example.com:443"
-      health_check: true
-EOF
-```
-
-## 🚀 高级功能
-
-### 1. 自定义路由规则
-
-```bash
-# 基于路径的路由
-cat > custom-routing-values.yaml << 'EOF'
-proxy:
-  custom_routes:
-    - path: "/v3/auth"
-      upstream: "keystone-auth.openstack.svc.cluster.local"
-    - path: "/compute"
-      upstream: "nova-api.openstack.svc.cluster.local"
-    - path: "/network"
-      upstream: "neutron-server.openstack.svc.cluster.local"
-EOF
-```
-
-### 2. 缓存配置
-
-```bash
-# 启用智能缓存
-cat > cache-values.yaml << 'EOF'
-proxy:
+  worker_processes: auto
+  worker_connections: 4096
   proxy_cache:
     enabled: true
-    cache_zones:
-      - name: "api_cache"
-        size: "100m"
-        inactive: "60m"
-    cache_rules:
-      - location: "/v3/auth/tokens"
-        cache_time: "0"  # 不缓存认证token
-      - location: "/v3/projects"
-        cache_time: "5m"
-      - location: "/v2.1/flavors"
-        cache_time: "30m"
-EOF
+    path: "/var/cache/nginx"
+    max_size: "1g"
+  proxy_timeouts:
+    connect: 300s
+    send: 300s
+    read: 300s
+
+dns:
+  cache_size: 10000
+  neg_ttl: 300
 ```
 
-### 3. 限流配置
+### 调试技巧
 
-```bash
-# API限流保护
-cat > rate-limit-values.yaml << 'EOF'
-proxy:
-  rate_limiting:
-    enabled: true
-    zones:
-      - name: "api_limit"
-        key: "$binary_remote_addr"
-        size: "10m"
-        rate: "10r/s"
-    rules:
-      - location: "/v3/auth"
-        zone: "api_limit"
-        burst: 20
-      - location: "/v2.1/"
-        zone: "api_limit"  
-        burst: 50
-EOF
-```
+1. **启用详细日志**
+   ```bash
+   helm upgrade nexus . --set dns.log_queries=true --reuse-values -n openstack-proxy
+   ```
 
-这套完整的配置和示例为您在各种环境下部署和使用Nexus提供了全面的指导。
+2. **使用调试容器**
+   ```bash
+   kubectl run debug --image=nicolaka/netshoot --rm -it -n openstack-proxy -- /bin/bash
+   ```
+
+3. **配置验证**
+   ```bash
+   # 验证 Nginx 配置
+   kubectl exec deployment/nexus-proxy -n openstack-proxy -- nginx -t
+   
+   # 验证 DNSMasq 配置
+   kubectl exec deployment/nexus-dns -n openstack-proxy -- dnsmasq --test
+   ```
+
+## 📚 参考链接
+
+- [Kubernetes 文档](https://kubernetes.io/docs/)
+- [Helm 文档](https://helm.sh/docs/)
+- [OpenStack API 参考](https://docs.openstack.org/api-ref/)
+- [Nginx 配置指南](http://nginx.org/en/docs/)
+- [DNSMasq 文档](https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html)

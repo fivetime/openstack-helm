@@ -15,7 +15,7 @@ metadata:
   labels:
 {{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
-  schedule: "*/{{ .Values.discovery.interval }} * * * *"
+  schedule: "*/{{ .Values.discovery.interval | default 5 }} * * * *"
   concurrencyPolicy: Replace
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1

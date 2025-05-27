@@ -175,6 +175,12 @@ pod:
         - key: node-role.kubernetes.io/master
           operator: Exists
           effect: NoSchedule
+    service_discovery:
+      enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
   resources:
     enabled: false
     proxy:

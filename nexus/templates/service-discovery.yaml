@@ -36,7 +36,9 @@ spec:
           restartPolicy: OnFailure
           nodeSelector:
             {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value | quote }}
-{{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 10 }}
+{{ if $envAll.Values.pod.tolerations.service_discovery.enabled }}
+{{ tuple $envAll "service_discovery" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
           initContainers:
 {{ tuple $envAll "service_discovery" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 10 }}
 {{- if .Values.discovery.use_openstack_cli }}

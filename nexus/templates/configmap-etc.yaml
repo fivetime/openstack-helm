@@ -64,6 +64,7 @@ data:
     }
 
   dnsmasq.conf: |
+    # 基本配置
     port=53
     domain-needed
     bogus-priv
@@ -71,19 +72,26 @@ data:
     no-poll
     bind-interfaces
 
+    # 上游 DNS
     {{- range .Values.dns.upstream_dns }}
     server={{ . }}
     {{- end }}
 
+    # 缓存配置
     cache-size={{ .Values.dns.cache_size }}
     neg-ttl={{ .Values.dns.neg_ttl }}
 
+    # 日志配置（使用 kolla 的日志路径）
     {{- if .Values.dns.log_queries }}
     log-queries
-    log-facility={{ .Values.dns.log_file }}
+    log-facility=/var/log/kolla/ironic/dnsmasq.log
     {{- end }}
 
+    # 监听所有接口
     interface=*
+
+    # 不要前台运行（-k 参数会处理）
+    # no-daemon
 
     # 包含其他配置文件（服务发现会生成）
     conf-dir=/etc/dnsmasq.d/,*.conf

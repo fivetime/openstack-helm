@@ -44,6 +44,12 @@ spec:
 {{ tuple $envAll "dns" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.dns | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
 {{ dict "envAll" $envAll "application" "dns" "container" "dns" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              /usr/local/bin/kolla_extend_start
+              exec dnsmasq -k --conf-file=/etc/dnsmasq.conf
           ports:
             - name: dns-udp
               containerPort: {{ .Values.dns.port }}
@@ -52,26 +58,24 @@ spec:
               containerPort: {{ .Values.dns.port }}
               protocol: TCP
           livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - "nslookup kubernetes.default.svc.cluster.local localhost"
-{{ toYaml .Values.pod.probes.dns.dns.liveness.params | indent 12 }}
+            tcpSocket:
+              port: 53
+          {{ toYaml .Values.pod.probes.dns.dns.liveness.params | indent 12 }}
           readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - "nslookup kubernetes.default.svc.cluster.local localhost"
-{{ toYaml .Values.pod.probes.dns.dns.readiness.params | indent 12 }}
+            tcpSocket:
+              port: 53
+          {{ toYaml .Values.pod.probes.dns.dns.readiness.params | indent 12 }}
           volumeMounts:
             # 默认配置文件
             - name: nexus-etc
               mountPath: /etc/dnsmasq.conf
               subPath: dnsmasq.conf
               readOnly: true
-            # 配置文件目录
+            # 日志目录（kolla的镜像）
+            - name: dns-log
+              mountPath: /var/log/kolla
+
+            # PVC 共享配置
             - name: shared-config
               mountPath: /etc/dnsmasq.d
               subPath: dnsmasq
@@ -81,6 +85,8 @@ spec:
           configMap:
             name: nexus-etc
             defaultMode: 0444
+        - name: dns-log
+          emptyDir: {}
         - name: shared-config
           persistentVolumeClaim:
             claimName: nexus-shared-config

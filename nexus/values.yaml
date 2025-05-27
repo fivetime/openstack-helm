@@ -441,4 +441,5 @@ manifests:
   service_dns: true
   network_policy: false
   pvc_shared_config: true
+  job_rbac_setup: true
   job_image_repo_sync: true

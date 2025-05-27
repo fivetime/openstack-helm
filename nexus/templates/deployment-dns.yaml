@@ -48,7 +48,6 @@ spec:
             - /bin/bash
             - -c
             - |
-              /usr/local/bin/kolla_extend_start
               exec dnsmasq -k --conf-file=/etc/dnsmasq.conf
           ports:
             - name: dns-udp
@@ -75,9 +74,6 @@ spec:
               mountPath: /etc/dnsmasq.conf
               subPath: dnsmasq.conf
               readOnly: true
-            # 日志目录（kolla的镜像）
-            - name: dns-log
-              mountPath: /var/log/kolla
 
             # PVC 共享配置
             - name: shared-config
@@ -89,8 +85,6 @@ spec:
           configMap:
             name: nexus-etc
             defaultMode: 0444
-        - name: dns-log
-          emptyDir: {}
         - name: shared-config
           persistentVolumeClaim:
             claimName: nexus-shared-config

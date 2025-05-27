@@ -75,8 +75,6 @@ spec:
               mountPath: /var/cache/nginx
             - name: nginx-run
               mountPath: /var/run
-            - name: nginx-log
-              mountPath: /var/log/nginx
 
             # 默认配置文件
             - name: nexus-etc
@@ -104,8 +102,6 @@ spec:
         - name: nginx-cache
           emptyDir: {}
         - name: nginx-run
-          emptyDir: {}
-        - name: nginx-log
           emptyDir: {}
 
         - name: nexus-etc

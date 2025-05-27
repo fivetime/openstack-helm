@@ -53,21 +53,21 @@ spec:
               containerPort: {{ .Values.proxy.ports.https }}
               protocol: TCP
 {{- end }}
-{{- if .Values.pod.probes.proxy.proxy.liveness.enabled }}
+{{- if .Values.pod.probes.proxy.liveness.enabled }}
           livenessProbe:
             httpGet:
               path: /nginx-health
               port: {{ .Values.proxy.ports.http }}
               scheme: HTTP
-{{ toYaml .Values.pod.probes.proxy.proxy.liveness.params | indent 12 }}
+{{ toYaml .Values.pod.probes.proxy.liveness.params | indent 12 }}
 {{- end }}
-{{- if .Values.pod.probes.proxy.proxy.readiness.enabled }}
+{{- if .Values.pod.probes.proxy.readiness.enabled }}
           readinessProbe:
             httpGet:
               path: /nginx-health
               port: {{ .Values.proxy.ports.http }}
               scheme: HTTP
-{{ toYaml .Values.pod.probes.proxy.proxy.readiness.params | indent 12 }}
+{{ toYaml .Values.pod.probes.proxy.readiness.params | indent 12 }}
 {{- end }}
           volumeMounts:
             # 写入权限目录

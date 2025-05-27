@@ -57,14 +57,18 @@ spec:
             - name: dns-tcp
               containerPort: {{ .Values.dns.port }}
               protocol: TCP
+{{- if .Values.pod.probes.dns.liveness.enabled }}
           livenessProbe:
             tcpSocket:
-              port: 53
-          {{ toYaml .Values.pod.probes.dns.dns.liveness.params | indent 12 }}
+              port: {{ .Values.dns.port }}
+{{ toYaml .Values.pod.probes.dns.liveness.params | indent 12 }}
+{{- end }}
+{{- if .Values.pod.probes.dns.readiness.enabled }}
           readinessProbe:
             tcpSocket:
-              port: 53
-          {{ toYaml .Values.pod.probes.dns.dns.readiness.params | indent 12 }}
+              port: {{ .Values.dns.port }}
+{{ toYaml .Values.pod.probes.dns.readiness.params | indent 12 }}
+{{- end }}
           volumeMounts:
             # 默认配置文件
             - name: nexus-etc

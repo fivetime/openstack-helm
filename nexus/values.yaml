@@ -214,33 +214,31 @@ pod:
           cpu: "2000m"
   probes:
     proxy:
-      proxy:
-        readiness:
-          enabled: true
-          params:
-            initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 5
-        liveness:
-          enabled: true
-          params:
-            initialDelaySeconds: 30
-            periodSeconds: 30
-            timeoutSeconds: 10
+      readiness:
+        enabled: true
+        params:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+      liveness:
+        enabled: true
+        params:
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
     dns:
-      dns:
-        readiness:
-          enabled: true
-          params:
-            initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 5
-        liveness:
-          enabled: true
-          params:
-            initialDelaySeconds: 30
-            periodSeconds: 30
-            timeoutSeconds: 10
+      readiness:
+        enabled: true
+        params:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+      liveness:
+        enabled: true
+        params:
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
 
 # 网络配置
 network:

@@ -264,20 +264,10 @@ dependencies:
           - endpoint: node
             service: local_image_registry
   static:
-    proxy:
-      jobs:
-        - nexus-rbac-setup
-    dns:
-      jobs:
-        - nexus-rbac-setup
     discovery:
-      jobs:
-        - nexus-rbac-setup
       services:
         - endpoint: internal
           service: identity
-    rbac_setup:
-      services: null
     image_repo_sync:
       services:
         - endpoint: internal
@@ -441,5 +431,4 @@ manifests:
   service_dns: true
   network_policy: false
   pvc_shared_config: true
-  job_rbac_setup: true
   job_image_repo_sync: true

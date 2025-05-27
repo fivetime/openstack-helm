@@ -45,7 +45,7 @@ neg-ttl={{ .Values.dns.neg_ttl }}
 {{- if .Values.dns.log_queries }}
 # 日志配置
 log-queries
-log-facility={{ .Values.dns.log_file }}
+log-facility=-
 {{- end }}
 
 # OpenStack服务域名解析

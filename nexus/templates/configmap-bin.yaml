@@ -26,8 +26,6 @@ data:
 {{ tuple "bin/_config-manager.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   orchestrator.sh: |
 {{ tuple "bin/_orchestrator.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  proxy-start.sh: |
-{{ tuple "bin/_proxy-start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- if .Values.dns.enabled }}
   dns-start.sh: |
 {{ tuple "bin/_dns-start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}

@@ -8,9 +8,9 @@ Licensed under the Apache License, Version 2.0 (the "License");
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: nexus-service-discovery
+  name: nexus-discovery
   labels:
-{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{ tuple $envAll "nexus" "discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 rules:
   - apiGroups: [""]
     resources: ["services", "endpoints"]
@@ -26,26 +26,26 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: nexus-service-discovery
+  name: nexus-discovery
   labels:
-{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{ tuple $envAll "nexus" "discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: nexus-service-discovery
+  name: nexus-discovery
 subjects:
   - kind: ServiceAccount
-    name: nexus-service-discovery
+    name: nexus-discovery
     namespace: {{ .Release.Namespace }}
 
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: nexus-service-discovery
+  name: nexus-discovery
   namespace: {{ .Release.Namespace }}
   labels:
-{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{ tuple $envAll "nexus" "discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 
 ---
 apiVersion: v1

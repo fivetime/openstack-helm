@@ -5,15 +5,15 @@ Licensed under the Apache License, Version 2.0 (the "License");
 {{- if and .Values.manifests.discovery .Values.discovery.enabled }}
 {{- $envAll := . }}
 
-{{- $serviceAccountName := "nexus-service-discovery" }}
-{{ tuple $envAll "service-discovery" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- $serviceAccountName := "nexus-discovery" }}
+{{ tuple $envAll "discovery" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: nexus-service-discovery
+  name: nexus-discovery
   labels:
-{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{ tuple $envAll "nexus" "discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   schedule: "*/{{ .Values.discovery.interval | default 5 }} * * * *"
   concurrencyPolicy: Replace
@@ -22,12 +22,12 @@ spec:
   jobTemplate:
     metadata:
       labels:
-{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+{{ tuple $envAll "nexus" "discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
     spec:
       template:
         metadata:
           labels:
-{{ tuple $envAll "nexus" "service-discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 12 }}
+{{ tuple $envAll "nexus" "discovery" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 12 }}
           annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 12 }}
         spec:
@@ -62,7 +62,7 @@ spec:
 {{- end }}
 {{- end }}
           containers:
-            - name: service-discovery
+            - name: discovery
 {{ tuple $envAll "discovery" | include "helm-toolkit.snippets.image" | indent 14 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.discovery | include "helm-toolkit.snippets.kubernetes_resources" | indent 14 }}
 {{ dict "envAll" $envAll "application" "discovery" "container" "discovery" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 14 }}

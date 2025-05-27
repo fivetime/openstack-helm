@@ -7,7 +7,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 set -eo pipefail
 
 # 工作目录
-WORK_DIR="/tmp/service-discovery"
+WORK_DIR="/tmp/discovery"
 SHARED_CONFIG_DIR="/shared/config"
 
 # 日志函数

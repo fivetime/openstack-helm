@@ -45,7 +45,7 @@ check_namespace() {
 
 # 验证服务账户权限
 verify_service_account_permissions() {
-    local sa_name="nexus-service-discovery"
+    local sa_name="nexus-discovery"
     local namespace="${CURRENT_NAMESPACE}"
 
     log "Verifying service account permissions..."
@@ -116,25 +116,25 @@ verify_cluster_rbac() {
     log "Verifying cluster-level RBAC configuration..."
 
     # 检查ClusterRole
-    if kubectl get clusterrole nexus-service-discovery >/dev/null 2>&1; then
-        log "✓ ClusterRole 'nexus-service-discovery' exists"
+    if kubectl get clusterrole nexus-discovery >/dev/null 2>&1; then
+        log "✓ ClusterRole 'nexus-discovery' exists"
     else
-        error_exit "✗ ClusterRole 'nexus-service-discovery' not found"
+        error_exit "✗ ClusterRole 'nexus-discovery' not found"
     fi
 
     # 检查ClusterRoleBinding
-    if kubectl get clusterrolebinding nexus-service-discovery >/dev/null 2>&1; then
-        log "✓ ClusterRoleBinding 'nexus-service-discovery' exists"
+    if kubectl get clusterrolebinding nexus-discovery >/dev/null 2>&1; then
+        log "✓ ClusterRoleBinding 'nexus-discovery' exists"
     else
-        error_exit "✗ ClusterRoleBinding 'nexus-service-discovery' not found"
+        error_exit "✗ ClusterRoleBinding 'nexus-discovery' not found"
     fi
 
     # 验证绑定的正确性
-    local expected_sa="system:serviceaccount:${CURRENT_NAMESPACE}:nexus-service-discovery"
+    local expected_sa="system:serviceaccount:${CURRENT_NAMESPACE}:nexus-discovery"
     local actual_subjects
-    actual_subjects=$(kubectl get clusterrolebinding nexus-service-discovery -o jsonpath='{.subjects[*].name}' 2>/dev/null || echo "")
+    actual_subjects=$(kubectl get clusterrolebinding nexus-discovery -o jsonpath='{.subjects[*].name}' 2>/dev/null || echo "")
 
-    if echo "${actual_subjects}" | grep -q "nexus-service-discovery"; then
+    if echo "${actual_subjects}" | grep -q "nexus-discovery"; then
         log "✓ ClusterRoleBinding subjects configured correctly"
     else
         log "Warning: ClusterRoleBinding subjects may not be configured correctly"

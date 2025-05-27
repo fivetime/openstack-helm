@@ -70,9 +70,14 @@ spec:
 {{ toYaml .Values.pod.probes.proxy.proxy.readiness.params | indent 12 }}
 {{- end }}
           volumeMounts:
-            # PID 文件目录
+            # 写入权限目录
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
             - name: nginx-run
-              mountPath: /run
+              mountPath: /var/run
+            - name: nginx-log
+              mountPath: /var/log/nginx
+
             # 默认配置文件
             - name: nexus-etc
               mountPath: /etc/nginx/nginx.conf
@@ -96,8 +101,13 @@ spec:
             - name: PORT_HTTPS
               value: {{ .Values.proxy.ports.https | quote }}
       volumes:
+        - name: nginx-cache
+          emptyDir: {}
         - name: nginx-run
           emptyDir: {}
+        - name: nginx-log
+          emptyDir: {}
+
         - name: nexus-etc
           configMap:
             name: nexus-etc

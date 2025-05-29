@@ -53,6 +53,12 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       hostPID: true
+      # -------------- Add by Simon Start --------------
+      {{- if and $envAll.Values.pod.tolerations.health_manager.enabled $envAll.Values.pod.tolerations.health_manager.tolerations }}
+      tolerations:
+      {{- toYaml $envAll.Values.pod.tolerations.health_manager.tolerations | nindent 8 }}
+      {{- end }}
+      # -------------- Add by Simon End --------------
       nodeSelector:
         {{ .Values.labels.health_manager.node_selector_key }}: {{ .Values.labels.health_manager.node_selector_value }}
       initContainers:

@@ -590,6 +590,13 @@ pod:
       container:
         octavia_housekeeping:
           runAsUser: 42424
+  tolerations:
+    worker:
+      enabled: false
+    housekeeping:
+      enabled: false
+    health_manager:
+      enabled: false
   affinity:
     anti:
       type:

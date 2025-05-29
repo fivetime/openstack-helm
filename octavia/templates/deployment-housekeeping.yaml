@@ -53,6 +53,12 @@ spec:
       hostNetwork: true
       affinity:
 {{ tuple $envAll "octavia" "housekeeping" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      # -------------- Add by Simon Start --------------
+      {{- if and $envAll.Values.pod.tolerations.housekeeping.enabled $envAll.Values.pod.tolerations.housekeeping.tolerations }}
+      tolerations:
+      {{- toYaml $envAll.Values.pod.tolerations.housekeeping.tolerations | nindent 8 }}
+      {{- end }}
+      # -------------- Add by Simon End --------------
       nodeSelector:
         {{ .Values.labels.housekeeping.node_selector_key }}: {{ .Values.labels.housekeeping.node_selector_value }}
       initContainers:

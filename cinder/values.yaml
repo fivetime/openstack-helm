@@ -55,6 +55,7 @@ images:
     cinder_scheduler: quay.io/airshipit/cinder:2024.1-ubuntu_jammy
     cinder_volume: quay.io/airshipit/cinder:2024.1-ubuntu_jammy
     cinder_volume_usage_audit: quay.io/airshipit/cinder:2024.1-ubuntu_jammy
+    cinder_db_purge: quay.io/airshipit/cinder:2024.1-ubuntu_jammy
     cinder_storage_init: docker.io/openstackhelm/ceph-config-helper:latest-ubuntu_jammy
     cinder_backup: quay.io/airshipit/cinder:2024.1-ubuntu_jammy
     cinder_backup_storage_init: docker.io/openstackhelm/ceph-config-helper:latest-ubuntu_jammy
@@ -74,9 +75,37 @@ jobs:
     history:
       success: 3
       failed: 1
+  db_purge:
+    cron: "0 0 * * *"
+    starting_deadline: 600
+    history:
+      success: 3
+      failed: 1
 
 pod:
+  probes:
+    api:
+      cinder-api:
+        liveness:
+          enabled: True
+          params:
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
+            successThreshold: 1
+        readiness:
+          enabled: True
+          params:
+            initialDelaySeconds: 30
   security_context:
+    db_purge:
+      pod:
+        runAsUser: 42424
+      container:
+        cinder_db_purge:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
     volume_usage_audit:
       pod:
         runAsUser: 42424
@@ -210,6 +239,11 @@ pod:
       cinder_volume_usage_audit:
         volumeMounts:
         volumes:
+    cinder_db_purge:
+      init_container: null
+      cinder_db_purge:
+        volumeMounts:
+        volumes:
     cinder_backup:
       init_container: null
       cinder_backup:
@@ -303,6 +337,13 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
       db_drop:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_purge:
         requests:
           memory: "128Mi"
           cpu: "100m"
@@ -437,6 +478,7 @@ conf:
     composite:osapi_volume:
       use: call:cinder.api:root_app_factory
       /: apiversions
+      /healthcheck: healthcheck
       /v1: openstack_volume_api_v1
       /v2: openstack_volume_api_v2
       /v3: openstack_volume_api_v3
@@ -476,6 +518,10 @@ conf:
       paste.app_factory: cinder.api.v2.router:APIRouter.factory
     app:apiv3:
       paste.app_factory: cinder.api.v3.router:APIRouter.factory
+    app:healthcheck:
+      paste.app_factory: oslo_middleware:Healthcheck.app_factory
+      backends: disable_by_file
+      disable_by_file_path: /etc/cinder/healthcheck_disable
     pipeline:apiversions:
       pipeline: cors http_proxy_to_wsgi faultwrap osvolumeversionapp
     app:osvolumeversionapp:
@@ -1029,6 +1075,8 @@ conf:
       thunder-lock: true
       worker-reload-mercy: 80
       wsgi-file: /var/lib/openstack/bin/cinder-wsgi
+  db_purge:
+    before: 30
 
 backup:
   external_ceph_rbd:
@@ -1107,6 +1155,18 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_db
+    db_purge:
+      jobs:
+        - cinder-db-sync
+        - cinder-db-init
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-rabbit-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
     ks_endpoints:
       jobs:
         - cinder-ks-service
@@ -1304,6 +1364,7 @@ endpoints:
       #     key: null
     path:
       default: '/v1/%(tenant_id)s'
+      healthcheck: /healthcheck
     scheme:
       default: 'http'
     port:
@@ -1326,6 +1387,7 @@ endpoints:
       #     key: null
     path:
       default: '/v2/%(tenant_id)s'
+      healthcheck: /healthcheck
     scheme:
       default: 'http'
     port:
@@ -1348,6 +1410,7 @@ endpoints:
       #     key: null
     path:
       default: '/v3/%(tenant_id)s'
+      healthcheck: /healthcheck
     scheme:
       default: 'http'
     port:
@@ -1473,6 +1536,7 @@ manifests:
   configmap_bin: true
   configmap_etc: true
   cron_volume_usage_audit: true
+  cron_db_purge: false
   deployment_api: true
   deployment_backup: true
   deployment_scheduler: true

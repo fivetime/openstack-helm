@@ -1,0 +1,71 @@
+{{- if .Values.manifests.job_manage_network }}
+{{- $envAll := . }}
+
+{{- $serviceAccountName := "octavia-manage-network" }}
+{{ tuple $envAll "manage_network" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: octavia-manage-network
+  annotations:
+{{- if .Values.helm3_hook }}
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+{{- end }}
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+spec:
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "octavia" "manage-network" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+      restartPolicy: OnFailure
+      nodeSelector:
+        {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
+      initContainers:
+{{ tuple $envAll "manage_network" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: octavia-manage-network
+          image: {{ .Values.images.tags.ks_service }}
+          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll $envAll.Values.pod.resources.jobs.manage_network | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+          env:
+{{- with $env := dict "ksUserSecret" .Values.secrets.identity.octavia }}
+{{- include "helm-toolkit.snippets.keystone_openrc_env_vars" $env | indent 12 }}
+{{- end }}
+          command:
+            - /tmp/manage-network-init.sh
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: octavia-bin
+              mountPath: /tmp/manage-network-init.sh
+              subPath: manage-network-init.sh
+              readOnly: true
+            - name: network-config
+              mountPath: /etc/octavia/network-config
+              readOnly: true
+{{- if .Values.manifests.secret_ssh_key }}
+            - name: octavia-ssh-key
+              mountPath: /etc/octavia/ssh-key
+              readOnly: true
+{{- end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: octavia-bin
+          configMap:
+            name: octavia-bin
+            defaultMode: 0555
+        - name: network-config
+          configMap:
+            name: octavia-net
+{{- if .Values.manifests.secret_ssh_key }}
+        - name: octavia-ssh-key
+          secret:
+            secretName: octavia-ssh-key
+            defaultMode: 0600
+{{- end }}
+{{- end }}

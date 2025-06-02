@@ -1,0 +1,96 @@
+{{- if .Values.manifests.cronjob_cleanup_ports }}
+{{- $envAll := . }}
+{{- $serviceAccountName := "octavia-cleanup-ports" }}
+{{- tuple $envAll "cleanup_ports" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: octavia-cleanup-ports
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+spec:
+  schedule: "0 */6 * * *"  # 每6小时执行一次
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{ tuple $envAll "octavia" "cleanup-ports" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 12 }}
+        spec:
+          serviceAccountName: {{ $serviceAccountName }}
+          restartPolicy: OnFailure
+          nodeSelector:
+            {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value | quote }}
+          containers:
+          - name: cleanup
+            image: {{ .Values.images.tags.ks_service }}
+            imagePullPolicy: {{ .Values.images.pull_policy }}
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -ex
+              
+              echo "=== Starting Port Cleanup ==="
+              
+              # 获取所有 Health Manager 端口
+              PORTS=$(openstack port list \
+                --device-owner Octavia:health-mgr \
+                -f json | jq -r '.[] | select(.name | startswith("octavia-hm-port-")) | .name')
+              
+              CLEANED_COUNT=0
+              for port in $PORTS; do
+                node_name=${port#octavia-hm-port-}
+                
+                # 检查节点是否存在
+                if ! kubectl get node ${node_name} &>/dev/null; then
+                  echo "Node ${node_name} not found, deleting port ${port}..."
+                  if openstack port delete ${port}; then
+                    ((CLEANED_COUNT++))
+                    echo "Successfully deleted port ${port}"
+                  else
+                    echo "Failed to delete port ${port}"
+                  fi
+                else
+                  echo "Node ${node_name} exists, keeping port ${port}"
+                fi
+              done
+              
+              echo "=== Cleanup completed. Deleted ${CLEANED_COUNT} orphaned ports. ==="
+              
+              # 更新 controller IP 列表
+              echo "Updating controller IP list..."
+              
+              CONTROLLER_IPS=""
+              REMAINING_PORTS=$(openstack port list \
+                --device-owner Octavia:health-mgr \
+                -f json | jq -r '.[] | select(.name | startswith("octavia-hm-port-")) | .name')
+              
+              for port in $REMAINING_PORTS; do
+                port_ip=$(openstack port show ${port} -f value -c fixed_ips | \
+                  grep -oP '(?<=ip_address=)[^,}]+' | tr -d "'")
+                
+                if [ -n "${port_ip}" ]; then
+                  if [ -n "${CONTROLLER_IPS}" ]; then
+                    CONTROLLER_IPS="${CONTROLLER_IPS},${port_ip}:5555"
+                  else
+                    CONTROLLER_IPS="${port_ip}:5555"
+                  fi
+                fi
+              done
+              
+              kubectl patch configmap network-config \
+                -n {{ .Release.Namespace }} \
+                --type merge \
+                -p "{\"data\":{\"controller_ip_port_list\":\"${CONTROLLER_IPS}\"}}"
+              
+              echo "Controller IP list updated: ${CONTROLLER_IPS}"
+            env:
+{{- with $env := dict "ksUserSecret" ( index $envAll.Values.secrets.identity "admin" ) "useCA" .Values.manifests.certificates }}
+{{- include "helm-toolkit.snippets.keystone_openrc_env_vars" $env | indent 14 }}
+{{- end }}
+              - name: OPENSTACK_CLOUD_NAME
+                value: "octavia-default"
+{{- end }}

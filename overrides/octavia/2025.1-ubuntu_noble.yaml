@@ -21,4 +21,74 @@ images:
     test: docker.io/xrally/xrally-openstack:3.0.0
     rabbit_init: "docker.io/rabbitmq:3.13-management"
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+pod:
+  mounts:
+    octavia_api:
+      octavia_api:
+        volumeMounts:
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/private/cakey.pem
+            subPath: cakey.pem
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/ca_01.pem
+            subPath: ca_01.pem
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/client.pem
+            subPath: client.pem
+        volumes:
+          - name: octavia-certs
+            secret:
+              secretName: octavia-certs
+              defaultMode: 0644
+    octavia_worker:
+      octavia_worker:
+        volumeMounts:
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/private/cakey.pem
+            subPath: cakey.pem
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/ca_01.pem
+            subPath: ca_01.pem
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/client.pem
+            subPath: client.pem
+        volumes:
+          - name: octavia-certs
+            secret:
+              secretName: octavia-certs
+              defaultMode: 0644
+    octavia_housekeeping:
+      octavia_housekeeping:
+        volumeMounts:
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/private/cakey.pem
+            subPath: cakey.pem
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/ca_01.pem
+            subPath: ca_01.pem
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/client.pem
+            subPath: client.pem
+        volumes:
+          - name: octavia-certs
+            secret:
+              secretName: octavia-certs
+              defaultMode: 0644
+    octavia_health_manager:
+      octavia_health_manager:
+        volumeMounts:
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/private/cakey.pem
+            subPath: cakey.pem
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/ca_01.pem
+            subPath: ca_01.pem
+          - name: octavia-certs
+            mountPath: /etc/octavia/certs/client.pem
+            subPath: client.pem
+        volumes:
+          - name: octavia-certs
+            secret:
+              secretName: octavia-certs
+              defaultMode: 0644
 ...

@@ -2,13 +2,12 @@
 
 set -xe
 
-# 定义证书源路径 - 这是create_dual_intermediate_CA.sh生成的证书位置
+# 定义证书源路径
 CERT_SOURCE_PATH=${CERT_SOURCE_PATH:-"/tmp/dual_ca/etc/octavia/certs"}
 
 # CA私钥密码 - 可以通过环境变量传递
 CA_PASSPHRASE=${CA_PASSPHRASE:-"not-secure-passphrase"}
 
-# 根据原始190-create-octavia-certs.sh的映射规则
 # 定义要导入到Secret的证书文件映射
 declare -A CERT_MAPPING=(
     ["ca_01.pem"]="client_ca.cert.pem"
@@ -70,15 +69,6 @@ function validate_certificate_content() {
     echo "证书内容验证通过"
 }
 
-function trim_data() {
-    local data_path=$1
-    if [[ ! -f "$data_path" ]]; then
-        echo "错误：文件不存在: $data_path"
-        exit 1
-    fi
-    cat "$data_path" | base64 -w0 | tr -d '\n'
-}
-
 function check_existing_secret() {
     echo "检查现有Secret..."
 
@@ -105,6 +95,15 @@ function check_existing_secret() {
     fi
 
     return 1
+}
+
+function trim_data() {
+    local data_path=$1
+    if [[ ! -f "$data_path" ]]; then
+        echo "错误：文件不存在: $data_path"
+        exit 1
+    fi
+    cat "$data_path" | base64 -w0 | tr -d '\n'
 }
 
 function create_secret() {
@@ -164,7 +163,10 @@ function display_certificate_info() {
 
     echo ""
     echo "服务器CA私钥信息："
-    openssl rsa -in "${CERT_SOURCE_PATH}/server_ca.key.pem" -text -noout | grep -E "(Private-Key:|writing RSA key)" | sed 's/^/  /' || echo "  RSA 私钥文件"
+    echo "  文件: ${CERT_SOURCE_PATH}/server_ca.key.pem"
+    echo "  类型: $(head -1 "${CERT_SOURCE_PATH}/server_ca.key.pem")"
+    echo "  大小: $(wc -c < "${CERT_SOURCE_PATH}/server_ca.key.pem") bytes"
+    echo "  加密: 是（需要密码解密）"
 
     echo ""
     echo "客户端证书信息："
@@ -190,16 +192,20 @@ function main() {
 
     echo ""
 
-    # 其余函数调用保持不变...
+    # 验证证书文件
     validate_certificates
     validate_certificate_content
+
+    # 显示证书信息
     display_certificate_info
 
+    # 检查现有Secret，如果有效则跳过
     if check_existing_secret; then
         echo "证书导入完成（使用现有有效证书）"
         return 0
     fi
 
+    # 创建新的Secret
     create_secret
 
     echo ""

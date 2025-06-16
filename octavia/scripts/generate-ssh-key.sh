@@ -1,5 +1,4 @@
 #!/bin/bash
-# scripts/generate-ssh-key.sh
 
 set -e
 

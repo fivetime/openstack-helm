@@ -5,8 +5,11 @@ set -xe
 # 定义证书源路径 - 这是create_dual_intermediate_CA.sh生成的证书位置
 CERT_SOURCE_PATH=${CERT_SOURCE_PATH:-"/tmp/dual_ca/etc/octavia/certs"}
 
-# 定义要导入到Secret的证书文件映射
+# CA私钥密码 - 可以通过环境变量传递
+CA_PASSPHRASE=${CA_PASSPHRASE:-"not-secure-passphrase"}
+
 # 根据原始190-create-octavia-certs.sh的映射规则
+# 定义要导入到Secret的证书文件映射
 declare -A CERT_MAPPING=(
     ["ca_01.pem"]="client_ca.cert.pem"
     ["cakey.pem"]="server_ca.key.pem"
@@ -51,9 +54,10 @@ function validate_certificate_content() {
         exit 1
     fi
 
-    # 验证服务器CA私钥
-    if ! openssl rsa -in "${CERT_SOURCE_PATH}/server_ca.key.pem" -check -noout >/dev/null 2>&1; then
-        echo "错误：server_ca.key.pem 不是有效的私钥文件"
+    # 验证服务器CA私钥（使用密码）
+    if ! openssl rsa -in "${CERT_SOURCE_PATH}/server_ca.key.pem" -check -noout -passin pass:"${CA_PASSPHRASE}" >/dev/null 2>&1; then
+        echo "错误：server_ca.key.pem 不是有效的私钥文件，或密码错误"
+        echo "请检查CA_PASSPHRASE环境变量是否正确"
         exit 1
     fi
 
@@ -110,10 +114,19 @@ function create_secret() {
     local temp_dir=$(mktemp -d)
     trap "rm -rf ${temp_dir}" EXIT
 
-    # 根据映射关系复制证书文件
+    # 处理每个证书文件
     for secret_key in "${!CERT_MAPPING[@]}"; do
         source_file="${CERT_SOURCE_PATH}/${CERT_MAPPING[$secret_key]}"
-        cp "$source_file" "${temp_dir}/${secret_key}"
+
+        if [[ "$secret_key" == "cakey.pem" ]]; then
+            # 对于server_ca.key.pem，需要去除密码保护
+            echo "处理加密私钥: ${CERT_MAPPING[$secret_key]} -> ${secret_key}"
+            openssl rsa -in "$source_file" -out "${temp_dir}/${secret_key}" -passin pass:"${CA_PASSPHRASE}"
+        else
+            # 其他文件直接复制
+            cp "$source_file" "${temp_dir}/${secret_key}"
+        fi
+
         echo "映射: ${CERT_MAPPING[$secret_key]} -> ${secret_key}"
     done
 
@@ -168,22 +181,25 @@ function display_certificate_info() {
 function main() {
     echo "开始导入Octavia证书到Kubernetes Secret..."
     echo "证书源路径: ${CERT_SOURCE_PATH}"
+
+    # 检查密码是否设置
+    if [[ "${CA_PASSPHRASE}" == "not-secure-passphrase" ]]; then
+        echo "警告：使用默认密码，请通过CA_PASSPHRASE环境变量设置正确的密码"
+        echo "例如：export CA_PASSPHRASE='your-actual-password'"
+    fi
+
     echo ""
 
-    # 验证证书文件
+    # 其余函数调用保持不变...
     validate_certificates
     validate_certificate_content
-
-    # 显示证书信息
     display_certificate_info
 
-    # 检查现有Secret，如果有效则跳过
     if check_existing_secret; then
         echo "证书导入完成（使用现有有效证书）"
         return 0
     fi
 
-    # 创建新的Secret
     create_secret
 
     echo ""

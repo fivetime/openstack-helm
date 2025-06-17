@@ -32,4 +32,6 @@ ovs-vsctl --may-exist add-port br-int o-hm0 \
 
 ip link set dev o-hm0 address $HM_PORT_MAC
 
-iptables -I INPUT -i o-hm0 -p udp --dport {{ .Values.conf.octavia.health_manager.bind_port }} -j ACCEPT
+# 注释掉 iptables 规则 - 使用 OpenStack 安全组进行防火墙控制
+# 安全组 lb-health-mgr-sec-grp 已经允许 UDP 端口 {{ .Values.conf.octavia.health_manager.bind_port }}
+# iptables -I INPUT -i o-hm0 -p udp --dport {{ .Values.conf.octavia.health_manager.bind_port }} -j ACCEPT

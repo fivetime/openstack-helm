@@ -50,15 +50,17 @@ data:
   octavia-driver-agent.sh: |
 {{ tuple "bin/_octavia-driver-agent.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   octavia-health-manager.sh: |
-{{ tuple "bin/_octavia-health-manager.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{ tuple "bin/_health-manager-start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   octavia-health-manager-nic-init.sh: |
-{{ tuple "bin/_octavia-health-manager-nic-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  octavia-health-manager-get-port.sh: |
-{{ tuple "bin/_octavia-health-manager-get-port.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{ tuple "bin/_health-manager-vos-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   octavia-housekeeping.sh: |
 {{ tuple "bin/_octavia-housekeeping.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   octavia-worker.sh: |
 {{ tuple "bin/_octavia-worker.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  health-manager-init.sh: |
+{{ tuple "bin/_health-manager-nic-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  manage-network-init.sh: |
+{{ tuple "bin/_manage-network-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   rabbit-init.sh: |
 {{- include "helm-toolkit.scripts.rabbit_init" . | indent 4 }}
 {{- end }}

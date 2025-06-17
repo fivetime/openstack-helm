@@ -20,6 +20,8 @@
 ---
 release_group: null
 
+helm3_hook: true
+
 labels:
   api:
     node_selector_key: openstack-control-plane
@@ -88,6 +90,46 @@ network:
       enabled: false
       port: 30826
 
+  # 管理网络配置 - 支持 flat, vlan, vxlan, geneve
+  management:
+    # 网络模式: flat, vlan, vxlan, geneve
+    network_type: flat  # 默认使用 vxlan
+
+    # 选项1: 使用独立的管理网络（推荐）
+    # device: lb-mgmt-int  # 管理网络设备
+    # provider_network: lb-management  # 提供者网络名称
+    # network_name: lb-mgmt-net
+    # subnet_name: lb-mgmt-subnet
+
+    # 网络类型相关配置
+    # vlan_id: "200"  # 仅在 type: vlan 时使用
+    # segmentation_id: "5000"  # 仅在 type: vxlan 时使用
+
+    # 子网配置
+    # subnet_cidr: 172.31.0.0/24
+    # subnet_alloc_start: 172.31.0.2
+    # subnet_alloc_end: 172.31.0.200
+    # subnet_gateway: 172.31.0.1  # 可选，留空则无网关
+    # subnet_dns_server: 8.8.8.8
+    # mtu: 1450
+
+    # 选项2: 复用现有网络（类似 ironic 的配置）
+    device: br-ex  # 使用虚拟机相同的公网网桥接口
+    provider_network: external  # 提供者网络名称
+    network_name: public  # 使用现有网络
+    subnet_name: public-subnet-ipv4  # 使用现有子网
+
+    # 子网配置
+    subnet_cidr: 203.0.113.0/24
+    subnet_alloc_start: 203.0.113.100
+    subnet_alloc_end: 203.0.113.250
+    subnet_gateway: 203.0.113.1  # 可选，留空则无网关
+    subnet_dns_server: 10.96.0.10  # 可选，留空则无网关
+
+    # 高级选项
+    # enable_dhcp: true     # 是否启用 DHCP
+    shared: true          # 是否共享网络
+
 dependencies:
   dynamic:
     common:
@@ -104,6 +146,7 @@ dependencies:
         - octavia-ks-user
         - octavia-ks-endpoints
         - octavia-rabbit-init
+        - octavia-manage-network
       services:
         - endpoint: internal
           service: oslo_db
@@ -123,6 +166,7 @@ dependencies:
         - octavia-ks-user
         - octavia-ks-endpoints
         - octavia-rabbit-init
+        - octavia-manage-network
       services:
         - endpoint: internal
           service: oslo_db
@@ -144,6 +188,7 @@ dependencies:
         - octavia-ks-user
         - octavia-ks-endpoints
         - octavia-rabbit-init
+        - octavia-manage-network
       services:
         - endpoint: internal
           service: oslo_db
@@ -165,6 +210,7 @@ dependencies:
         - octavia-ks-user
         - octavia-ks-endpoints
         - octavia-rabbit-init
+        - octavia-manage-network
       services:
         - endpoint: internal
           service: oslo_db
@@ -216,6 +262,12 @@ dependencies:
       services:
         - endpoint: internal
           service: local_image_registry
+    manage_network:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: network
 
 conf:
   octavia:
@@ -388,6 +440,17 @@ secrets:
         public: octavia-tls-public
   oci_image_registry:
     octavia: octavia-oci-image-registry
+  ssh_key:
+    private_key: |
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+      QyNTUxOQAAACA+UxreJcWSv5ZLcE8cW1aA6xlYR9iJGO18Iv5zbpjk3gAAAJgNWwnwDVsJ
+      8AAAAAtzc2gtZWQyNTUxOQAAACA+UxreJcWSv5ZLcE8cW1aA6xlYR9iJGO18Iv5zbpjk3g
+      AAAEDeU70D69iu1uek7xp2oronhqLw7SFHKimQ/IYhVp1+9j5TGt4lxZK/lktwTxxbVoDr
+      GVhH2IkY7Xwi/nNumOTeAAAAE29jdGF2aWEtYW1waG9yYS1rZXkBAg==
+      -----END OPENSSH PRIVATE KEY-----
+    public_key: |
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID5TGt4lxZK/lktwTxxbVoDrGVhH2IkY7Xwi/nNumOTe octavia-amphora-key
 
 endpoints:
   cluster_domain_suffix: cluster.local
@@ -601,20 +664,6 @@ pod:
       container:
         octavia_housekeeping:
           runAsUser: 42424
-    octavia_health_manager:
-      container:
-        octavia_health_manager_nic_init:
-          runAsUser: 0
-          capabilities:
-            add:
-              - NET_ADMIN
-              - NET_RAW
-              - NET_BIND_SERVICE
-        octavia_health_manager:
-          runAsUser: 0
-          capabilities:
-            add:
-              - NET_ADMIN
   tolerations:
     worker:
       enabled: false
@@ -789,6 +838,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      manage_network:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 network_policy:
   octavia:
@@ -798,6 +854,7 @@ network_policy:
 manifests:
   configmap_bin: true
   configmap_etc: true
+  configmap_net: true
   daemonset_health_manager: true
   deployment_api: true
   deployment_worker: true
@@ -808,6 +865,7 @@ manifests:
   job_db_sync: true
   job_db_drop: false
   job_image_repo_sync: true
+  job_manage_network: true
   job_rabbit_init: true
   job_ks_endpoints: true
   job_ks_service: true
@@ -822,6 +880,7 @@ manifests:
   secret_keystone: true
   secret_rabbitmq: true
   secret_registry: true
+  secret_ssh_key: true
   service_ingress_api: true
   service_api: true
 ...

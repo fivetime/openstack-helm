@@ -63,7 +63,7 @@ spec:
         {{ .Values.labels.health_manager.node_selector_key }}: {{ .Values.labels.health_manager.node_selector_value }}
       initContainers:
 {{ tuple $envAll "health_manager" $mounts_octavia_health_manager_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
-        - name: octavia-health-manager-get-port
+        - name: health-manager-nic-init
 {{ tuple $envAll "octavia_health_manager_init" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.health_manager | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
@@ -71,18 +71,25 @@ spec:
 {{- include "helm-toolkit.snippets.keystone_openrc_env_vars" $env | indent 12 }}
 {{- end }}
           command:
-            - /tmp/octavia-health-manager-get-port.sh
+            - /tmp/health-manager-init.sh
           volumeMounts:
             - name: pod-shared
               mountPath: /tmp/pod-shared
             - name: octavia-bin
-              mountPath: /tmp/octavia-health-manager-get-port.sh
-              subPath: octavia-health-manager-get-port.sh
+              mountPath: /tmp/health-manager-init.sh
+              subPath: health-manager-init.sh
               readOnly: true
-        - name: octavia-health-manager-nic-init
+            - name: octavia-network-config
+              mountPath: /etc/octavia/network-config
+              readOnly: true
+        - name: health-manager-vos-init
 {{ tuple $envAll "openvswitch_vswitchd" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.health_manager | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
-{{ dict "envAll" $envAll "application" "octavia_health_manager" "container" "octavia_health_manager_nic_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          securityContext:
+            runAsUser: 0
+            capabilities:
+              add:
+                - NET_ADMIN
           command:
             - /tmp/octavia-health-manager-nic-init.sh
           volumeMounts:
@@ -98,7 +105,11 @@ spec:
         - name: octavia-health-manager
 {{ tuple $envAll "octavia_health_manager" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.health_manager | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
-{{ dict "envAll" $envAll "application" "octavia_health_manager" "container" "octavia_health_manager" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          securityContext:
+            runAsUser: 0
+            capabilities:
+              add:
+                - NET_ADMIN
           command:
             - /tmp/octavia-health-manager.sh
             - start
@@ -111,6 +122,9 @@ spec:
           volumeMounts:
             - name: pod-etc-octavia
               mountPath: /etc/octavia
+            - name: pod-shared
+              mountPath: /tmp/pod-shared
+              readOnly: true
             - name: octavia-bin
               mountPath: /tmp/octavia-health-manager.sh
               subPath: octavia-health-manager.sh
@@ -142,6 +156,9 @@ spec:
         - name: run
           hostPath:
             path: /run
+        - name: octavia-network-config
+          configMap:
+            name: octavia-net
 {{ if $mounts_octavia_health_manager.volumes }}{{ toYaml $mounts_octavia_health_manager.volumes | indent 8 }}{{ end }}
 {{- end }}
 {{- end }}

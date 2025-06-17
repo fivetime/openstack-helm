@@ -615,13 +615,6 @@ pod:
           capabilities:
             add:
               - NET_ADMIN
-  tolerations:
-    worker:
-      enabled: false
-    housekeeping:
-      enabled: false
-    health_manager:
-      enabled: false
   affinity:
     anti:
       type:

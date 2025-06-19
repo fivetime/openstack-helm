@@ -616,6 +616,8 @@ pod:
             add:
               - NET_ADMIN
   tolerations:
+    octavia_api:
+      enabled: false
     worker:
       enabled: false
     housekeeping:

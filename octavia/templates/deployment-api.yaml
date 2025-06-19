@@ -67,6 +67,12 @@ spec:
       serviceAccountName: {{ $serviceAccountName }}
       affinity:
 {{ tuple $envAll "octavia" "api" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      # -------------- Add by Simon Start --------------
+      {{- if and $envAll.Values.pod.tolerations.octavia_api.enabled $envAll.Values.pod.tolerations.octavia_api.tolerations }}
+      tolerations:
+      {{- toYaml $envAll.Values.pod.tolerations.octavia_api.tolerations | nindent 8 }}
+      {{- end }}
+      # -------------- Add by Simon End --------------
       nodeSelector:
         {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "30" }}

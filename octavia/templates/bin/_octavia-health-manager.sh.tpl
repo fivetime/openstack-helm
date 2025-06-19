@@ -20,18 +20,22 @@ set -ex
 COMMAND="${@:-start}"
 
 function start () {
-  cat > /tmp/dhclient.conf <<EOF
-request subnet-mask,broadcast-address,interface-mtu;
-do-forward-updates false;
-EOF
+  # 从共享目录读取网络配置信息
+  HM_PORT_IP=$(cat /tmp/pod-shared/HM_PORT_IP)
+  HM_SUBNET_MASK=$(cat /tmp/pod-shared/HM_SUBNET_MASK)
 
-  dhclient -v o-hm0 -cf /tmp/dhclient.conf
+  # 静态配置网络接口
+  ip addr flush dev o-hm0
+  ip addr add ${HM_PORT_IP}/${HM_SUBNET_MASK} dev o-hm0
+  ip link set dev o-hm0 up
 
+  # 启动 Octavia 健康管理器
   exec octavia-health-manager \
         --config-file /etc/octavia/octavia.conf
 }
 
 function stop () {
+  # 停止 Octavia 健康管理器
   kill -TERM 1
 }
 

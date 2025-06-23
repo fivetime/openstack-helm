@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ANNOTATION_KEY="openstack-helm-infra/ovn-system-id"
+ANNOTATION_KEY="openstack-helm/ovn-system-id"
 
 # Get a specific IPv4 address for original functionality (preserving original function)
 function get_ip_address_from_interface {
@@ -182,7 +182,7 @@ function get_current_system_id {
 }
 
 function get_stored_system_id {
-  kubectl get node "$NODE_NAME" -o "jsonpath={.metadata.annotations.openstack-helm-infra/ovn-system-id}"
+  kubectl get node "$NODE_NAME" -o "jsonpath={.metadata.annotations.openstack-helm/ovn-system-id}"
 }
 
 function store_system_id() {

@@ -43,10 +43,7 @@ echo "Processes: ${UWSGI_PROCESSES}"
 echo "Threads: ${UWSGI_THREADS}"
 
 # Create kuryr spec file for Docker
-cat > ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec << EOF
-http://127.0.0.1:${BIND_PORT}
-EOF
-
+echo "http://127.0.0.1:${BIND_PORT}" > ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec
 echo "Created kuryr spec file at ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec"
 
 # Add kolla venv to PATH
@@ -60,7 +57,6 @@ fi
 
 echo "Starting kuryr via uwsgi..."
 exec uwsgi \
-    --plugins python \
     --http-socket ${BIND_HOST}:${BIND_PORT} \
     --wsgi kuryr_libnetwork.server:app \
     --pyargv "--config-file /etc/kuryr/kuryr.conf" \

@@ -53,26 +53,6 @@ spec:
 {{- if .Values.pod.tolerations.kuryr.enabled }}
 {{ tuple $envAll "kuryr" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
 {{- end}}
-      initContainers:
-{{ tuple $envAll "kuryr" $mounts_kuryr_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
-        - name: kuryr-docker-check
-{{ tuple $envAll "kuryr_libnetwork" | include "helm-toolkit.snippets.image" | indent 10 }}
-{{ dict "envAll" $envAll "application" "kuryr" "container" "kuryr" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
-          env:
-            - name: DOCKER_HOST
-              value: "unix:///var/run/docker.sock"
-          command:
-            - /tmp/docker-check.sh
-          volumeMounts:
-            - name: pod-tmp
-              mountPath: /tmp
-            - name: kuryr-bin
-              mountPath: /tmp/docker-check.sh
-              subPath: docker-check.sh
-              readOnly: true
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
-              readOnly: true
       containers:
         - name: kuryr-libnetwork
 {{ tuple $envAll "kuryr_libnetwork" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -109,10 +89,8 @@ spec:
               mountPath: /tmp/kuryr-libnetwork.sh
               subPath: kuryr-libnetwork.sh
               readOnly: true
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: docker-plugins
-              mountPath: /usr/lib/docker/plugins
+              mountPath: {{ .Values.network.kuryr.plugins_dir }}
             - name: kuryr-log
               mountPath: /var/log/kolla/kuryr
             - name: run-openvswitch
@@ -132,9 +110,6 @@ spec:
             name: kuryr-bin
             defaultMode: 0555
         - name: docker-socket
-          hostPath:
-            path: {{ .Values.network.kuryr.docker_socket_path }}
-            type: Socket
         - name: docker-plugins
           hostPath:
             path: {{ .Values.network.kuryr.plugins_dir }}

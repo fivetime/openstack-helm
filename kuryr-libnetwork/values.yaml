@@ -50,8 +50,7 @@ tls:
 
 network:
   kuryr:
-    docker_socket_path: /var/run/docker.sock
-    plugins_dir: /usr/lib/docker/plugins
+    plugins_dir: /run/docker/plugins/kuryr
     external_policy_local: false
     bind_host: "0.0.0.0"
     bind_port: 23750
@@ -194,11 +193,13 @@ dependencies:
 conf:
   kuryr:
     DEFAULT:
-      debug: false
+      debug: true
       enabled_port_drivers:
         - kuryr_libnetwork.port_driver.drivers.veth
-      bindir: /usr/libexec/kuryr
+      bindir: /var/lib/kolla/venv/libexec/kuryr
       log_dir: /var/log/kolla/kuryr
+      capability_scope: local
+      process_external_connectivity: true
     neutron:
       project_name: service
       auth_type: password

@@ -28,7 +28,4 @@ data:
 {{- include "helm-toolkit.scripts.keystone_user" . | indent 4 }}
   kuryr-libnetwork.sh: |
 {{ tuple "bin/_kuryr-libnetwork.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-  docker-check.sh: |
-{{ tuple "bin/_docker-check.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
-
 {{- end }}

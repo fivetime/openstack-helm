@@ -104,7 +104,7 @@ container_runtime:
     socket_group: docker                       # Docker socket 用户组
     socket_path: /var/run/docker.sock          # Docker socket 路径
     library_dir: /var/lib/docker               # Docker 类库目录
-    plugins_dir: /usr/lib/docker/plugins       # Docker 插件目录
+    plugins_dir: /run/docker/plugins           # Docker 插件目录
 
     # Docker API 配置
     api_version: "1.26"                        # Docker API 版本
@@ -131,12 +131,12 @@ container_runtime:
 # ────────────────────────────────────────────────────────────────────
 network:
   # 网络驱动选择: cni, kuryr, docker
-  driver: cni
+  driver: kuryr
 
   drivers:
     # CNI (Container Network Interface) 配置
     cni:
-      deploy_daemon: true                      # 是否部署 CNI daemon
+      deploy_daemon: false                     # 是否部署 CNI daemon
 
       # CNI 路径配置
       paths:
@@ -169,7 +169,6 @@ network:
 
     # Kuryr (OpenStack Neutron 集成) 配置
     kuryr:
-      enabled: false                           # 是否使用 Kuryr
       driver_name: kuryr                       # Kuryr 插件名称
       etcd_endpoints: "http://etcd:2379"       # etcd 端点
 
@@ -712,7 +711,7 @@ conf:
 
     # === 客户端配置 ===
     cinder_client:
-      endpoint_type: publicURL                # 端点类型
+      endpoint_type: internalURL              # 端点类型
       api_version: "3"                        # API 版本
       insecure: false                         # 不安全模式
 
@@ -720,20 +719,20 @@ conf:
       images_directory: /var/lib/zun/images   # 镜像目录
 
     glance_client:
-      endpoint_type: publicURL                # 端点类型
+      endpoint_type: internalURL              # 端点类型
       api_version: "2"                        # API 版本
       insecure: false                         # 不安全模式
 
     neutron_client:
-      endpoint_type: publicURL                # 端点类型
+      endpoint_type: internalURL              # 端点类型
       insecure: false                         # 不安全模式
 
     placement_client:
-      endpoint_type: publicURL                # 端点类型
+      endpoint_type: internalURL              # 端点类型
       insecure: false                         # 不安全模式
 
     zun_client:
-      endpoint_type: publicURL                # 端点类型
+      endpoint_type: internalURL              # 端点类型
       insecure: false                         # 不安全模式
 
     # === 卷配置 ===
@@ -1321,13 +1320,13 @@ manifests:
   # ────────────────────────────────────────────────────────────────────
   configmap_bin: true                         # 二进制文件配置映射
   configmap_etc: true                         # 配置文件配置映射
-  configmap_cni: true                         # CNI 配置映射
+  configmap_cni: false                        # CNI 配置映射
 
   # ────────────────────────────────────────────────────────────────────
   # 9.2 工作负载
   # ────────────────────────────────────────────────────────────────────
   daemonset_compute: true                     # 计算服务守护进程集
-  daemonset_cni_daemon: true                  # CNI 守护进程集
+  daemonset_cni_daemon: false                 # CNI 守护进程集
   deployment_api: true                        # API 服务部署
   deployment_wsproxy: true                    # WebSocket 代理部署
 

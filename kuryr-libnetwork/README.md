@@ -83,7 +83,7 @@ kubectl logs -l application=kuryr -c kuryr-libnetwork
 在计算节点上：
 ```bash
 # 检查插件文件
-ls -la /usr/lib/docker/plugins/kuryr/
+ls -la /run/docker/plugins/kuryr/
 
 # 测试Docker网络
 docker network ls
@@ -94,12 +94,12 @@ docker network create --driver=kuryr test-network
 
 ### 重要配置项
 
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `labels.kuryr.node_selector_key` | 节点选择器键 | `kuryr-libnetwork` |
-| `labels.kuryr.node_selector_value` | 节点选择器值 | `enabled` |
-| `network.kuryr.docker_socket_path` | Docker socket路径 | `/var/run/docker.sock` |
-| `network.kuryr.plugins_dir` | Docker插件目录 | `/usr/lib/docker/plugins/kuryr` |
+| 配置项 | 说明 | 默认值                         |
+|--------|------|-----------------------------|
+| `labels.kuryr.node_selector_key` | 节点选择器键 | `kuryr-libnetwork`          |
+| `labels.kuryr.node_selector_value` | 节点选择器值 | `enabled`                   |
+| `network.kuryr.docker_socket_path` | Docker socket路径 | `/var/run/docker.sock`      |
+| `network.kuryr.plugins_dir` | Docker插件目录 | `/run/docker/plugins/kuryr` |
 
 ### 安全配置
 - Pod以root用户运行（必需）
@@ -116,7 +116,7 @@ docker network create --driver=kuryr test-network
     - 检查OpenStack服务连接
 
 2. **Docker网络插件未注册**
-    - 确认 `/usr/lib/docker/plugins/kuryr/kuryr.spec` 文件存在
+    - 确认 `/run/docker/plugins/kuryr/kuryr.spec` 文件存在
     - 检查Kuryr API是否在端口23750上监听
 
 3. **网络连接失败**

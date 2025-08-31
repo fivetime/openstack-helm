@@ -1,0 +1,209 @@
+# Example override values for different deployment scenarios
+
+# ========================================
+# Scenario 1: Docker with Kuryr networking
+# ========================================
+docker-kuryr:
+  container_runtime:
+    type: docker
+    docker:
+      socket_path: /var/run/docker.sock
+
+  network:
+    driver: kuryr
+    kuryr:
+      enabled: true
+      driver_name: kuryr
+      etcd_endpoints: "http://etcd:2379"
+    zun_cni:
+      enabled: false
+
+  conf:
+    zun:
+      DEFAULT:
+        container_driver: docker
+      docker:
+        api_url: unix:///var/run/docker.sock
+      network:
+        driver: kuryr
+        driver_name: kuryr
+
+# ========================================
+# Scenario 2: Docker with Zun CNI
+# ========================================
+docker-zun-cni:
+  container_runtime:
+    type: docker
+    docker:
+      socket_path: /var/run/docker.sock
+
+  network:
+    driver: zun-cni
+    kuryr:
+      enabled: false
+    zun_cni:
+      enabled: true
+
+  conf:
+    zun:
+      DEFAULT:
+        container_driver: docker
+      docker:
+        api_url: unix:///var/run/docker.sock
+      network:
+        driver: zun-cni
+
+  manifests:
+    daemonset_cni_daemon: true
+
+# ========================================
+# Scenario 3: CRI with Kata Containers
+# ========================================
+cri-kata:
+  container_runtime:
+    type: cri
+    cri:
+      socket_path: /run/containerd/containerd.sock
+      kata:
+        enabled: true
+        runtime_path: /usr/bin/kata-runtime
+
+  capsule_driver:
+    type: cri
+
+  network:
+    driver: zun-cni
+    zun_cni:
+      enabled: true
+
+  conf:
+    zun:
+      DEFAULT:
+        container_driver: cri
+        capsule_driver: cri
+        container_runtime: kata
+      network:
+        driver: zun-cni
+
+  manifests:
+    daemonset_cni_daemon: true
+
+# ========================================
+# Scenario 4: Mixed runtime support
+# ========================================
+mixed-runtime:
+  container_runtime:
+    type: docker
+    docker:
+      socket_path: /var/run/docker.sock
+    cri:
+      socket_path: /run/containerd/containerd.sock
+
+  capsule_driver:
+    type: cri
+
+  network:
+    driver: zun-cni
+    zun_cni:
+      enabled: true
+
+  image_driver:
+    driver_list:
+      - glance
+      - docker
+    default: docker
+
+  volume_driver:
+    driver_list:
+      - cinder
+      - local
+
+  conf:
+    zun:
+      DEFAULT:
+        container_driver: docker
+        capsule_driver: cri
+        image_driver_list: glance,docker
+        default_image_driver: docker
+      docker:
+        api_url: unix:///var/run/docker.sock
+      network:
+        driver: zun-cni
+      volume:
+        driver_list: cinder,local
+
+  manifests:
+    daemonset_cni_daemon: true
+
+# ========================================
+# Scenario 5: Production with HA
+# ========================================
+production-ha:
+  pod:
+    replicas:
+      api: 3
+      wsproxy: 3
+
+  container_runtime:
+    type: docker
+    docker:
+      socket_path: /var/run/docker.sock
+      # TLS configuration for Docker
+      api_insecure: false
+      ca_file: /etc/docker/ca.pem
+      cert_file: /etc/docker/cert.pem
+      key_file: /etc/docker/key.pem
+
+  network:
+    driver: zun-cni
+    zun_cni:
+      enabled: true
+
+  conf:
+    zun:
+      DEFAULT:
+        debug: false
+        container_driver: docker
+        # Resource limits
+        minimum_memory: 128
+        maximum_memory: 32768
+        minimum_cpus: 0.1
+        maximum_cpus: 32.0
+        minimum_disk: 1
+        maximum_disk: 1000
+      api:
+        workers: 4
+      compute:
+        enable_cpu_pinning: true
+        # Resource allocation ratios
+        cpu_allocation_ratio: 16.0
+        ram_allocation_ratio: 1.5
+        disk_allocation_ratio: 1.0
+      network:
+        driver: zun-cni
+      scheduler:
+        driver: filter_scheduler
+        enabled_filters: AvailabilityZoneFilter,ComputeFilter,RuntimeFilter,CPUFilter,RamFilter,DiskFilter
+
+  pod:
+    resources:
+      enabled: true
+      api:
+        requests:
+          memory: "512Mi"
+          cpu: "500m"
+        limits:
+          memory: "2Gi"
+          cpu: "2000m"
+      compute:
+        requests:
+          memory: "512Mi"
+          cpu: "1000m"
+        limits:
+          memory: "4Gi"
+          cpu: "4000m"
+
+  manifests:
+    daemonset_cni_daemon: true
+    pdb_api: true
+    network_policy: true

@@ -10,6 +10,7 @@ stop_at_branch_base: true
 sections:
   - [aodh, aodh Chart]
   - [barbican, barbican Chart]
+  - [blazar, blazar Chart]
   - [ca-issuer, ca-issuer Chart]
   - [calico, calico Chart]
   - [ceilometer, ceilometer Chart]
@@ -77,6 +78,7 @@ sections:
   - [registry, registry Chart]
   - [shaker, shaker Chart]
   - [tempest, tempest Chart]
+  - [watcher, watcher Chart]
   - [features, New Features]
   - [issues, Known Issues]
   - [upgrade, Upgrade Notes]

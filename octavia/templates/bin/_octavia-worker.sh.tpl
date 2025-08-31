@@ -20,6 +20,13 @@ set -ex
 COMMAND="${@:-start}"
 
 function start () {
+  cat > /tmp/dhclient.conf <<EOF
+request subnet-mask,broadcast-address,interface-mtu;
+do-forward-updates false;
+EOF
+
+  dhclient -v o-w0 -cf /tmp/dhclient.conf
+
   exec octavia-worker \
         --config-file /etc/octavia/octavia.conf
 }

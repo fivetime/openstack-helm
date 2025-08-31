@@ -6,6 +6,7 @@ OpenStack charts options
 
     aodh
     barbican
+    blazar
     ceilometer
     cinder
     cyborg
@@ -29,3 +30,4 @@ OpenStack charts options
     skyline
     tacker
     tempest
+    watcher

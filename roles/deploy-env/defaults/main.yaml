@@ -53,9 +53,9 @@ loopback_device: /dev/loop100
 loopback_image: /var/lib/openstack-helm/ceph-loop.img
 loopback_image_size: 12G
 
-coredns_resolver_setup: true
+coredns_resolver_setup: false
 
-metallb_setup: false
+metallb_setup: true
 metallb_version: "0.14.9"
 metallb_pool_cidr: "172.24.128.0/24"
 metallb_openstack_endpoint_cidr: "172.24.128.100/24"
@@ -74,4 +74,16 @@ tunnel_cluster_cidr: "172.24.5.1/24"
 
 dnsmasq_image: "quay.io/airshipit/neutron:2024.2-ubuntu_jammy"
 nginx_image: "quay.io/airshipit/nginx:alpine3.18"
+
+overlay_network_setup: true
+overlay_network_prefix: "10.248.0."
+overlay_network_vxlan_iface: vxlan42
+overlay_network_vxlan_id: 42
+# NOTE: This is to avoid conflicts with the vxlan overlay managed by Openstack
+# which uses 4789 by default. Some alternative implementations used to
+# leverage 8472, so let's use it.
+overlay_network_vxlan_port: 8472
+overlay_network_bridge_name: brvxlan
+overlay_network_bridge_ip: "{{ overlay_network_prefix }}{{ (groups['all'] | sort).index(inventory_hostname) + 1 }}"
+overlay_network_underlay_dev: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['interface'] }}"
 ...

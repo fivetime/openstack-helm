@@ -15,6 +15,11 @@
   include_tasks:
     file: prerequisites.yaml
 
+- name: Overlay network
+  include_tasks:
+    file: overlay.yaml
+  when: overlay_network_setup
+
 - name: Configure /etc/hosts
   template:
     src: files/hosts
@@ -102,5 +107,11 @@
     file: ingress.yaml
   when:
     - ingress_setup
+    - inventory_hostname in (groups['primary'] | default([]))
+
+- name: Include env inventory tasks
+  include_tasks:
+    file: env_inventory.yaml
+  when:
     - inventory_hostname in (groups['primary'] | default([]))
 ...

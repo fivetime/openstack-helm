@@ -181,6 +181,7 @@ storage:
     class_path: volume.beta.kubernetes.io/storage-class
   host:
     host_path: /data/openstack-helm/postgresql
+    archive_host_path: /data/openstack-helm/postgresql-archive
   mount:
     path: /var/lib/postgresql
     subpath: .
@@ -334,6 +335,8 @@ conf:
         lock_expire_after: 7200
         retry_after: 3600
         container_name: throttle-backups-manager
+      primary_user_class: postgresql
+      failover_user_class: postgresql_failover
 
   exporter:
     queries:

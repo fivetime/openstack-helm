@@ -1,0 +1,14 @@
+# Nexus Discovery Python 依赖
+
+# OpenStack SDK
+openstacksdk>=1.0.0,<2.0.0
+
+# 模板引擎
+jinja2>=3.0.0,<4.0.0
+
+# YAML 处理（可选，用于配置文件）
+pyyaml>=6.0,<7.0
+
+# 额外的 OpenStack 客户端（可选）
+python-openstackclient>=6.0.0,<7.0.0
+python-keystoneclient>=5.0.0,<6.0.0

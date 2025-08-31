@@ -1,0 +1,187 @@
+# Zun 与 Nova 集成配置示例
+
+# ========================================
+# 场景 1: 独立 Zun 部署（默认）
+# ========================================
+standalone:
+  conf:
+    zun:
+      compute:
+        # 不与 Nova 共享节点
+        host_shared_with_nova: false
+        # 独立的资源分配
+        cpu_allocation_ratio: 16.0
+        ram_allocation_ratio: 1.5
+        disk_allocation_ratio: 1.0
+      scheduler:
+        # 使用 filter_scheduler
+        driver: filter_scheduler
+        # 基本过滤器集
+        enabled_filters: AvailabilityZoneFilter,ComputeFilter,RuntimeFilter
+
+  labels:
+    compute:
+      # 使用独立的节点标签
+      node_selector_key: openstack-zun-compute
+      node_selector_value: enabled
+
+# ========================================
+# 场景 2: 与 Nova 共享计算节点
+# ========================================
+shared-with-nova:
+  conf:
+    zun:
+      compute:
+        # 与 Nova 共享节点
+        host_shared_with_nova: true
+        # 为系统预留更多资源
+        reserved_host_memory_mb: 4096
+        reserved_host_cpus: 4
+        reserved_host_disk_mb: 10240
+        # 可能需要调整分配比率
+        cpu_allocation_ratio: 8.0
+        ram_allocation_ratio: 1.2
+        disk_allocation_ratio: 1.0
+      scheduler:
+        driver: filter_scheduler
+        # 添加更多资源相关的过滤器
+        enabled_filters: >-
+          AvailabilityZoneFilter,
+          ComputeFilter,
+          RuntimeFilter,
+          CPUFilter,
+          RamFilter,
+          DiskFilter,
+          AggregateInstanceExtraSpecsFilter
+        # 从 Placement 获取的最大结果数
+        max_placement_results: 100
+
+  labels:
+    compute:
+      # 使用与 Nova 相同的节点标签
+      node_selector_key: openstack-compute-node
+      node_selector_value: enabled
+
+  # Placement API 配置
+  endpoints:
+    placement:
+      name: placement
+      hosts:
+        default: placement-api
+      host_fqdn_override:
+        default: null
+      path:
+        default: /
+      scheme:
+        default: http
+      port:
+        api:
+          default: 8778
+
+# ========================================
+# 场景 3: 混合部署（部分节点共享）
+# ========================================
+hybrid:
+  # 某些节点专用于容器，某些节点与 Nova 共享
+  conf:
+    zun:
+      compute:
+        # 默认不共享
+        host_shared_with_nova: false
+        # 但可以通过节点配置覆盖
+
+  # 使用节点标签来区分
+  labels:
+    compute:
+      node_selector_key: openstack-compute-type
+      node_selector_value: container
+    # 额外的标签用于共享节点
+    shared_compute:
+      node_selector_key: openstack-compute-type
+      node_selector_value: shared
+
+# ========================================
+# 场景 4: 高级调度配置
+# ========================================
+advanced-scheduling:
+  conf:
+    zun:
+      compute:
+        host_shared_with_nova: true
+        # 资源预留
+        reserved_host_memory_mb: 4096
+        reserved_host_cpus: 4
+        # 启用 CPU 绑定
+        enable_cpu_pinning: true
+        # 浮动 CPU 集（不参与绑定）
+        floating_cpu_set: "0-3"
+
+      scheduler:
+        driver: filter_scheduler
+        # 完整的过滤器列表
+        enabled_filters: >-
+          AvailabilityZoneFilter,
+          ComputeFilter,
+          ComputeCapabilitiesFilter,
+          ImagePropertiesFilter,
+          RuntimeFilter,
+          CPUFilter,
+          RamFilter,
+          DiskFilter,
+          TrustedFilter,
+          NUMATopologyFilter,
+          AggregateInstanceExtraSpecsFilter,
+          AggregateMultiTenancyIsolation,
+          AggregateImagePropertiesIsolation,
+          MetricsFilter,
+          IoOpsFilter,
+          PciPassthroughFilter
+
+      # PCI 设备配置（如果需要 GPU/SR-IOV）
+      pci:
+        # PCI 设备别名
+        alias:
+          - name: "GPU"
+            product_id: "10de:1db6"  # NVIDIA V100
+            vendor_id: "10de"
+            device_type: "PCI"
+          - name: "NIC-SRIOV"
+            product_id: "8086:154d"
+            vendor_id: "8086"
+            device_type: "VF"
+        # PCI 白名单
+        passthrough_whitelist:
+          - vendor_id: "10de"
+            product_id: "1db6"
+          - vendor_id: "8086"
+            product_id: "154d"
+            physical_network: "physnet1"
+
+# ========================================
+# 场景 5: 资源配额和 QoS
+# ========================================
+quota-qos:
+  conf:
+    zun:
+      # 配额设置
+      quota:
+        # 每个项目的容器数量限制
+        containers: 100
+        # 内存限制 (MB)
+        memory: 102400
+        # CPU 限制
+        cpu: 100
+        # 磁盘限制 (GB)
+        disk: 1000
+
+      compute:
+        host_shared_with_nova: true
+        # QoS 相关设置
+        # 容器内存 swap 限制
+        default_memory_swap: 2048
+        # CPU 份额
+        default_cpu_shares: 1024
+        # CPU 周期
+        default_cpu_period: 100000
+        # CPU 配额
+        default_cpu_quota: 50000

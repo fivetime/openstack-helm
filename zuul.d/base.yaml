@@ -24,6 +24,10 @@
       - playbooks/inject-keys.yaml
 
 - job:
+    name: openstack-helm-pre-commit
+    parent: tox-linters
+
+- job:
     name: openstack-helm-bandit
     roles:
       - zuul: openstack/openstack-helm
@@ -73,6 +77,7 @@
       - playbooks/deploy-env.yaml
       - playbooks/run-scripts.yaml
     vars:
+      overlay_network_setup: true
       extra_volume:
         size: 80G
         type: Linux
@@ -97,8 +102,9 @@
       cilium_version: "1.17.4"
       flannel_setup: false
       flannel_version: v0.26.7
-      metallb_setup: false
+      metallb_setup: true
       metallb_version: "0.14.9"
+      coredns_resolver_setup: false
       ingress_setup: true
       helm_version: "v3.18.1"
       crictl_version: "v1.33.0"
@@ -116,7 +122,6 @@
       - playbooks/deploy-env-kubespray.yaml
       - playbooks/run-scripts.yaml
     vars:
-      metallb_setup: true
       kube_version_kubespray: "v1.29.5"
 
 - job:
@@ -125,11 +130,12 @@
     abstract: true
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - export VOLUME_HELM_ARGS="--set volume.enabled=false"; ./tools/deployment/component/common/rabbitmq.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/keystone/keystone.sh
         - ./tools/deployment/component/heat/heat.sh
@@ -150,11 +156,12 @@
     abstract: true
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - export VOLUME_HELM_ARGS="--set volume.enabled=false"; ./tools/deployment/component/common/rabbitmq.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/keystone/keystone.sh
         - ./tools/deployment/component/heat/heat.sh
@@ -176,13 +183,14 @@
     abstract: true
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - ./tools/deployment/ceph/ceph-rook.sh
         - ./tools/deployment/ceph/ceph-adapter-rook.sh
         - export VOLUME_HELM_ARGS=" "; ./tools/deployment/component/common/rabbitmq.sh
-        - export VOLUME_HELM_ARGS=" "; ./tools/deployment/component/common/mariadb.sh
+        - export VOLUME_HELM_ARGS=" "; ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/keystone/keystone.sh
         - ./tools/deployment/component/cinder/cinder.sh
@@ -201,12 +209,13 @@
     vars:
       osh_helm_repo: openstack-helm
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/prepare-helm-repos-local.sh
         - ./tools/deployment/common/setup-client.sh
         - ./tools/deployment/component/common/rabbitmq.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/keystone/keystone.sh
         - ./tools/deployment/component/heat/heat.sh
@@ -229,12 +238,13 @@
       osh_helm_repo: openstack-helm
       download_overrides: "-d"
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/prepare-helm-repos-public.sh
         - ./tools/deployment/common/setup-client.sh
         - ./tools/deployment/component/common/rabbitmq.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/keystone/keystone.sh
         - ./tools/deployment/component/heat/heat.sh
@@ -255,11 +265,12 @@
     abstract: true
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - ./tools/deployment/component/common/rabbitmq.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/keystone/keystone.sh
         - ./tools/deployment/component/heat/heat.sh
@@ -284,11 +295,12 @@
       - ^zuul\.d/.*$
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - ./tools/deployment/common/cert-manager.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/common/rabbitmq.sh
         - ./tools/deployment/component/common/ldap.sh
@@ -301,15 +313,16 @@
     files:
       - ^cinder/.*$
       - ^zuul\.d/.*$
-      - ^tools/deployment/component/cinder/.
+      - ^tools/deployment/component/cinder/.*$
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - ./tools/deployment/ceph/ceph.sh
         - ./tools/deployment/ceph/ceph-ns-activate.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/common/rabbitmq.sh
         - ./tools/deployment/component/keystone/keystone.sh
@@ -324,15 +337,17 @@
     files:
       - ^cinder/.*$
       - ^zuul\.d/.*$
-      - ^tools/deployment/component/cinder/.
+      - ^tools/deployment/component/cinder/.*$
+      - ^tools/deployment/ceph/.*$
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - ./tools/deployment/ceph/ceph-rook.sh
         - ./tools/deployment/ceph/ceph-adapter-rook.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/common/rabbitmq.sh
         - ./tools/deployment/component/keystone/keystone.sh
@@ -362,6 +377,7 @@
     vars:
       run_helm_tests: "yes"
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
@@ -382,10 +398,11 @@
       - ^tools/deployment/component/horizon/.*$
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/common/rabbitmq.sh
         - ./tools/deployment/component/keystone/keystone.sh
@@ -401,13 +418,14 @@
     voting: false
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - ./tools/deployment/common/cert-manager.sh
         - ./tools/deployment/ceph/ceph-rook.sh
         - ./tools/deployment/ceph/ceph-adapter-rook.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/common/rabbitmq.sh
         - ./tools/deployment/component/keystone/keystone.sh
@@ -432,11 +450,12 @@
     timeout: 7200
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - ./tools/deployment/component/common/rabbitmq.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/keystone/keystone.sh
         - ./tools/deployment/component/heat/heat.sh
@@ -451,15 +470,16 @@
 
 - job:
     name: openstack-helm-skyline
-    parent: openstack-helm-compute-kit
+    parent: openstack-helm-deploy
     timeout: 10800
     vars:
       gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/setup-client.sh
         - export VOLUME_HELM_ARGS="--set volume.enabled=false"; ./tools/deployment/component/common/rabbitmq.sh
-        - ./tools/deployment/component/common/mariadb.sh
+        - ./tools/deployment/db/mariadb.sh
         - ./tools/deployment/component/common/memcached.sh
         - ./tools/deployment/component/keystone/keystone.sh
         - ./tools/deployment/component/heat/heat.sh
@@ -469,4 +489,72 @@
         - ./tools/deployment/component/compute-kit/compute-kit.sh
         - ./tools/deployment/component/skyline/skyline.sh
         - ./tools/gate/selenium/skyline-selenium.sh
+
+- job:
+    name: openstack-helm-octavia
+    parent: openstack-helm-deploy
+    timeout: 10800
+    vars:
+      gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
+        - ./tools/deployment/common/prepare-k8s.sh
+        - ./tools/deployment/common/prepare-charts.sh
+        - ./tools/deployment/common/setup-client.sh
+        - export VOLUME_HELM_ARGS="--set volume.enabled=false"; ./tools/deployment/component/common/rabbitmq.sh
+        - ./tools/deployment/db/mariadb.sh
+        - ./tools/deployment/component/common/memcached.sh
+        - ./tools/deployment/component/keystone/keystone.sh
+        - ./tools/deployment/component/heat/heat.sh
+        - export GLANCE_BACKEND=local; ./tools/deployment/component/glance/glance.sh
+        - ./tools/deployment/component/compute-kit/openvswitch.sh
+        - ./tools/deployment/component/compute-kit/libvirt.sh
+        - ./tools/deployment/component/compute-kit/compute-kit.sh
+        - ./tools/deployment/component/barbican/barbican.sh
+        - ./tools/deployment/component/octavia/octavia_resources.sh
+        - ./tools/deployment/component/octavia/octavia_certs.sh
+        - ./tools/deployment/component/octavia/octavia.sh
+        - ./tools/deployment/component/octavia/octavia_test.sh
+
+- job:
+    name: openstack-helm-watcher
+    parent: openstack-helm-deploy
+    timeout: 10800
+    vars:
+      gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
+        - ./tools/deployment/common/prepare-k8s.sh
+        - ./tools/deployment/common/prepare-charts.sh
+        - ./tools/deployment/common/setup-client.sh
+        - export VOLUME_HELM_ARGS="--set volume.enabled=false"; ./tools/deployment/component/common/rabbitmq.sh
+        - ./tools/deployment/db/mariadb.sh
+        - ./tools/deployment/component/common/memcached.sh
+        - ./tools/deployment/component/keystone/keystone.sh
+        - ./tools/deployment/component/heat/heat.sh
+        - export GLANCE_BACKEND=local; ./tools/deployment/component/glance/glance.sh
+        - ./tools/deployment/component/compute-kit/openvswitch.sh
+        - ./tools/deployment/component/compute-kit/libvirt.sh
+        - ./tools/deployment/component/compute-kit/compute-kit.sh
+        - ./tools/deployment/component/watcher/watcher.sh
+
+- job:
+    name: openstack-helm-blazar
+    parent: openstack-helm-deploy
+    timeout: 7200
+    vars:
+      gate_scripts:
+        - ./tools/deployment/common/prepare-bashrc.sh
+        - ./tools/deployment/common/prepare-k8s.sh
+        - ./tools/deployment/common/prepare-charts.sh
+        - ./tools/deployment/common/setup-client.sh
+        - ./tools/deployment/component/common/rabbitmq.sh
+        - ./tools/deployment/db/mariadb.sh
+        - ./tools/deployment/component/common/memcached.sh
+        - ./tools/deployment/component/keystone/keystone.sh
+        - export GLANCE_BACKEND=local; ./tools/deployment/component/glance/glance.sh
+        - ./tools/deployment/component/compute-kit/openvswitch.sh
+        - ./tools/deployment/component/compute-kit/libvirt.sh
+        - ./tools/deployment/component/compute-kit/compute-kit.sh
+        - ./tools/deployment/component/blazar/blazar.sh
+        - ./tools/deployment/component/blazar/blazar_smoke_test.sh
+        - ./tools/deployment/common/run-helm-tests.sh blazar
 ...

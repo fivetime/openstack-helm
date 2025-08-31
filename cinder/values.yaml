@@ -835,6 +835,7 @@ conf:
         app_name: cinder-volume
   cinder:
     DEFAULT:
+      state_path: /var/lib/cinder
       volume_usage_audit_period: hour
       resource_query_filters_file: /etc/cinder/resource_filters.json
       log_config_append: /etc/cinder/logging.conf
@@ -1436,7 +1437,7 @@ endpoints:
       #     crt: null
       #     key: null
     path:
-      default: '/v3/%(tenant_id)s'
+      default: '/v3'
       healthcheck: /healthcheck
     scheme:
       default: 'http'

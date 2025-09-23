@@ -472,7 +472,42 @@ To deploy the Blazar service run the following:
 .. code-block:: bash
 
     helm upgrade --install blazar openstack-helm/blazar \
-      --namespace=openstack
-      $(helm osh get-values-overrides -p ${OVERRIDES_DIR} -c blazar ${FEATURES})
+        --namespace=openstack \
+        $(helm osh get-values-overrides -p ${OVERRIDES_DIR} -c blazar ${FEATURES})
+
+    helm osh wait-for-pods openstack
+
+Freezer
+~~~~~~~
+
+Freezer is a disaster recovery and backup-as-a-service component for OpenStack.
+It provides a way to back up various resources, such as virtual machine instances,
+databases, and file systems.
+
+It allows users to schedule backups, restore data, and manage the lifecycle of their
+backups to ensure data protection and business continuity within an OpenStack cloud.
+
+To deploy the OpenStack Freezer, use the following:
+
+.. code-block:: bash
+
+    helm upgrade --install freezer openstack-helm/freezer \
+        --namespace=openstack \
+        $(helm osh get-values-overrides -p ${OVERRIDES_DIR} -c freezer ${FEATURES})
+
+Zaqar
+~~~~~
+
+Zaqar is the messaging service for OpenStack. It provides a multi-tenant, RESTful and
+WebSocket-based message queue service that allows applications and services to communicate
+asynchronously.
+
+To deploy the Zaqar service use the following:
+
+.. code-block:: bash
+
+    helm upgrade --install zaqar openstack-helm/zaqar \
+        --namespace=openstack \
+        $(helm osh get-values-overrides -p ${OVERRIDES_DIR} -c zaqar ${FEATURES})
 
     helm osh wait-for-pods openstack

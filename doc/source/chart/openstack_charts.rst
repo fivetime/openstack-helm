@@ -10,7 +10,9 @@ OpenStack charts options
     ceilometer
     cinder
     cyborg
+    cloudkitty
     designate
+    freezer
     glance
     heat
     horizon
@@ -31,3 +33,4 @@ OpenStack charts options
     tacker
     tempest
     watcher
+    zaqar

@@ -36,8 +36,8 @@ function get_ip_prefix_from_interface {
   echo ${prefix}
 }
 
-# Migrate IP addresses from a network interface to a bridge
-# Both IPv4 and IPv6 addresses are migrated properly
+# Migrate IP addresses, routes and gateway from a network interface to a bridge
+# Both IPv4 and IPv6 addresses, routes and gateway are migrated properly
 function migrate_ip_from_nic {
   src_nic=$1
   bridge_name=$2
@@ -100,6 +100,52 @@ function migrate_ip_from_nic {
     fi
   done < <(echo "$ipv6_data")
 
+  # Store IPv4 routes from source interface (excluding default routes)
+  ipv4_routes=()
+  ipv4_route_data=$(ip -4 route show dev ${src_nic} 2>/dev/null | grep -v "^default" | grep -v "proto kernel")
+
+  while read -r line; do
+    if [[ -n "$line" ]]; then
+      # Clean up the route line, removing the dev parameter
+      clean_route=$(echo "$line" | sed "s/dev ${src_nic}//g" | tr -s ' ' | sed 's/^ //;s/ $//')
+      if [[ -n "$clean_route" ]]; then
+        ipv4_routes+=("$clean_route")
+      fi
+    fi
+  done < <(echo "$ipv4_route_data")
+
+  # Store IPv6 routes from source interface (excluding default routes and link-local)
+  ipv6_routes=()
+  ipv6_route_data=$(ip -6 route show dev ${src_nic} 2>/dev/null | grep -v "^default" | grep -v "proto kernel" | grep -v "^fe80::")
+
+  while read -r line; do
+    if [[ -n "$line" ]]; then
+      # Clean up the route line, removing the dev parameter
+      clean_route=$(echo "$line" | sed "s/dev ${src_nic}//g" | tr -s ' ' | sed 's/^ //;s/ $//')
+      if [[ -n "$clean_route" ]]; then
+        ipv6_routes+=("$clean_route")
+      fi
+    fi
+  done < <(echo "$ipv6_route_data")
+
+  # Store default gateways
+  ipv4_default_gw=""
+  ipv6_default_gw=""
+
+  # Check for IPv4 default gateway
+  ipv4_default=$(ip -4 route show default dev ${src_nic} 2>/dev/null | head -n1)
+  if [[ -n "$ipv4_default" ]]; then
+    ipv4_default_gw=$(echo "$ipv4_default" | awk '{print $3}')
+    echo "Found IPv4 default gateway: ${ipv4_default_gw}"
+  fi
+
+  # Check for IPv6 default gateway
+  ipv6_default=$(ip -6 route show default dev ${src_nic} 2>/dev/null | head -n1)
+  if [[ -n "$ipv6_default" ]]; then
+    ipv6_default_gw=$(echo "$ipv6_default" | awk '{print $3}')
+    echo "Found IPv6 default gateway: ${ipv6_default_gw}"
+  fi
+
   # Check if we have any IPs to migrate
   if [[ ${#ipv4_addresses[@]} -eq 0 ]] && [[ ${#ipv6_addresses[@]} -eq 0 ]]; then
     echo "Interface ${src_nic} has no global IP addresses to migrate. Leaving as is."
@@ -108,6 +154,7 @@ function migrate_ip_from_nic {
   fi
 
   echo "Migrating ${#ipv4_addresses[@]} IPv4 and ${#ipv6_addresses[@]} IPv6 addresses from ${src_nic} to ${bridge_name}..."
+  echo "Also migrating ${#ipv4_routes[@]} IPv4 routes and ${#ipv6_routes[@]} IPv6 routes..."
 
   # Migration flag to track success/failure
   migration_failed=false
@@ -138,23 +185,94 @@ function migrate_ip_from_nic {
     done
   fi
 
-  # If all addresses were successfully added, flush source interface
+  # If address migration was successful, add routes
   if [[ "$migration_failed" = false ]]; then
-    echo "Successfully added all IP addresses to ${bridge_name}. Flushing source interface ${src_nic}..."
+    # IMPORTANT: Delete default routes from source interface FIRST
+    # This must be done before adding new default routes to avoid conflicts
+    if [[ -n "$ipv4_default_gw" ]]; then
+      echo "Removing IPv4 default route from ${src_nic}..."
+      ip -4 route del default dev ${src_nic} 2>/dev/null || true
+    fi
+
+    if [[ -n "$ipv6_default_gw" ]]; then
+      echo "Removing IPv6 default route from ${src_nic}..."
+      ip -6 route del default dev ${src_nic} 2>/dev/null || true
+    fi
+
+    # Add IPv4 routes
+    for route_config in "${ipv4_routes[@]}"; do
+      echo "Adding IPv4 route: $route_config dev ${bridge_name}"
+      if ! ip -4 route add $route_config dev ${bridge_name}; then
+        echo "Warning: Failed to add IPv4 route. It may already exist."
+      fi
+    done
+
+    # Add IPv6 routes
+    for route_config in "${ipv6_routes[@]}"; do
+      echo "Adding IPv6 route: $route_config dev ${bridge_name}"
+      if ! ip -6 route add $route_config dev ${bridge_name}; then
+        echo "Warning: Failed to add IPv6 route. It may already exist."
+      fi
+    done
+
+    # Now add default gateways to bridge (after removing from source)
+    if [[ -n "$ipv4_default_gw" ]]; then
+      echo "Adding IPv4 default gateway: ${ipv4_default_gw} via ${bridge_name}"
+      if ! ip -4 route add default via ${ipv4_default_gw} dev ${bridge_name}; then
+        # If still fails, might be from another interface
+        echo "Warning: Failed to add IPv4 default gateway. Checking for conflicts..."
+        existing_default=$(ip -4 route show default | head -n1)
+        if [[ -n "$existing_default" ]]; then
+          echo "Existing default route found: $existing_default"
+          echo "You may need to manually remove it and re-add via ${bridge_name}"
+        fi
+      fi
+    fi
+
+    if [[ -n "$ipv6_default_gw" ]]; then
+      echo "Adding IPv6 default gateway: ${ipv6_default_gw} via ${bridge_name}"
+      if ! ip -6 route add default via ${ipv6_default_gw} dev ${bridge_name}; then
+        # If still fails, might be from another interface
+        echo "Warning: Failed to add IPv6 default gateway. Checking for conflicts..."
+        existing_default=$(ip -6 route show default | head -n1)
+        if [[ -n "$existing_default" ]]; then
+          echo "Existing IPv6 default route found: $existing_default"
+          echo "You may need to manually remove it and re-add via ${bridge_name}"
+        fi
+      fi
+    fi
+  fi
+
+  # If all configurations were successfully added, flush source interface
+  if [[ "$migration_failed" = false ]]; then
+    echo "Successfully added all IP addresses and routes to ${bridge_name}. Flushing source interface ${src_nic}..."
 
     # Give system a moment to process new config
     sleep 1
 
-    # Flush source interface
+    # Note: Default routes already removed above before adding to bridge
+    # Now just flush addresses from source interface
     ip addr flush dev ${src_nic}
 
     # Verify system created routes
-    echo "Verifying system created routes..."
+    echo "Verifying routes for ${bridge_name}..."
     if ! ip route | grep -q "${bridge_name}"; then
       echo "Warning: No routes found for ${bridge_name}. This might cause connectivity issues."
     else
-      echo "Routes for ${bridge_name} successfully created by system."
+      echo "Routes for ${bridge_name} successfully configured."
     fi
+
+    # Display final configuration summary
+    echo "Migration completed successfully!"
+    echo ""
+    echo "Bridge ${bridge_name} configuration:"
+    ip addr show dev ${bridge_name}
+    echo ""
+    echo "IPv4 Routes:"
+    ip -4 route show dev ${bridge_name}
+    echo ""
+    echo "IPv6 Routes:"
+    ip -6 route show dev ${bridge_name}
   else
     # Migration failed, remove any addresses added to bridge
     echo "IP migration failed. Cleaning up bridge ${bridge_name}..."
@@ -169,6 +287,24 @@ function migrate_ip_from_nic {
       ip_prefix=$(echo "$addr_config" | awk '{print $1}')
       ip addr del $ip_prefix dev ${bridge_name} 2>/dev/null || true
     done
+
+    # Clean up routes
+    for route_config in "${ipv4_routes[@]}"; do
+      ip -4 route del $route_config dev ${bridge_name} 2>/dev/null || true
+    done
+
+    for route_config in "${ipv6_routes[@]}"; do
+      ip -6 route del $route_config dev ${bridge_name} 2>/dev/null || true
+    done
+
+    # Clean up default gateways
+    if [[ -n "$ipv4_default_gw" ]]; then
+      ip -4 route del default via ${ipv4_default_gw} dev ${bridge_name} 2>/dev/null || true
+    fi
+
+    if [[ -n "$ipv6_default_gw" ]]; then
+      ip -6 route del default via ${ipv6_default_gw} dev ${bridge_name} 2>/dev/null || true
+    fi
 
     echo "Original interface ${src_nic} configuration preserved."
     exit 1

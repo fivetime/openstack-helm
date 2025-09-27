@@ -22,8 +22,36 @@ OVS_SCHEMA=/usr/share/openvswitch/vswitch.ovsschema
 OVS_PID=/run/openvswitch/ovsdb-server.pid
 OVS_SOCKET=/run/openvswitch/db.sock
 
+function cleanup_stale_files () {
+  # Check and clean up stale PID file
+  if [[ -f "${OVS_PID}" ]]; then
+    OLD_PID=$(cat "${OVS_PID}" 2>/dev/null || echo "")
+    if [[ -n "${OLD_PID}" ]]; then
+      # Check if the process actually exists
+      if ! ps -p "${OLD_PID}" > /dev/null 2>&1; then
+        echo "Removing stale PID file for non-existent process ${OLD_PID}"
+        rm -f "${OVS_PID}"
+        # Also clean up the corresponding control socket
+        rm -f "/run/openvswitch/ovsdb-server.${OLD_PID}.ctl"
+      else
+        echo "Process ${OLD_PID} is still running, not removing PID file"
+        # Exit to prevent multiple instances
+        exit 1
+      fi
+    else
+      # PID file is empty, remove it
+      echo "Removing empty PID file"
+      rm -f "${OVS_PID}"
+    fi
+  fi
+}
+
 function start () {
   mkdir -p "$(dirname ${OVS_DB})"
+
+  # Clean up stale files before starting
+  cleanup_stale_files
+
   if [[ ! -e "${OVS_DB}" ]]; then
     ovsdb-tool create "${OVS_DB}"
   fi

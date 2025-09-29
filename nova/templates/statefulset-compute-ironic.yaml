@@ -54,8 +54,9 @@ spec:
       nodeSelector:
         {{ .Values.labels.agent.compute_ironic.node_selector_key }}: {{ .Values.labels.agent.compute_ironic.node_selector_value }}
 # -------------- Add by Simon Start --------------
-{{ if $envAll.Values.pod.tolerations.compute_ironic.enabled }}
-{{ tuple $envAll "compute_ironic" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ if .Values.pod.tolerations.compute_ironic.enabled }}
+      tolerations:
+{{ toYaml .Values.pod.tolerations.compute_ironic.tolerations | indent 8 }}
 {{ end }}
 # -------------- Add by Simon End --------------
       hostPID: true

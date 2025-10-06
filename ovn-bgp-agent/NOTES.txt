@@ -1,0 +1,15 @@
+{{- if .Values.manifests.daemonset_ovn_bgp_agent }}
+OVN BGP Agent has been deployed.
+
+To verify the deployment:
+
+  kubectl --namespace {{ .Release.Namespace }} get pods -l "application=ovn-bgp-agent"
+
+To check BGP status:
+
+  kubectl --namespace {{ .Release.Namespace }} exec daemonset/ovn-bgp-agent -c frr -- \
+    vtysh -c "show bgp summary"
+
+For more information, visit:
+  https://docs.openstack.org/ovn-bgp-agent/latest/
+{{- end }}

@@ -1,0 +1,11 @@
+{{- if .Values.manifests.poddisruptionbudget }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ovn-bgp-agent
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+{{ tuple . "ovn-bgp-agent" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{- end }}

@@ -1,0 +1,249 @@
+---
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+release_group: null
+
+labels:
+  agent:
+    node_selector_key: openstack-network-node
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+images:
+  tags:
+    ovn_bgp_agent: ghcr.io/fivetime/openstackhelm/ovn-bgp-agent:master-ubuntu_noble
+    frr: quay.io/frrouting/frr:10.4.1
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+    image_repo_sync: docker.io/docker:28.1.1
+  pull_policy: IfNotPresent
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+pod:
+  security_context:
+    ovn_bgp_agent:
+      pod:
+        runAsUser: 42494
+        fsGroup: 42424
+      container:
+        ovn_bgp_agent:
+          runAsUser: 42494
+          privileged: true
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+              - NET_ADMIN
+              - SYS_ADMIN
+              - NET_RAW
+        frr:
+          privileged: true
+          readOnlyRootFilesystem: false
+          capabilities:
+            add:
+              - NET_ADMIN
+              - NET_RAW
+  tolerations:
+    ovn_bgp_agent:
+      enabled: false
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+  mounts:
+    ovn_bgp_agent:
+      ovn_bgp_agent:
+        volumeMounts: []
+        volumes: []
+      frr:
+        volumeMounts: []
+        volumes: []
+  lifecycle:
+    upgrades:
+      daemonsets:
+        pod_replacement_strategy: RollingUpdate
+        ovn_bgp_agent:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+    termination_grace_period:
+      ovn_bgp_agent:
+        timeout: 30
+  resources:
+    enabled: false
+    ovn_bgp_agent:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    frr:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "1000m"
+    jobs:
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - ovn-bgp-agent-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    ovn_bgp_agent:
+      services:
+        - endpoint: internal
+          service: ovn_nb
+        - endpoint: internal
+          service: ovn_sb
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+
+# OVN BGP Agent configuration
+conf:
+  ovn_bgp_agent:
+    DEFAULT:
+      debug: false
+      log_dir: /var/log/ovn-bgp-agent
+      log_file: ovn-bgp-agent.log
+      # Options: ovn_bgp_driver, nb_ovn_bgp_driver, ovn_evpn_driver, ovn_stretched_l2_bgp_driver
+      driver: nb_ovn_bgp_driver
+      # OVN connection
+      ovn_nb_connection: tcp:ovn-ovsdb-nb.openstack.svc.cluster.local:6641
+      ovn_sb_connection: tcp:ovn-ovsdb-sb.openstack.svc.cluster.local:6642
+      # Expose options
+      expose_tenant_networks: false
+      expose_ipv6_gua_tenant_networks: false
+      address_scopes: ""
+      # Root helper
+      root_helper: sudo ovn-bgp-agent-rootwrap /etc/ovn-bgp-agent/rootwrap.conf
+      root_helper_daemon: ""
+
+  rootwrap:
+    filters: |
+      [Filters]
+      # ip commands
+      ip: CommandFilter, ip, root
+      
+      # iptables commands
+      iptables: CommandFilter, iptables, root
+      iptables-save: CommandFilter, iptables-save, root
+      iptables-restore: CommandFilter, iptables-restore, root
+      
+      # OVS commands
+      ovn-nbctl: CommandFilter, ovn-nbctl, root
+      ovn-sbctl: CommandFilter, ovn-sbctl, root
+      ovs-vsctl: CommandFilter, ovs-vsctl, root
+      ovs-ofctl: CommandFilter, ovs-ofctl, root
+      ovs-appctl: CommandFilter, ovs-appctl, root
+
+# BGP configuration
+bgp:
+  enabled: true
+
+  # IPv4 Unicast BGP Peering (to Leaf Switch)
+  # peer_ip options:
+  #   "" or "detection" - Auto-detect (route table -> ARP -> first IP)
+  #   "first"            - Use first IP in subnet (network + 1)
+  #   "last"             - Use last IP in subnet (broadcast - 1)
+  #   "10.0.192.1"       - Fixed IP address
+  peer_ip: ""
+
+  # Peer ASN (leave empty to auto-generate based on peer_ip)
+  peer_asn: ""
+
+  # EVPN Configuration
+  evpn:
+    enabled: false
+    # Route Reflector IP (usually Spine loopback)
+    rr_ip: ""
+    # Route Reflector ASN (usually 16-bit private ASN 64512-65534)
+    rr_asn: ""
+
+# Networking
+network:
+  # Host paths
+  host:
+    openvswitch_db: /run/openvswitch
+    ovn: /run/ovn
+
+# Manifests control
+manifests:
+  configmap_bin: true
+  configmap_etc: true
+  daemonset_ovn_bgp_agent: true
+  job_image_repo_sync: true
+  serviceaccount: true
+  poddisruptionbudget: true
+
+# Endpoints
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  ovn_nb:
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-nb
+    host_fqdn_override:
+      default: null
+    port:
+      nb:
+        default: 6641
+    scheme:
+      default: tcp
+  ovn_sb:
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-sb
+    host_fqdn_override:
+      default: null
+    port:
+      sb:
+        default: 6642
+    scheme:
+      default: tcp

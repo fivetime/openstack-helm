@@ -1,0 +1,229 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.daemonset_ovn_bgp_agent }}
+{{- $envAll := . }}
+
+{{- $serviceAccountName := "ovn-bgp-agent" }}
+{{ tuple $envAll "ovn_bgp_agent" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ovn-bgp-agent
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "ovn-bgp-agent" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll "ovn-bgp-agent" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "ovn-bgp-agent" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ dict "envAll" $envAll "podName" "ovn-bgp-agent" "containerNames" (list "ovn-bgp-agent" "frr" "init") | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "agent" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.agent.node_selector_key }}: {{ .Values.labels.agent.node_selector_value | quote }}
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      hostPID: true
+{{- if .Values.pod.tolerations.ovn_bgp_agent.enabled }}
+{{ tuple $envAll "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{- end }}
+      initContainers:
+        - name: init-frr-config
+      {{ tuple $envAll "ovn_bgp_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
+      {{ dict "envAll" $envAll "application" "agent" "container" "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/frr-init.sh
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: ovn-bgp-agent-bin
+              mountPath: /tmp/frr-init.sh
+              subPath: frr-init.sh
+              readOnly: true
+            - name: ovn-bgp-agent-bin
+              mountPath: /tmp/frr-config-gen.sh
+              subPath: frr-config-gen.sh
+              readOnly: true
+            - name: frr-config
+              mountPath: /etc/frr
+            - name: pod-shared
+              mountPath: /tmp/pod-shared
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+      containers:
+        - name: frr
+{{ tuple $envAll "frr" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.frr | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "agent" "container" "frr" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /usr/lib/frr/docker-start
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: frr-config
+              mountPath: /etc/frr
+            - name: frr-run
+              mountPath: /run/frr
+{{- if .Values.pod.mounts.ovn_bgp_agent.frr.volumeMounts }}
+{{ toYaml .Values.pod.mounts.ovn_bgp_agent.frr.volumeMounts | indent 12 }}
+{{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - /usr/lib/frr/watchfrr.sh
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - vtysh -c 'show running-config' > /dev/null
+            initialDelaySeconds: 15
+            periodSeconds: 10
+        - name: ovn-bgp-agent
+{{ tuple $envAll "ovn_bgp_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.ovn_bgp_agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "agent" "container" "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          env:
+            - name: OVN_NB_CONNECTION
+              value: "{{ tuple "ovn_nb" "internal" "nb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" }}"
+            - name: OVN_SB_CONNECTION
+              value: "{{ tuple "ovn_sb" "internal" "sb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" }}"
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          command:
+            - /tmp/ovn-bgp-agent.sh
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: ovn-bgp-agent-bin
+              mountPath: /tmp/ovn-bgp-agent.sh
+              subPath: ovn-bgp-agent.sh
+              readOnly: true
+            - name: ovn-bgp-agent-etc
+              mountPath: /etc/ovn-bgp-agent/ovn-bgp-agent.conf
+              subPath: ovn-bgp-agent.conf
+              readOnly: true
+            - name: ovn-bgp-agent-etc
+              mountPath: /etc/ovn-bgp-agent/rootwrap.conf
+              subPath: rootwrap.conf
+              readOnly: true
+            - name: ovn-bgp-agent-rootwrap-filters
+              mountPath: /etc/ovn-bgp-agent/rootwrap.d
+              readOnly: true
+            - name: run-openvswitch
+              mountPath: /run/openvswitch
+            - name: run-ovn
+              mountPath: /run/ovn
+            - name: frr-run
+              mountPath: /run/frr
+            - name: pod-shared
+              mountPath: /tmp/pod-shared
+{{- if .Values.pod.mounts.ovn_bgp_agent.ovn_bgp_agent.volumeMounts }}
+{{ toYaml .Values.pod.mounts.ovn_bgp_agent.ovn_bgp_agent.volumeMounts | indent 12 }}
+{{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pgrep -f 'ovn-bgp-agent' > /dev/null"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "test -f /tmp/pod-shared/ready"
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: pod-shared
+          emptyDir: {}
+        - name: ovn-bgp-agent-bin
+          configMap:
+            name: ovn-bgp-agent-bin
+            defaultMode: 0555
+        - name: ovn-bgp-agent-etc
+          configMap:
+            name: ovn-bgp-agent-etc
+            defaultMode: 0444
+        - name: ovn-bgp-agent-rootwrap-filters
+          configMap:
+            name: ovn-bgp-agent-etc
+            defaultMode: 0444
+            items:
+              - key: filters.conf
+                path: filters.conf
+        - name: frr-config
+          emptyDir: {}
+        - name: frr-run
+          emptyDir: {}
+        - name: run-openvswitch
+          hostPath:
+            path: {{ .Values.network.host.openvswitch_db }}
+            type: Directory
+        - name: run-ovn
+          hostPath:
+            path: {{ .Values.network.host.ovn }}
+            type: DirectoryOrCreate
+{{- if .Values.pod.mounts.ovn_bgp_agent.ovn_bgp_agent.volumes }}
+{{ toYaml .Values.pod.mounts.ovn_bgp_agent.ovn_bgp_agent.volumes | indent 8 }}
+{{- end }}
+{{- if .Values.pod.mounts.ovn_bgp_agent.frr.volumes }}
+{{ toYaml .Values.pod.mounts.ovn_bgp_agent.frr.volumes | indent 8 }}
+{{- end }}
+{{- end }}

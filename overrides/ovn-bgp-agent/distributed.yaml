@@ -1,0 +1,51 @@
+# values_overrides/distributed.yaml
+---
+# Example for distributed deployment on compute nodes
+
+bgp:
+  enabled: true
+  peer_ip: ""
+  peer_asn: ""
+
+conf:
+  ovn_bgp_agent:
+    DEFAULT:
+      driver: nb_ovn_bgp_driver
+      # Provider networks and FIPs only
+      expose_tenant_networks: false
+
+# Deploy on all compute nodes
+labels:
+  agent:
+    node_selector_key: openstack-compute-node
+    node_selector_value: enabled
+
+# Tolerate master/control-plane nodes if needed
+pod:
+  tolerations:
+    ovn_bgp_agent:
+      enabled: true
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+
+  resources:
+    enabled: true
+    ovn_bgp_agent:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+    frr:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"

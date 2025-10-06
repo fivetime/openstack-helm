@@ -1,0 +1,57 @@
+---
+# Example values override for OVN BGP Agent deployment
+# Usage: helm install ovn-bgp-agent ./ovn-bgp-agent -f values_overrides/example.yaml
+
+# Basic BGP configuration with auto-discovery
+bgp:
+  enabled: true
+  # Auto-detect peer IP from br-ex network
+  peer_ip: ""
+  # Auto-generate peer ASN from peer IP
+  peer_asn: ""
+
+# OVN BGP Agent configuration
+conf:
+  ovn_bgp_agent:
+    DEFAULT:
+      # Enable debug logging
+      debug: true
+      # Use NB driver (recommended for stability)
+      driver: nb_ovn_bgp_driver
+      # Enable tenant network exposure
+      expose_tenant_networks: true
+      expose_ipv6_gua_tenant_networks: false
+      # Optional: limit to specific address scopes
+      # address_scopes: "public-scope-uuid"
+
+# Resource limits for production
+pod:
+  resources:
+    enabled: true
+    ovn_bgp_agent:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "2Gi"
+        cpu: "2000m"
+    frr:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+
+# Node selection for network nodes
+labels:
+  agent:
+    node_selector_key: openstack-network-node
+    node_selector_value: enabled
+
+# Use specific image versions
+images:
+  tags:
+    ovn_bgp_agent: ghcr.io/fivetime/openstackhelm/ovn-bgp-agent:master-ubuntu_noble
+    frr: quay.io/frrouting/frr:10.4.1
+  pull_policy: IfNotPresent

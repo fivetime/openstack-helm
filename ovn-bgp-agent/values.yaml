@@ -183,8 +183,22 @@ bgp:
   #   "10.0.192.1"       - Fixed IP address
   peer_ip: ""
 
-  # Peer ASN (leave empty to auto-generate based on peer_ip)
-  peer_asn: ""
+  # Leaf ASN Mapping
+  # This configuration is only used during initial helm install.
+  # After installation, the mapping is stored in a ConfigMap that can be
+  # edited directly without triggering pod restarts.
+  #
+  # Format: "subnet": "ASN"
+  # The server's br-ex subnet will be matched against these entries.
+  #
+  # Example topology:
+  #   Rack1 (10.0.192.0/24) -> Leaf-1 (AS 65001)
+  #   Rack2 (10.0.193.0/24) -> Leaf-2 (AS 65002)
+  #   Rack3 (10.0.194.0/24) -> Leaf-3 (AS 65003)
+  asn_mapping:
+    "10.0.192.0/24": "65001"
+    "10.0.193.0/24": "65002"
+    "10.0.194.0/24": "65003"
 
   # EVPN Configuration
   evpn:
@@ -205,10 +219,11 @@ network:
 manifests:
   configmap_bin: true
   configmap_etc: true
-  daemonset_ovn_bgp_agent: true
-  job_image_repo_sync: true
+  configmap_asn: true
   serviceaccount: true
+  job_image_repo_sync: true
   poddisruptionbudget: true
+  daemonset_ovn_bgp_agent: true
 
 # Endpoints
 endpoints:

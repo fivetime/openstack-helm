@@ -53,8 +53,9 @@ spec:
 {{- end }}
       initContainers:
         - name: init-frr-config
-      {{ tuple $envAll "ovn_bgp_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
-      {{ dict "envAll" $envAll "application" "agent" "container" "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{ tuple $envAll "ovn_bgp_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "agent" "container" "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.ovn_bgp_agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /tmp/frr-init.sh
           volumeMounts:
@@ -72,6 +73,9 @@ spec:
               mountPath: /etc/frr
             - name: pod-shared
               mountPath: /tmp/pod-shared
+            - name: asn-mapping
+              mountPath: /etc/ovn-bgp-agent/asn-mapping
+              readOnly: true
           env:
             - name: NODE_IP
               valueFrom:
@@ -220,6 +224,10 @@ spec:
           hostPath:
             path: {{ .Values.network.host.ovn }}
             type: DirectoryOrCreate
+        - name: asn-mapping
+          configMap:
+            name: ovn-bgp-agent-asn
+            optional: false
 {{- if .Values.pod.mounts.ovn_bgp_agent.ovn_bgp_agent.volumes }}
 {{ toYaml .Values.pod.mounts.ovn_bgp_agent.ovn_bgp_agent.volumes | indent 8 }}
 {{- end }}

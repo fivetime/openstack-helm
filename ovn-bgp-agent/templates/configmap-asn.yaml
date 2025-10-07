@@ -1,0 +1,50 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if and .Values.manifests.configmap_asn .Values.bgp.enabled }}
+{{- $existingCM := lookup "v1" "ConfigMap" .Release.Namespace "ovn-bgp-agent-asn" }}
+{{- if not $existingCM }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ovn-bgp-agent-asn
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ tuple . "ovn-bgp-agent" "asn-mapping" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+data:
+  # Leaf ASN Mapping
+  # Format: "subnet CIDR": "Leaf ASN"
+  #
+  # This ConfigMap is only created on initial install.
+  # Subsequent helm upgrades will NOT modify this ConfigMap.
+  # You can safely edit this ConfigMap directly using kubectl.
+  #
+  # To force recreation from values.yaml:
+  #   kubectl delete configmap ovn-bgp-agent-asn -n {{ .Release.Namespace }}
+  #   helm upgrade ovn-bgp-agent ...
+  mapping.json: |
+    {
+      {{- $mapping := .Values.bgp.asn_mapping }}
+      {{- if $mapping }}
+      {{- $keys := keys $mapping | sortAlpha }}
+      {{- range $i, $subnet := $keys }}
+      "{{ $subnet }}": "{{ index $mapping $subnet }}"{{- if ne $i (sub (len $keys) 1) }},{{- end }}
+      {{- end }}
+      {{- else }}
+      "_example_comment": "No mappings defined. Edit this ConfigMap to add Leaf ASN mappings."
+      {{- end }}
+    }
+{{- end }}
+{{- end }}

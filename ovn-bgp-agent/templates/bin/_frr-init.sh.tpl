@@ -59,10 +59,10 @@ discover_from_arp() {
     local interface="$1"
     local ip_cidr="$2"
 
-    read first_ip last_ip <<< $(get_subnet_info "$ip_cidr")
+    read -r first_ip last_ip <<< "$(get_subnet_info "$ip_cidr")"
 
     for gw in "$first_ip" "$last_ip"; do
-        ping -c 3 -W 1 "$gw" >/dev/null 2>&1 &
+        ping -c 1 -W 1 "$gw" >/dev/null 2>&1 &
     done
     wait
     sleep 1
@@ -99,13 +99,47 @@ discover_gateway_auto() {
     return 0
 }
 
+# Discover Leaf ASN from ConfigMap mapping
+discover_leaf_asn() {
+    local local_subnet="$1"
+    local mapping_file="/etc/ovn-bgp-agent/asn-mapping/mapping.json"
+
+    if [ ! -f "$mapping_file" ]; then
+        echo "ERROR: Leaf ASN mapping file not found: $mapping_file" >&2
+        echo "Please ensure the ConfigMap 'ovn-bgp-agent-asn' exists" >&2
+        return 1
+    fi
+
+    # Try to parse the mapping file
+    if ! jq empty "$mapping_file" 2>/dev/null; then
+        echo "ERROR: Invalid JSON in mapping file: $mapping_file" >&2
+        return 1
+    fi
+
+    # Look up ASN for the subnet
+    local asn=$(jq -r --arg subnet "$local_subnet" '.[$subnet] // empty' "$mapping_file")
+
+    if [ -z "$asn" ]; then
+        echo "ERROR: No Leaf ASN mapping found for subnet: $local_subnet" >&2
+        echo "" >&2
+        echo "Available mappings in ConfigMap:" >&2
+        jq -r 'to_entries[] | select(.key | startswith("_example_") | not) | "  \(.key) -> AS\(.value)"' "$mapping_file" >&2
+        echo "" >&2
+        echo "To add a mapping, edit the ConfigMap:" >&2
+        echo "  kubectl -n {{ .Release.Namespace }} edit configmap ovn-bgp-agent-asn" >&2
+        return 1
+    fi
+
+    echo "$asn"
+}
+
 # Get local node information
 NODE_NAME="${NODE_NAME:-$(hostname)}"
 LOCAL_IPV4=$(ip -4 addr show br-ex 2>/dev/null | \
     grep -oP '(?<=inet\s)\d+(\.\d+){3}/\d+' | head -n1)
 
 if [ -z "$LOCAL_IPV4" ]; then
-    echo "ERROR: Cannot get IPv4 from br-ex"
+    echo "ERROR: Cannot get IPv4 address from br-ex interface"
     exit 1
 fi
 
@@ -113,7 +147,15 @@ LOCAL_IP="${LOCAL_IPV4%/*}"
 LOCAL_ASN=$(ip_to_asn "$LOCAL_IP")
 ROUTER_ID="$LOCAL_IP"
 
-# Get Leaf peer configuration
+# Get local subnet
+LOCAL_SUBNET=$(ip -4 route show dev br-ex | awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\/[0-9]+/ {print $1; exit}')
+
+if [ -z "$LOCAL_SUBNET" ]; then
+    echo "ERROR: Cannot determine local subnet from br-ex interface"
+    exit 1
+fi
+
+# Get Leaf peer IP configuration
 PEER_CONFIG="{{ .Values.bgp.peer_ip }}"
 
 if [ -z "$PEER_CONFIG" ] || [ "$PEER_CONFIG" = "detection" ]; then
@@ -131,11 +173,12 @@ else
     DISCOVERY_METHOD="manual"
 fi
 
-{{- if .Values.bgp.peer_asn }}
-PEER_ASN="{{ .Values.bgp.peer_asn }}"
-{{- else }}
-PEER_ASN=$(ip_to_asn "$PEER_IPV4")
-{{- end }}
+# Discover Leaf ASN from ConfigMap
+PEER_ASN=$(discover_leaf_asn "$LOCAL_SUBNET")
+if [ -z "$PEER_ASN" ]; then
+    echo "ERROR: Failed to discover Leaf ASN for subnet $LOCAL_SUBNET"
+    exit 1
+fi
 
 # Verify Leaf connectivity
 PEER_REACHABLE="unknown"
@@ -146,7 +189,7 @@ else
 fi
 
 {{- if .Values.bgp.evpn.enabled }}
-# EVPN Route Reflector 配置
+# EVPN Route Reflector configuration
 EVPN_RR_IP="{{ .Values.bgp.evpn.rr_ip }}"
 EVPN_RR_ASN="{{ .Values.bgp.evpn.rr_asn }}"
 
@@ -170,15 +213,16 @@ cat <<EOF
 === BGP Configuration ===
 Node:           $NODE_NAME
 Interface:      br-ex ($LOCAL_IPV4)
+Subnet:         $LOCAL_SUBNET
 
 Local (Server):
   IPv4:         $LOCAL_IP
-  ASN:          $LOCAL_ASN
+  ASN:          $LOCAL_ASN (auto-generated)
   Router ID:    $ROUTER_ID
 
 Peer (Leaf Switch):
   IPv4:         $PEER_IPV4
-  ASN:          $PEER_ASN
+  ASN:          $PEER_ASN (from ConfigMap)
   Discovery:    $DISCOVERY_METHOD
   Reachable:    $PEER_REACHABLE
 
@@ -203,7 +247,7 @@ if [ "$EVPN_RR_REACHABLE" != "yes" ]; then
 fi
 {{- end }}
 
-# 导出配置供 FRR 使用
+# Export configuration for FRR
 export NODE_NAME LOCAL_IP LOCAL_ASN ROUTER_ID
 export PEER_IPV4 PEER_ASN
 {{- if .Values.bgp.evpn.enabled }}
@@ -212,7 +256,7 @@ export EVPN_RR_IP EVPN_RR_ASN EVPN_ENABLED=true
 export EVPN_ENABLED=false
 {{- end }}
 
-# 生成 FRR 配置
+# Generate FRR configuration
 /tmp/frr-config-gen.sh
 
 echo "FRR configuration initialized successfully"

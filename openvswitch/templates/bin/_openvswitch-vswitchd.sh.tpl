@@ -170,7 +170,6 @@ function poststart () {
       sleep 1
   done
   chown {{ .Values.pod.user.nova.uid }}.{{ .Values.pod.user.nova.uid }} ${OVS_CTL}
-  chgrp {{ .Values.pod.user.nova.uid }} ${OVS_SOCKET}
 
 {{- if .Values.conf.poststart.extraCommand }}
 {{ .Values.conf.poststart.extraCommand | indent 2 }}

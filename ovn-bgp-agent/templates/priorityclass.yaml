@@ -1,0 +1,11 @@
+# templates/priorityclass.yaml
+{{- if .Values.manifests.priorityclass }}
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: ovn-bgp-agent-priority
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: "High priority for OVN BGP Agent to prevent eviction during node pressure"
+{{- end }}

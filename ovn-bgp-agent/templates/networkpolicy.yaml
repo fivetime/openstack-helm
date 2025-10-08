@@ -1,0 +1,67 @@
+{{- if .Values.manifests.networkpolicy }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ovn-bgp-agent
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      application: ovn-bgp-agent
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # 允许 Prometheus 抓取 metrics
+{{- if .Values.monitoring.enabled }}
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 9342  # FRR exporter
+{{- end }}
+
+  egress:
+    # 允许访问 OVN 数据库
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+        - podSelector:
+            matchLabels:
+              application: ovn
+              component: server
+      ports:
+        - protocol: TCP
+          port: 6641
+        - protocol: TCP
+          port: 6642
+
+    # 允许 DNS 解析
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # 允许 BGP 对等
+    - ports:
+        - protocol: TCP
+          port: 179
+
+    # 允许访问本地 OVS
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 6640
+{{- end }}

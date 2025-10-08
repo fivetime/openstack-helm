@@ -1,0 +1,23 @@
+{{- if and .Values.manifests.service_metrics .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ovn-bgp-agent-metrics
+  labels:
+    application: ovn-bgp-agent
+    component: metrics
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9342"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    application: ovn-bgp-agent
+  ports:
+    - name: metrics
+      port: 9342
+      targetPort: 9342
+{{- end }}

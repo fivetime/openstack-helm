@@ -42,7 +42,10 @@ spec:
 {{ dict "envAll" $envAll "podName" "ovn-bgp-agent" "containerNames" (list "ovn-bgp-agent" "frr" "init") | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName }}
-{{ dict "envAll" $envAll "application" "agent" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+{{- if .Values.manifests.priorityclass }}
+      priorityClassName: ovn-bgp-agent-priority
+{{- end }}
+{{ dict "envAll" $envAll "application" "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       nodeSelector:
         {{ .Values.labels.agent.node_selector_key }}: {{ .Values.labels.agent.node_selector_value | quote }}
       dnsPolicy: ClusterFirstWithHostNet
@@ -54,7 +57,7 @@ spec:
       initContainers:
         - name: init-frr-config
 {{ tuple $envAll "ovn_bgp_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
-{{ dict "envAll" $envAll "application" "agent" "container" "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{ dict "envAll" $envAll "application" "ovn_bgp_agent" "container" "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.ovn_bgp_agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /tmp/frr-init.sh
@@ -89,7 +92,7 @@ spec:
         - name: frr
 {{ tuple $envAll "frr" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.frr | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
-{{ dict "envAll" $envAll "application" "agent" "container" "frr" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{ dict "envAll" $envAll "application" "ovn_bgp_agent" "container" "frr" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
           command:
             - /usr/lib/frr/docker-start
           env:
@@ -108,6 +111,10 @@ spec:
               mountPath: /etc/frr
             - name: frr-run
               mountPath: /run/frr
+            - name: frr-lib
+              mountPath: /var/lib/frr
+            - name: frr-tmp
+              mountPath: /var/tmp/frr
 {{- if .Values.pod.mounts.ovn_bgp_agent.frr.volumeMounts }}
 {{ toYaml .Values.pod.mounts.ovn_bgp_agent.frr.volumeMounts | indent 12 }}
 {{- end }}
@@ -130,12 +137,8 @@ spec:
         - name: ovn-bgp-agent
 {{ tuple $envAll "ovn_bgp_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.ovn_bgp_agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
-{{ dict "envAll" $envAll "application" "agent" "container" "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{ dict "envAll" $envAll "application" "ovn_bgp_agent" "container" "ovn_bgp_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
           env:
-            - name: OVN_NB_CONNECTION
-              value: "{{ tuple "ovn_nb" "internal" "nb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" }}"
-            - name: OVN_SB_CONNECTION
-              value: "{{ tuple "ovn_sb" "internal" "sb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" }}"
             - name: NODE_IP
               valueFrom:
                 fieldRef:
@@ -156,13 +159,6 @@ spec:
             - name: ovn-bgp-agent-etc
               mountPath: /etc/ovn-bgp-agent/ovn-bgp-agent.conf
               subPath: ovn-bgp-agent.conf
-              readOnly: true
-            - name: ovn-bgp-agent-etc
-              mountPath: /etc/ovn-bgp-agent/rootwrap.conf
-              subPath: rootwrap.conf
-              readOnly: true
-            - name: ovn-bgp-agent-rootwrap-filters
-              mountPath: /etc/ovn-bgp-agent/rootwrap.d
               readOnly: true
             - name: run-openvswitch
               mountPath: /run/openvswitch
@@ -192,6 +188,21 @@ spec:
                 - "test -f /tmp/pod-shared/ready"
             initialDelaySeconds: 15
             periodSeconds: 10
+      {{- if .Values.monitoring.enabled }}
+        - name: frr-exporter
+          image: {{ .Values.images.tags.frr_exporter }}
+          ports:
+            - containerPort: 9342
+              name: metrics
+          volumeMounts:
+            - name: frr-sockets
+              mountPath: /run/frr
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9342
+            initialDelaySeconds: 30
+      {{- end }}
       volumes:
         - name: pod-tmp
           emptyDir: {}
@@ -205,16 +216,13 @@ spec:
           configMap:
             name: ovn-bgp-agent-etc
             defaultMode: 0444
-        - name: ovn-bgp-agent-rootwrap-filters
-          configMap:
-            name: ovn-bgp-agent-etc
-            defaultMode: 0444
-            items:
-              - key: filters.conf
-                path: filters.conf
         - name: frr-config
           emptyDir: {}
         - name: frr-run
+          emptyDir: {}
+        - name: frr-lib
+          emptyDir: {}
+        - name: frr-tmp
           emptyDir: {}
         - name: run-openvswitch
           hostPath:

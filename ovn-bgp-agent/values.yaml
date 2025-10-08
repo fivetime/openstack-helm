@@ -25,6 +25,7 @@ images:
   tags:
     ovn_bgp_agent: ghcr.io/fivetime/openstackhelm/ovn-bgp-agent:master-ubuntu_noble
     frr: quay.io/frrouting/frr:10.4.1
+    frr_exporter: docker.io/tynany/frr_exporter:v1.8.1
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
     image_repo_sync: docker.io/docker:28.1.1
   pull_policy: IfNotPresent
@@ -34,142 +35,24 @@ images:
       - dep_check
       - image_repo_sync
 
-pod:
-  security_context:
-    ovn_bgp_agent:
-      pod:
-        runAsUser: 42494
-        fsGroup: 42424
-      container:
-        ovn_bgp_agent:
-          runAsUser: 42494
-          privileged: true
-          readOnlyRootFilesystem: false
-          allowPrivilegeEscalation: true
-          capabilities:
-            add:
-              - NET_ADMIN
-              - SYS_ADMIN
-              - NET_RAW
-        frr:
-          privileged: true
-          readOnlyRootFilesystem: false
-          capabilities:
-            add:
-              - NET_ADMIN
-              - NET_RAW
-  tolerations:
-    ovn_bgp_agent:
-      enabled: false
-      tolerations:
-        - effect: NoSchedule
-          key: node-role.kubernetes.io/master
-          operator: Exists
-        - effect: NoSchedule
-          key: node-role.kubernetes.io/control-plane
-          operator: Exists
-  mounts:
-    ovn_bgp_agent:
-      ovn_bgp_agent:
-        volumeMounts: []
-        volumes: []
-      frr:
-        volumeMounts: []
-        volumes: []
-  lifecycle:
-    upgrades:
-      daemonsets:
-        pod_replacement_strategy: RollingUpdate
-        ovn_bgp_agent:
-          enabled: true
-          min_ready_seconds: 0
-          max_unavailable: 1
-    termination_grace_period:
-      ovn_bgp_agent:
-        timeout: 30
-  resources:
-    enabled: false
-    ovn_bgp_agent:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "1024Mi"
-        cpu: "2000m"
-    frr:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "512Mi"
-        cpu: "1000m"
-    jobs:
-      image_repo_sync:
-        requests:
-          memory: "128Mi"
-          cpu: "100m"
-        limits:
-          memory: "1024Mi"
-          cpu: "2000m"
-
-dependencies:
-  dynamic:
-    common:
-      local_image_registry:
-        jobs:
-          - ovn-bgp-agent-image-repo-sync
-        services:
-          - endpoint: node
-            service: local_image_registry
-  static:
-    ovn_bgp_agent:
-      services:
-        - endpoint: internal
-          service: ovn_nb
-        - endpoint: internal
-          service: ovn_sb
-    image_repo_sync:
-      services:
-        - endpoint: internal
-          service: local_image_registry
-
 # OVN BGP Agent configuration
 conf:
   ovn_bgp_agent:
     DEFAULT:
       debug: false
-      log_dir: /var/log/ovn-bgp-agent
-      log_file: ovn-bgp-agent.log
+      use_stderr: true
+      use_syslog: false
       # Options: ovn_bgp_driver, nb_ovn_bgp_driver, ovn_evpn_driver, ovn_stretched_l2_bgp_driver
-      driver: nb_ovn_bgp_driver
-      # OVN connection
-      ovn_nb_connection: tcp:ovn-ovsdb-nb.openstack.svc.cluster.local:6641
-      ovn_sb_connection: tcp:ovn-ovsdb-sb.openstack.svc.cluster.local:6642
+      driver: ovn_bgp_driver
+      bridge_mappings: external:br-ex
+      # OVS connection
+      ovsdb_connection: unix:/run/openvswitch/db.sock
       # Expose options
       expose_tenant_networks: false
       expose_ipv6_gua_tenant_networks: false
       address_scopes: ""
-      # Root helper
-      root_helper: sudo ovn-bgp-agent-rootwrap /etc/ovn-bgp-agent/rootwrap.conf
-      root_helper_daemon: ""
-
-  rootwrap:
-    filters: |
-      [Filters]
-      # ip commands
-      ip: CommandFilter, ip, root
-      
-      # iptables commands
-      iptables: CommandFilter, iptables, root
-      iptables-save: CommandFilter, iptables-save, root
-      iptables-restore: CommandFilter, iptables-restore, root
-      
-      # OVS commands
-      ovn-nbctl: CommandFilter, ovn-nbctl, root
-      ovn-sbctl: CommandFilter, ovn-sbctl, root
-      ovs-vsctl: CommandFilter, ovs-vsctl, root
-      ovs-ofctl: CommandFilter, ovs-ofctl, root
-      ovs-appctl: CommandFilter, ovs-appctl, root
+    privsep:
+      helper_command: "sudo /install/local/bin/privsep-helper"
 
 # BGP configuration
 bgp:
@@ -215,15 +98,101 @@ network:
     openvswitch_db: /run/openvswitch
     ovn: /run/ovn
 
-# Manifests control
-manifests:
-  configmap_bin: true
-  configmap_etc: true
-  configmap_asn: true
-  serviceaccount: true
-  job_image_repo_sync: true
-  poddisruptionbudget: true
-  daemonset_ovn_bgp_agent: true
+monitoring:
+  enabled: false
+
+pod:
+  security_context:
+    ovn_bgp_agent:
+      pod:
+        runAsUser: 0
+        fsGroup: 0
+      container:
+        ovn_bgp_agent:
+          runAsUser: 0
+          privileged: true
+          readOnlyRootFilesystem: false
+        frr:
+          runAsUser: 0
+          privileged: true
+          readOnlyRootFilesystem: false
+
+  tolerations:
+    ovn_bgp_agent:
+      enabled: false
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+  mounts:
+    ovn_bgp_agent:
+      ovn_bgp_agent:
+        volumeMounts: []
+        volumes: []
+      frr:
+        volumeMounts: []
+        volumes: []
+  lifecycle:
+    upgrades:
+      daemonsets:
+        pod_replacement_strategy: RollingUpdate
+        ovn_bgp_agent:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+    termination_grace_period:
+      ovn_bgp_agent:
+        timeout: 30
+  resources:
+    enabled: false
+    ovn_bgp_agent:
+      requests:
+        memory: "512Mi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "2000m"
+    frr:
+      requests:
+        memory: "512Mi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "2000m"
+    jobs:
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - ovn-bgp-agent-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    ovn_bgp_agent:
+      jobs:
+        - ovn-ovsdb-nb-bootstrap
+      services:
+        - endpoint: internal
+          service: ovn_nb
+        - endpoint: internal
+          service: ovn_sb
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
 
 # Endpoints
 endpoints:
@@ -249,8 +218,6 @@ endpoints:
     port:
       nb:
         default: 6641
-    scheme:
-      default: tcp
   ovn_sb:
     namespace: null
     hosts:
@@ -260,5 +227,16 @@ endpoints:
     port:
       sb:
         default: 6642
-    scheme:
-      default: tcp
+
+# Manifests control
+manifests:
+  configmap_bin: true
+  configmap_etc: true
+  configmap_asn: true
+  priorityclass: true
+  networkpolicy: false
+  serviceaccount: true
+  service_metrics: true
+  job_image_repo_sync: true
+  poddisruptionbudget: true
+  daemonset_ovn_bgp_agent: true

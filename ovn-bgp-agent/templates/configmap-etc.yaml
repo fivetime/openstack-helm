@@ -1,19 +1,15 @@
-{{/*
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/}}
-
 {{- if .Values.manifests.configmap_etc }}
 {{- $envAll := . }}
+{{- if not (hasKey .Values.conf.ovn_bgp_agent.DEFAULT "ovn_nb_connection") }}
+{{- $ovnNbHost := tuple "ovn_nb" "internal" . | include "helm-toolkit.endpoints.endpoint_host_lookup" }}
+{{- $ovnNbPort := tuple "ovn_nb" "internal" "nb" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- $_ := set .Values.conf.ovn_bgp_agent.DEFAULT "ovn_nb_connection" (printf "tcp:%s:%s" $ovnNbHost $ovnNbPort) }}
+{{- end }}
+{{- if not (hasKey .Values.conf.ovn_bgp_agent.DEFAULT "ovn_sb_connection") }}
+{{- $ovnSbHost := tuple "ovn_sb" "internal" . | include "helm-toolkit.endpoints.endpoint_host_lookup" }}
+{{- $ovnSbPort := tuple "ovn_sb" "internal" "sb" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- $_ := set .Values.conf.ovn_bgp_agent.DEFAULT "ovn_sb_connection" (printf "tcp:%s:%s" $ovnSbHost $ovnSbPort) }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -22,13 +18,4 @@ metadata:
 data:
   ovn-bgp-agent.conf: |
 {{ include "helm-toolkit.utils.to_ini" .Values.conf.ovn_bgp_agent | indent 4 }}
-  rootwrap.conf: |
-    [DEFAULT]
-    filters_path = /etc/ovn-bgp-agent/rootwrap.d
-    exec_dirs = /sbin,/usr/sbin,/bin,/usr/bin,/usr/local/bin,/usr/local/sbin
-    use_syslog = False
-    syslog_log_facility = syslog
-    syslog_log_level = ERROR
-  filters.conf: |
-{{ .Values.conf.rootwrap.filters | indent 4 }}
 {{- end }}

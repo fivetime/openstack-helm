@@ -1,23 +1,44 @@
 #!/bin/bash
-
-{{/*
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/}}
-
 set -ex
 
-# Wait for FRR to be ready
-echo "Waiting for FRR to be ready..."
+# Wait for FRR init
+timeout=60
+counter=0
+until [ -f /tmp/pod-shared/bgp-config.env ] || [ $counter -eq $timeout ]; do
+    sleep 1
+    ((counter++))
+done
+
+if [ ! -f /tmp/pod-shared/bgp-config.env ]; then
+    echo "ERROR: BGP config not found"
+    exit 1
+fi
+
+# Load BGP config
+source /tmp/pod-shared/bgp-config.env
+
+# Update config file
+cp /etc/ovn-bgp-agent/ovn-bgp-agent.conf /tmp/ovn-bgp-agent.conf
+if grep -q "^bgp_AS" /tmp/ovn-bgp-agent.conf; then
+    sed -i "s/^bgp_AS.*/bgp_AS = $BGP_AS/" /tmp/ovn-bgp-agent.conf
+else
+    sed -i "/^\[DEFAULT\]/a bgp_AS = $BGP_AS" /tmp/ovn-bgp-agent.conf
+fi
+
+if grep -q "^bgp_router_id" /tmp/ovn-bgp-agent.conf; then
+    sed -i "s/^bgp_router_id.*/bgp_router_id = $BGP_ROUTER_ID/" /tmp/ovn-bgp-agent.conf
+else
+    sed -i "/^\[DEFAULT\]/a bgp_router_id = $BGP_ROUTER_ID" /tmp/ovn-bgp-agent.conf
+fi
+
+# Dynamically set routing table ID
+BR_EX_TABLE_ID=$(grep "br-ex" /etc/iproute2/rt_tables | awk '{print $1}')
+if [ -n "$BR_EX_TABLE_ID" ]; then
+    sed -i '/^bgp_vrf_table_id/d' /tmp/ovn-bgp-agent.conf
+    sed -i "/^\[DEFAULT\]/a bgp_vrf_table_id = $BR_EX_TABLE_ID" /tmp/ovn-bgp-agent.conf
+fi
+
+# Wait for FRR ready
 timeout=60
 counter=0
 until [ -S /run/frr/zebra.vty ] || [ $counter -eq $timeout ]; do
@@ -25,56 +46,15 @@ until [ -S /run/frr/zebra.vty ] || [ $counter -eq $timeout ]; do
     ((counter++))
 done
 
-if [ $counter -eq $timeout ]; then
-    echo "ERROR: FRR did not become ready in time"
-    exit 1
-fi
-
-echo "FRR is ready"
-
-# Wait for OVN databases to be accessible
-echo "Checking OVN NB database connectivity..."
-timeout=120
-counter=0
-until ovn-nbctl --db="$OVN_NB_CONNECTION" show >/dev/null 2>&1 || [ $counter -eq $timeout ]; do
-    echo "Waiting for OVN NB database at $OVN_NB_CONNECTION..."
-    sleep 2
-    ((counter++))
-done
-
-if [ $counter -eq $timeout ]; then
-    echo "ERROR: OVN NB database not accessible"
-    exit 1
-fi
-
-echo "OVN NB database is accessible"
-
-echo "Checking OVN SB database connectivity..."
-counter=0
-until ovn-sbctl --db="$OVN_SB_CONNECTION" show >/dev/null 2>&1 || [ $counter -eq $timeout ]; do
-    echo "Waiting for OVN SB database at $OVN_SB_CONNECTION..."
-    sleep 2
-    ((counter++))
-done
-
-if [ $counter -eq $timeout ]; then
-    echo "ERROR: OVN SB database not accessible"
-    exit 1
-fi
-
-echo "OVN SB database is accessible"
-
-# Create log directory
 mkdir -p /var/log/ovn-bgp-agent
-
-# Update configuration with runtime values
-sed -i "s|^ovn_nb_connection.*|ovn_nb_connection = $OVN_NB_CONNECTION|" /etc/ovn-bgp-agent/ovn-bgp-agent.conf
-sed -i "s|^ovn_sb_connection.*|ovn_sb_connection = $OVN_SB_CONNECTION|" /etc/ovn-bgp-agent/ovn-bgp-agent.conf
-
-# Mark as ready
 touch /tmp/pod-shared/ready
 
-# Start the agent
-exec /usr/local/bin/ovn-bgp-agent \
-    --config-file /etc/ovn-bgp-agent/ovn-bgp-agent.conf \
-    --log-file /var/log/ovn-bgp-agent/ovn-bgp-agent.log
+# Debug: show config if debug enabled
+if grep -q "^debug = [Tt]rue" /etc/ovn-bgp-agent/ovn-bgp-agent.conf 2>/dev/null; then
+    echo "=== OVN BGP Agent Configuration ==="
+    cat /tmp/ovn-bgp-agent.conf
+    echo "==================================="
+fi
+
+exec /install/local/bin/ovn-bgp-agent \
+    --config-file /tmp/ovn-bgp-agent.conf

@@ -62,7 +62,7 @@ discover_from_arp() {
     read -r first_ip last_ip <<< "$(get_subnet_info "$ip_cidr")"
 
     for gw in "$first_ip" "$last_ip"; do
-        ping -c 1 -W 1 "$gw" >/dev/null 2>&1 &
+        ping -c 2 -W 3 "$gw" >/dev/null 2>&1 &
     done
     wait
     sleep 1
@@ -261,6 +261,13 @@ export EVPN_ENABLED=false
 
 echo "FRR configuration initialized successfully"
 
+# Export to shared file for ovn-bgp-agent
+cat > /tmp/pod-shared/bgp-config.env <<EOF
+BGP_AS=$LOCAL_ASN
+BGP_ROUTER_ID=$ROUTER_ID
+EOF
+
+echo "BGP configuration exported to /tmp/pod-shared/bgp-config.env"
 {{- else }}
 echo "BGP is not enabled"
 exit 0

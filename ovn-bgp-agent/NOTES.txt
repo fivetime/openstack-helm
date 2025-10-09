@@ -5,59 +5,70 @@ OVN BGP Agent has been successfully deployed!
 
 DEPLOYMENT STATUS
 -----------------
-To verify the deployment:
+Check deployment status:
 
   kubectl --namespace {{ .Release.Namespace }} get pods -l "application=ovn-bgp-agent"
 
-Expected output: All pods should be in "Running" state with 2/2 or 3/3 containers ready.
+Expected: All pods should be in "Running" state with 2/2 or 3/3 containers ready.
 
 
 BGP SESSION STATUS
 ------------------
-To check BGP session status:
+Check BGP session status:
 
+  # IPv4 session
   kubectl --namespace {{ .Release.Namespace }} exec daemonset/ovn-bgp-agent -c frr -- \
-    vtysh -c "show bgp summary"
+    vtysh -c "show bgp ipv4 unicast summary"
+
+{{- if .Values.bgp.ipv6.enabled }}
+  # IPv6 session
+  kubectl --namespace {{ .Release.Namespace }} exec daemonset/ovn-bgp-agent -c frr -- \
+    vtysh -c "show bgp ipv6 unicast summary"
+{{- end }}
 
 Expected: BGP neighbor state should be "Established"
 
 
 VIEW CONFIGURATION
 ------------------
-To view the BGP configuration discovered during initialization:
+View the discovered BGP configuration:
 
   kubectl --namespace {{ .Release.Namespace }} logs daemonset/ovn-bgp-agent -c init-frr-config
 
-This will show:
+This shows:
   - Local server IP and auto-generated ASN
-  - Detected Leaf switch IP and ASN
+  - Detected Leaf switch IPv4{{- if .Values.bgp.ipv6.enabled }} and IPv6{{- end }} addresses
   - Network reachability status
 {{- if .Values.bgp.evpn.enabled }}
   - EVPN Route Reflector configuration
 {{- end }}
 
 
-CHECK ADVERTISED ROUTES
------------------------
-To see routes advertised to the Leaf switch:
+LEAF CONFIGURATION MANAGEMENT
+-----------------------------
+View or edit Leaf switch configuration:
 
-  kubectl --namespace {{ .Release.Namespace }} exec daemonset/ovn-bgp-agent -c frr -- \
-    vtysh -c "show ip bgp"
-
-
-RUNTIME ASN MAPPING MANAGEMENT
-------------------------------
-To view or edit Leaf ASN mappings:
-
-  # View current mappings
+  # View current configuration
   kubectl --namespace {{ .Release.Namespace }} get configmap ovn-bgp-agent-asn \
     -o jsonpath='{.data.mapping\.json}' | jq .
 
-  # Edit mappings (changes apply to new pods immediately)
+  # Edit configuration (changes apply to new pods)
   kubectl --namespace {{ .Release.Namespace }} edit configmap ovn-bgp-agent-asn
 
-Note: The ASN mapping ConfigMap persists across helm upgrades and can be
-safely edited at runtime. Changes will be applied to pods as they restart.
+Configuration format:
+  {
+    "subnet_cidr": {
+      "asn": "BGP AS Number",
+      "ipv4_gateway": "IPv4 Gateway Address",
+{{- if .Values.bgp.ipv6.enabled }}
+      "ipv6_gateway": "IPv6 Gateway Address",
+{{- end }}
+      "description": "Optional description"
+    }
+  }
+
+Note: ConfigMap persists across helm upgrades and can be safely edited at runtime.
+Changes apply to pods as they restart.
 
 
 TROUBLESHOOTING
@@ -69,9 +80,13 @@ If BGP sessions are not establishing:
 
 2. Verify Leaf switch connectivity:
    kubectl --namespace {{ .Release.Namespace }} exec daemonset/ovn-bgp-agent -c ovn-bgp-agent -- \
-     ping -c 3 <leaf-switch-ip>
+     ping -c 3 <leaf-ipv4-address>
+{{- if .Values.bgp.ipv6.enabled }}
+   kubectl --namespace {{ .Release.Namespace }} exec daemonset/ovn-bgp-agent -c ovn-bgp-agent -- \
+     ping6 -c 3 <leaf-ipv6-address>
+{{- end }}
 
-3. Verify ASN mapping exists for your subnet:
+3. Verify Leaf configuration exists:
    kubectl --namespace {{ .Release.Namespace }} get configmap ovn-bgp-agent-asn -o yaml
 
 4. Check FRR logs:
@@ -83,7 +98,6 @@ DOCUMENTATION
 For more information:
   - OVN BGP Agent: https://docs.openstack.org/ovn-bgp-agent/latest/
   - Chart README: https://github.com/openstack/openstack-helm/tree/master/ovn-bgp-agent
-  - Troubleshooting Guide: See README.md in the chart directory
 
 ================================================================================
 {{- end }}

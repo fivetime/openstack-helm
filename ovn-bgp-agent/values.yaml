@@ -66,22 +66,42 @@ bgp:
   #   "10.0.192.1"       - Fixed IP address
   peer_ip: ""
 
-  # Leaf ASN Mapping
+  # Enable IPv6 Dual-Stack BGP
+  # When enabled, establishes separate BGP sessions:
+  #   - IPv4 session: exchanges IPv4 routes
+  #   - IPv6 session: exchanges IPv6 routes
+  # Requirements:
+  #   - br-ex must have IPv6 address configured
+  #   - Leaf switch must support dual-stack BGP
+  #   - ipv6_gateway must be configured in leaf_mapping for each subnet
+  ipv6:
+    enabled: true
+
+  # Leaf Switch Configuration Mapping
   # This configuration is only used during initial helm install.
   # After installation, the mapping is stored in a ConfigMap that can be
   # edited directly without triggering pod restarts.
   #
-  # Format: "subnet": "ASN"
-  # The server's br-ex subnet will be matched against these entries.
+  # Format per subnet:
+  #   "subnet_cidr":
+  #     asn: "Leaf BGP AS Number"
+  #     ipv4_gateway: "IPv4 Gateway Address" (required)
+  #     ipv6_gateway: "IPv6 Gateway Address" (required if ipv6.enabled=true)
+  #     description: "Human readable description" (optional)
   #
-  # Example topology:
-  #   Rack1 (10.0.192.0/24) -> Leaf-1 (AS 65001)
-  #   Rack2 (10.0.193.0/24) -> Leaf-2 (AS 65002)
-  #   Rack3 (10.0.194.0/24) -> Leaf-3 (AS 65003)
-  asn_mapping:
-    "10.0.192.0/24": "65001"
-    "10.0.193.0/24": "65002"
-    "10.0.194.0/24": "65003"
+  # The subnet is matched against the br-ex interface's subnet.
+  # Example: If br-ex has 10.0.192.115/20, it will match "10.0.192.0/20"
+  leaf_mapping:
+    "10.0.192.0/20":
+      asn: "4200000100"
+      ipv4_gateway: "10.0.192.1"
+      ipv6_gateway: "fd00:1:2:3::1"
+      description: "VLAN 13 - North-South Network"
+    "10.0.208.0/20":
+      asn: "4200000100"
+      ipv4_gateway: "10.0.208.1"
+      ipv6_gateway: "fd00:1:2:4::1"
+      description: "VLAN 14 - East-West Network"
 
   # EVPN Configuration
   evpn:

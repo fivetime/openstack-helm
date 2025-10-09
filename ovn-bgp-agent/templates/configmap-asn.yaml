@@ -24,8 +24,15 @@ metadata:
   labels:
 {{ tuple . "ovn-bgp-agent" "asn-mapping" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 data:
-  # Leaf ASN Mapping
-  # Format: "subnet CIDR": "Leaf ASN"
+  # Leaf Switch Configuration Mapping
+  # Format per subnet:
+  # {
+  #   "subnet_cidr": {
+  #     "asn": "Leaf BGP AS Number",
+  #     "ipv4_gateway": "IPv4 Gateway Address (optional, defaults to first IP)",
+  #     "ipv6_gateway": "IPv6 Gateway Address (required if ipv6.enabled=true)"
+  #   }
+  # }
   #
   # This ConfigMap is only created on initial install.
   # Subsequent helm upgrades will NOT modify this ConfigMap.
@@ -36,14 +43,32 @@ data:
   #   helm upgrade ovn-bgp-agent ...
   mapping.json: |
     {
-      {{- $mapping := .Values.bgp.asn_mapping }}
+      {{- $mapping := .Values.bgp.leaf_mapping }}
       {{- if $mapping }}
       {{- $keys := keys $mapping | sortAlpha }}
       {{- range $i, $subnet := $keys }}
-      "{{ $subnet }}": "{{ index $mapping $subnet }}"{{- if ne $i (sub (len $keys) 1) }},{{- end }}
+      {{- $config := index $mapping $subnet }}
+      "{{ $subnet }}": {
+        "asn": "{{ $config.asn }}"
+        {{- if $config.ipv4_gateway }},
+        "ipv4_gateway": "{{ $config.ipv4_gateway }}"
+        {{- end }}
+        {{- if $config.ipv6_gateway }},
+        "ipv6_gateway": "{{ $config.ipv6_gateway }}"
+        {{- end }}
+        {{- if $config.description }},
+        "description": "{{ $config.description }}"
+        {{- end }}
+      }{{- if ne $i (sub (len $keys) 1) }},{{- end }}
       {{- end }}
       {{- else }}
-      "_example_comment": "No mappings defined. Edit this ConfigMap to add Leaf ASN mappings."
+      "_example_comment": "No mappings defined. Edit this ConfigMap to add Leaf switch mappings.",
+      "_example_10.0.192.0/24": {
+        "asn": "4200000100",
+        "ipv4_gateway": "10.0.192.1",
+        "ipv6_gateway": "fd00:1:2:3::1",
+        "description": "Rack1 - VLAN 13"
+      }
       {{- end }}
     }
 {{- end }}

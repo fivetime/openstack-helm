@@ -1,19 +1,5 @@
 #!/bin/bash
 
-{{/*
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/}}
-
 set -ex
 
 # Create FRR configuration directory
@@ -60,26 +46,53 @@ router bgp ${LOCAL_ASN}
  no bgp default ipv4-unicast
 MAIN_EOF
 
-# 添加 Leaf 对等体配置
-cat >> /etc/frr/frr.conf <<PEER_EOF
+# 添加 IPv4 Leaf 对等体配置
+cat >> /etc/frr/frr.conf <<PEER_IPV4_EOF
  !
- ! eBGP Peering to Leaf Switch
- neighbor ${PEER_IPV4} remote-as ${PEER_ASN}
- neighbor ${PEER_IPV4} description "Leaf-Switch"
- neighbor ${PEER_IPV4} timers 3 10
- neighbor ${PEER_IPV4} timers connect 10
-PEER_EOF
+ ! eBGP Peering to Leaf Switch (IPv4)
+ neighbor LEAF-V4 peer-group
+ neighbor LEAF-V4 remote-as ${PEER_ASN}
+ neighbor LEAF-V4 description "LEAF-IPv4"
+ neighbor LEAF-V4 update-source br-ex
+ neighbor LEAF-V4 send-community all
+ neighbor LEAF-V4 ebgp-multihop 10
+ neighbor LEAF-V4 timers 3 10
+ neighbor LEAF-V4 timers connect 10
+ !
+ neighbor ${PEER_IPV4} peer-group LEAF-V4
+PEER_IPV4_EOF
 
-# 如果启用 EVPN,添加 RR 对等体
+# 如果启用 IPv6，添加 IPv6 Leaf 对等体配置
+if [ "${ENABLE_IPV6:-false}" = "true" ]; then
+    cat >> /etc/frr/frr.conf <<PEER_IPV6_EOF
+ !
+ ! eBGP Peering to Leaf Switch (IPv6)
+ neighbor LEAF-V6 peer-group
+ neighbor LEAF-V6 remote-as ${PEER_ASN}
+ neighbor LEAF-V6 description "LEAF-IPv6"
+ neighbor LEAF-V6 update-source br-ex
+ neighbor LEAF-V6 send-community all
+ neighbor LEAF-V6 ebgp-multihop 10
+ neighbor LEAF-V6 timers 3 10
+ neighbor LEAF-V6 timers connect 10
+ !
+ neighbor ${PEER_IPV6} peer-group LEAF-V6
+PEER_IPV6_EOF
+fi
+
+# 如果启用 EVPN，添加 RR 对等体
 if [ "$EVPN_ENABLED" = "true" ]; then
     cat >> /etc/frr/frr.conf <<EVPN_PEER_EOF
  !
  ! iBGP to EVPN Route Reflector
- neighbor ${EVPN_RR_IP} remote-as ${EVPN_RR_ASN}
- neighbor ${EVPN_RR_IP} description "EVPN-Route-Reflector"
- neighbor ${EVPN_RR_IP} update-source ${LOCAL_IP}
- neighbor ${EVPN_RR_IP} timers 3 10
- neighbor ${EVPN_RR_IP} timers connect 10
+ neighbor EVPN-RR peer-group
+ neighbor EVPN-RR remote-as ${EVPN_RR_ASN}
+ neighbor EVPN-RR description "EVPN-Route-Reflector"
+ neighbor EVPN-RR update-source ${LOCAL_IP}
+ neighbor EVPN-RR timers 3 10
+ neighbor EVPN-RR timers connect 10
+ !
+ neighbor ${EVPN_RR_IP} peer-group EVPN-RR
 EVPN_PEER_EOF
 fi
 
@@ -87,17 +100,32 @@ fi
 cat >> /etc/frr/frr.conf <<IPV4_AF_EOF
  !
  address-family ipv4 unicast
-  neighbor ${PEER_IPV4} activate
-  neighbor ${PEER_IPV4} soft-reconfiguration inbound
+  neighbor LEAF-V4 activate
+  neighbor LEAF-V4 next-hop-self
+  neighbor LEAF-V4 soft-reconfiguration inbound
+  maximum-paths 4
  exit-address-family
 IPV4_AF_EOF
 
-# 如果启用 EVPN,添加 L2VPN EVPN address-family
+# 添加 IPv6 Unicast address-family（独立的 IPv6 会话）
+if [ "${ENABLE_IPV6:-false}" = "true" ]; then
+    cat >> /etc/frr/frr.conf <<IPV6_AF_EOF
+ !
+ address-family ipv6 unicast
+  neighbor LEAF-V6 activate
+  neighbor LEAF-V6 next-hop-self
+  neighbor LEAF-V6 soft-reconfiguration inbound
+  maximum-paths 4
+ exit-address-family
+IPV6_AF_EOF
+fi
+
+# 如果启用 EVPN，添加 L2VPN EVPN address-family
 if [ "$EVPN_ENABLED" = "true" ]; then
     cat >> /etc/frr/frr.conf <<EVPN_AF_EOF
  !
  address-family l2vpn evpn
-  neighbor ${EVPN_RR_IP} activate
+  neighbor EVPN-RR activate
   advertise-all-vni
  exit-address-family
 EVPN_AF_EOF

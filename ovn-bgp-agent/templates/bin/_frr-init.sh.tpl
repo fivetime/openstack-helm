@@ -1,19 +1,5 @@
 #!/bin/bash
 
-{{/*
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/}}
-
 set -ex
 
 {{- if .Values.bgp.enabled }}
@@ -25,87 +11,13 @@ ip_to_asn() {
     echo $((4200000000 + b * 65536 + c * 256 + d))
 }
 
-# Calculate subnet information
-get_subnet_info() {
-    local ip_cidr="$1"
-    local ip="${ip_cidr%/*}"
-    local prefix="${ip_cidr#*/}"
-
-    IFS='.' read -r a b c d <<< "$ip"
-    local ip_int=$((a * 16777216 + b * 65536 + c * 256 + d))
-
-    local mask=$((0xFFFFFFFF << (32 - prefix) & 0xFFFFFFFF))
-    local network=$((ip_int & mask))
-    local broadcast=$((network | (~mask & 0xFFFFFFFF)))
-
-    local first=$((network + 1))
-    local last=$((broadcast - 1))
-
-    local first_ip="$((first >> 24 & 0xFF)).$((first >> 16 & 0xFF)).$((first >> 8 & 0xFF)).$((first & 0xFF))"
-    local last_ip="$((last >> 24 & 0xFF)).$((last >> 16 & 0xFF)).$((last >> 8 & 0xFF)).$((last & 0xFF))"
-
-    echo "$first_ip $last_ip"
-}
-
-# Discover gateway from routing table
-discover_from_route() {
-    local interface="$1"
-    ip -4 route show dev "$interface" 2>/dev/null | \
-        grep '^default' | awk '{print $3}' | head -n1
-}
-
-# Discover gateway via ARP scanning
-discover_from_arp() {
-    local interface="$1"
-    local ip_cidr="$2"
-
-    read -r first_ip last_ip <<< "$(get_subnet_info "$ip_cidr")"
-
-    for gw in "$first_ip" "$last_ip"; do
-        ping -c 2 -W 3 "$gw" >/dev/null 2>&1 &
-    done
-    wait
-    sleep 1
-
-    for gw in "$first_ip" "$last_ip"; do
-        if ip neigh show dev "$interface" | grep -q "^${gw} "; then
-            echo "$gw"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-# Auto-detect gateway with fallback
-discover_gateway_auto() {
-    local interface="$1"
-    local ip_cidr="$2"
-
-    local gw=$(discover_from_route "$interface")
-    if [ -n "$gw" ]; then
-        echo "$gw detection:route"
-        return 0
-    fi
-
-    gw=$(discover_from_arp "$interface" "$ip_cidr")
-    if [ -n "$gw" ]; then
-        echo "$gw detection:arp"
-        return 0
-    fi
-
-    read first_ip last_ip <<< $(get_subnet_info "$ip_cidr")
-    echo "$first_ip detection:fallback"
-    return 0
-}
-
-# Discover Leaf ASN from ConfigMap mapping
-discover_leaf_asn() {
+# Discover Leaf configuration from ConfigMap mapping
+discover_leaf_config() {
     local local_subnet="$1"
     local mapping_file="/etc/ovn-bgp-agent/asn-mapping/mapping.json"
 
     if [ ! -f "$mapping_file" ]; then
-        echo "ERROR: Leaf ASN mapping file not found: $mapping_file" >&2
+        echo "ERROR: Leaf configuration mapping file not found: $mapping_file" >&2
         echo "Please ensure the ConfigMap 'ovn-bgp-agent-asn' exists" >&2
         return 1
     fi
@@ -116,21 +28,42 @@ discover_leaf_asn() {
         return 1
     fi
 
-    # Look up ASN for the subnet
-    local asn=$(jq -r --arg subnet "$local_subnet" '.[$subnet] // empty' "$mapping_file")
+    # Look up configuration for the subnet
+    local config=$(jq -r --arg subnet "$local_subnet" '.[$subnet] // empty' "$mapping_file")
 
-    if [ -z "$asn" ]; then
-        echo "ERROR: No Leaf ASN mapping found for subnet: $local_subnet" >&2
+    if [ -z "$config" ] || [ "$config" = "null" ]; then
+        echo "ERROR: No Leaf configuration found for subnet: $local_subnet" >&2
         echo "" >&2
         echo "Available mappings in ConfigMap:" >&2
-        jq -r 'to_entries[] | select(.key | startswith("_example_") | not) | "  \(.key) -> AS\(.value)"' "$mapping_file" >&2
+        jq -r 'to_entries[] | select(.key | startswith("_example_") | not) | "  \(.key) -> AS\(.value.asn) (IPv4: \(.value.ipv4_gateway), IPv6: \(.value.ipv6_gateway // "N/A"))"' "$mapping_file" >&2
         echo "" >&2
         echo "To add a mapping, edit the ConfigMap:" >&2
         echo "  kubectl -n {{ .Release.Namespace }} edit configmap ovn-bgp-agent-asn" >&2
         return 1
     fi
 
-    echo "$asn"
+    # Extract ASN
+    local asn=$(echo "$config" | jq -r '.asn // empty')
+    if [ -z "$asn" ]; then
+        echo "ERROR: ASN not found in configuration for subnet: $local_subnet" >&2
+        return 1
+    fi
+
+    # Extract IPv4 gateway (required)
+    local ipv4_gw=$(echo "$config" | jq -r '.ipv4_gateway // empty')
+    if [ -z "$ipv4_gw" ]; then
+        echo "ERROR: ipv4_gateway not found in configuration for subnet: $local_subnet" >&2
+        return 1
+    fi
+
+    # Extract IPv6 gateway (required if IPv6 enabled)
+    local ipv6_gw=$(echo "$config" | jq -r '.ipv6_gateway // empty')
+
+    # Extract description (optional)
+    local description=$(echo "$config" | jq -r '.description // empty')
+
+    # Return as space-separated values: ASN IPv4_GW IPv6_GW DESCRIPTION
+    echo "$asn|$ipv4_gw|$ipv6_gw|$description"
 }
 
 # Get local node information
@@ -155,38 +88,46 @@ if [ -z "$LOCAL_SUBNET" ]; then
     exit 1
 fi
 
-# Get Leaf peer IP configuration
-PEER_CONFIG="{{ .Values.bgp.peer_ip }}"
-
-if [ -z "$PEER_CONFIG" ] || [ "$PEER_CONFIG" = "detection" ]; then
-    read PEER_IPV4 DISCOVERY_METHOD <<< $(discover_gateway_auto "br-ex" "$LOCAL_IPV4")
-elif [ "$PEER_CONFIG" = "first" ]; then
-    read first_ip last_ip <<< $(get_subnet_info "$LOCAL_IPV4")
-    PEER_IPV4="$first_ip"
-    DISCOVERY_METHOD="first"
-elif [ "$PEER_CONFIG" = "last" ]; then
-    read first_ip last_ip <<< $(get_subnet_info "$LOCAL_IPV4")
-    PEER_IPV4="$last_ip"
-    DISCOVERY_METHOD="last"
-else
-    PEER_IPV4="$PEER_CONFIG"
-    DISCOVERY_METHOD="manual"
-fi
-
-# Discover Leaf ASN from ConfigMap
-PEER_ASN=$(discover_leaf_asn "$LOCAL_SUBNET")
-if [ -z "$PEER_ASN" ]; then
-    echo "ERROR: Failed to discover Leaf ASN for subnet $LOCAL_SUBNET"
+# Discover Leaf configuration from ConfigMap
+LEAF_CONFIG=$(discover_leaf_config "$LOCAL_SUBNET")
+if [ -z "$LEAF_CONFIG" ]; then
+    echo "ERROR: Failed to discover Leaf configuration for subnet $LOCAL_SUBNET"
     exit 1
 fi
 
-# Verify Leaf connectivity
+# Parse the configuration (use | as delimiter to handle empty fields)
+IFS='|' read -r PEER_ASN PEER_IPV4 PEER_IPV6 LEAF_DESCRIPTION <<< "$LEAF_CONFIG"
+
+if [ -z "$PEER_ASN" ] || [ -z "$PEER_IPV4" ]; then
+    echo "ERROR: Invalid Leaf configuration for subnet $LOCAL_SUBNET"
+    exit 1
+fi
+
+# Verify Leaf IPv4 connectivity
 PEER_REACHABLE="unknown"
 if ping -c 2 -W 2 "$PEER_IPV4" >/dev/null 2>&1; then
     PEER_REACHABLE="yes"
 else
     PEER_REACHABLE="no"
 fi
+
+{{- if .Values.bgp.ipv6.enabled }}
+# Verify IPv6 configuration
+if [ -z "$PEER_IPV6" ] || [ "$PEER_IPV6" = "null" ]; then
+    echo "ERROR: IPv6 enabled but no ipv6_gateway configured for subnet $LOCAL_SUBNET"
+    echo "Please edit the ConfigMap and add ipv6_gateway for this subnet:"
+    echo "  kubectl -n {{ .Release.Namespace }} edit configmap ovn-bgp-agent-asn"
+    exit 1
+fi
+
+# Verify IPv6 connectivity
+PEER_IPV6_REACHABLE="unknown"
+if ping6 -c 2 -W 2 "$PEER_IPV6" >/dev/null 2>&1; then
+    PEER_IPV6_REACHABLE="yes"
+else
+    PEER_IPV6_REACHABLE="no"
+fi
+{{- end }}
 
 {{- if .Values.bgp.evpn.enabled }}
 # EVPN Route Reflector configuration
@@ -214,17 +155,34 @@ cat <<EOF
 Node:           $NODE_NAME
 Interface:      br-ex ($LOCAL_IPV4)
 Subnet:         $LOCAL_SUBNET
+{{- if ne "$LEAF_DESCRIPTION" "" }}
+Description:    $LEAF_DESCRIPTION
+{{- end }}
 
 Local (Server):
   IPv4:         $LOCAL_IP
-  ASN:          $LOCAL_ASN (auto-generated)
+  ASN:          $LOCAL_ASN (auto-generated from IP)
   Router ID:    $ROUTER_ID
 
 Peer (Leaf Switch):
-  IPv4:         $PEER_IPV4
   ASN:          $PEER_ASN (from ConfigMap)
-  Discovery:    $DISCOVERY_METHOD
-  Reachable:    $PEER_REACHABLE
+  IPv4:         $PEER_IPV4 (from ConfigMap)
+  IPv4 Status:  $PEER_REACHABLE
+{{- if .Values.bgp.ipv6.enabled }}
+  IPv6:         $PEER_IPV6 (from ConfigMap)
+  IPv6 Status:  $PEER_IPV6_REACHABLE
+{{- end }}
+
+{{- if .Values.bgp.ipv6.enabled }}
+BGP Sessions:
+  Mode:         Dual-Stack
+  IPv4 Session: $LOCAL_IP <-> $PEER_IPV4
+  IPv6 Session: (local IPv6) <-> $PEER_IPV6
+{{- else }}
+BGP Sessions:
+  Mode:         IPv4 Only
+  IPv4 Session: $LOCAL_IP <-> $PEER_IPV4
+{{- end }}
 
 {{- if .Values.bgp.evpn.enabled }}
 EVPN Route Reflector:
@@ -237,9 +195,18 @@ EVPN Route Reflector:
 
 EOF
 
+# Warning messages
 if [ "$PEER_REACHABLE" != "yes" ]; then
-    echo "WARNING: Leaf switch $PEER_IPV4 is not reachable"
+    echo "WARNING: Leaf switch IPv4 $PEER_IPV4 is not reachable"
+    echo "         BGP session will not establish until connectivity is restored"
 fi
+
+{{- if .Values.bgp.ipv6.enabled }}
+if [ "$PEER_IPV6_REACHABLE" != "yes" ]; then
+    echo "WARNING: Leaf switch IPv6 $PEER_IPV6 is not reachable"
+    echo "         IPv6 BGP session will not establish until connectivity is restored"
+fi
+{{- end }}
 
 {{- if .Values.bgp.evpn.enabled }}
 if [ "$EVPN_RR_REACHABLE" != "yes" ]; then
@@ -250,6 +217,12 @@ fi
 # Export configuration for FRR
 export NODE_NAME LOCAL_IP LOCAL_ASN ROUTER_ID
 export PEER_IPV4 PEER_ASN
+{{- if .Values.bgp.ipv6.enabled }}
+export ENABLE_IPV6=true
+export PEER_IPV6
+{{- else }}
+export ENABLE_IPV6=false
+{{- end }}
 {{- if .Values.bgp.evpn.enabled }}
 export EVPN_RR_IP EVPN_RR_ASN EVPN_ENABLED=true
 {{- else }}

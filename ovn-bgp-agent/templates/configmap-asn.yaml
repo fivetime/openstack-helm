@@ -29,8 +29,8 @@ data:
   # {
   #   "subnet_cidr": {
   #     "asn": "Leaf BGP AS Number",
-  #     "ipv4_gateway": "IPv4 Gateway Address (optional, defaults to first IP)",
-  #     "ipv6_gateway": "IPv6 Gateway Address (required if ipv6.enabled=true)"
+  #     "ipv4": "IPv4 Gateway Address (optional, defaults to first IP)",
+  #     "ipv6": "IPv6 Gateway Address (required if ipv6.enabled=true)"
   #   }
   # }
   #
@@ -43,21 +43,21 @@ data:
   #   helm upgrade ovn-bgp-agent ...
   mapping.json: |
     {
-      {{- $mapping := .Values.bgp.leaf_mapping }}
+      {{- $mapping := .Values.bgp.tors }}
       {{- if $mapping }}
       {{- $keys := keys $mapping | sortAlpha }}
       {{- range $i, $subnet := $keys }}
       {{- $config := index $mapping $subnet }}
       "{{ $subnet }}": {
         "asn": "{{ $config.asn }}"
-        {{- if $config.ipv4_gateway }},
-        "ipv4_gateway": "{{ $config.ipv4_gateway }}"
+        {{- if $config.ipv4 }},
+        "ipv4": "{{ $config.ipv4 }}"
         {{- end }}
-        {{- if $config.ipv6_gateway }},
-        "ipv6_gateway": "{{ $config.ipv6_gateway }}"
+        {{- if $config.ipv6 }},
+        "ipv6": "{{ $config.ipv6 }}"
         {{- end }}
-        {{- if $config.description }},
-        "description": "{{ $config.description }}"
+        {{- if $config.desc }},
+        "desc": "{{ $config.desc }}"
         {{- end }}
       }{{- if ne $i (sub (len $keys) 1) }},{{- end }}
       {{- end }}
@@ -65,9 +65,9 @@ data:
       "_example_comment": "No mappings defined. Edit this ConfigMap to add Leaf switch mappings.",
       "_example_10.0.192.0/24": {
         "asn": "4200000100",
-        "ipv4_gateway": "10.0.192.1",
-        "ipv6_gateway": "fd00:1:2:3::1",
-        "description": "Rack1 - VLAN 13"
+        "ipv4": "10.0.192.1",
+        "ipv6": "fd00:1:2:3::1",
+        "desc": "Rack1 - VLAN 13"
       }
       {{- end }}
     }

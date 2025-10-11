@@ -65,6 +65,10 @@ spec:
             - name: pod-tmp
               mountPath: /tmp
             - name: ovn-bgp-agent-bin
+              mountPath: /tmp/ip-utils.sh
+              subPath: ip-utils.sh
+              readOnly: true
+            - name: ovn-bgp-agent-bin
               mountPath: /tmp/frr-init.sh
               subPath: frr-init.sh
               readOnly: true

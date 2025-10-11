@@ -1,14 +1,17 @@
 {{- if .Values.manifests.configmap_etc }}
 {{- $envAll := . }}
-{{- if not (hasKey .Values.conf.ovn_bgp_agent.DEFAULT "ovn_nb_connection") }}
+{{- if not (hasKey .Values.conf.ovn_bgp_agent "ovn") }}
+{{- $_ := set .Values.conf.ovn_bgp_agent "ovn" dict }}
+{{- end }}
+{{- if not (hasKey .Values.conf.ovn_bgp_agent.ovn "ovn_nb_connection") }}
 {{- $ovnNbHost := tuple "ovn_nb" "internal" . | include "helm-toolkit.endpoints.endpoint_host_lookup" }}
 {{- $ovnNbPort := tuple "ovn_nb" "internal" "nb" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-{{- $_ := set .Values.conf.ovn_bgp_agent.DEFAULT "ovn_nb_connection" (printf "tcp:%s:%s" $ovnNbHost $ovnNbPort) }}
+{{- $_ := set .Values.conf.ovn_bgp_agent.ovn "ovn_nb_connection" (printf "tcp:%s:%s" $ovnNbHost $ovnNbPort) }}
 {{- end }}
-{{- if not (hasKey .Values.conf.ovn_bgp_agent.DEFAULT "ovn_sb_connection") }}
+{{- if not (hasKey .Values.conf.ovn_bgp_agent.ovn "ovn_sb_connection") }}
 {{- $ovnSbHost := tuple "ovn_sb" "internal" . | include "helm-toolkit.endpoints.endpoint_host_lookup" }}
 {{- $ovnSbPort := tuple "ovn_sb" "internal" "sb" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-{{- $_ := set .Values.conf.ovn_bgp_agent.DEFAULT "ovn_sb_connection" (printf "tcp:%s:%s" $ovnSbHost $ovnSbPort) }}
+{{- $_ := set .Values.conf.ovn_bgp_agent.ovn "ovn_sb_connection" (printf "tcp:%s:%s" $ovnSbHost $ovnSbPort) }}
 {{- end }}
 ---
 apiVersion: v1

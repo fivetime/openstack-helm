@@ -19,16 +19,26 @@ source /tmp/pod-shared/bgp-config.env
 
 # Update config file
 cp /etc/ovn-bgp-agent/ovn-bgp-agent.conf /tmp/ovn-bgp-agent.conf
+
+# Update bgp_AS
 if grep -q "^bgp_AS" /tmp/ovn-bgp-agent.conf; then
     sed -i "s/^bgp_AS.*/bgp_AS = $BGP_AS/" /tmp/ovn-bgp-agent.conf
 else
     sed -i "/^\[DEFAULT\]/a bgp_AS = $BGP_AS" /tmp/ovn-bgp-agent.conf
 fi
 
+# Update bgp_router_id
 if grep -q "^bgp_router_id" /tmp/ovn-bgp-agent.conf; then
     sed -i "s/^bgp_router_id.*/bgp_router_id = $BGP_ROUTER_ID/" /tmp/ovn-bgp-agent.conf
 else
     sed -i "/^\[DEFAULT\]/a bgp_router_id = $BGP_ROUTER_ID" /tmp/ovn-bgp-agent.conf
+fi
+
+# Update evpn_local_ip
+if grep -q "^evpn_local_ip" /tmp/ovn-bgp-agent.conf; then
+    sed -i "s/^evpn_local_ip.*/evpn_local_ip = $EVPN_LOCAL_IP/" /tmp/ovn-bgp-agent.conf
+else
+    sed -i "/^\[DEFAULT\]/a evpn_local_ip = $EVPN_LOCAL_IP" /tmp/ovn-bgp-agent.conf
 fi
 
 # Dynamically set routing table ID

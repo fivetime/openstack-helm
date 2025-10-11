@@ -47,6 +47,7 @@ conf:
       bridge_mappings: external:br-ex
       # OVS connection
       ovsdb_connection: unix:/run/openvswitch/db.sock
+      ovsdb_connection_timeout: 180
       # Expose options
       expose_tenant_networks: false
       expose_ipv6_gua_tenant_networks: false
@@ -73,7 +74,7 @@ bgp:
   # Requirements:
   #   - br-ex must have IPv6 address configured
   #   - Leaf switch must support dual-stack BGP
-  #   - ipv6_gateway must be configured in leaf_mapping for each subnet
+  #   - ipv6 must be configured in ToR for each subnet
   ipv6:
     enabled: true
 
@@ -85,23 +86,23 @@ bgp:
   # Format per subnet:
   #   "subnet_cidr":
   #     asn: "Leaf BGP AS Number"
-  #     ipv4_gateway: "IPv4 Gateway Address" (required)
-  #     ipv6_gateway: "IPv6 Gateway Address" (required if ipv6.enabled=true)
-  #     description: "Human readable description" (optional)
+  #     ipv4: "IPv4 Gateway Address" (required)
+  #     ipv6: "IPv6 Gateway Address" (required if ipv6.enabled=true)
+  #     desc: "Human readable description" (optional)
   #
   # The subnet is matched against the br-ex interface's subnet.
   # Example: If br-ex has 10.0.192.115/20, it will match "10.0.192.0/20"
-  leaf_mapping:
+  tors:
     "10.0.192.0/20":
       asn: "4200000100"
-      ipv4_gateway: "10.0.192.1"
-      ipv6_gateway: "fd00:1:2:3::1"
-      description: "VLAN 13 - North-South Network"
+      ipv4: "10.0.192.1"
+      ipv6: "fd00:1:2:3::1"
+      desc: "Rack-1"
     "10.0.208.0/20":
       asn: "4200000100"
-      ipv4_gateway: "10.0.208.1"
-      ipv6_gateway: "fd00:1:2:4::1"
-      description: "VLAN 14 - East-West Network"
+      ipv4: "10.0.208.1"
+      ipv6: "fd00:1:2:4::1"
+      desc: "Rack-2"
 
   # EVPN Configuration
   evpn:

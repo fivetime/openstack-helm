@@ -8,6 +8,7 @@ mkdir -p /etc/frr
 # Generate daemons file
 cat > /etc/frr/daemons <<'DAEMONS_EOF'
 bgpd=yes
+bfdd=yes
 zebra=yes
 ospfd=no
 ospf6d=no
@@ -21,12 +22,11 @@ eigrpd=no
 babeld=no
 sharpd=no
 pbrd=no
-bfdd=no
 fabricd=no
 vrrpd=no
 
-zebra_options="  -A 127.0.0.1 -s 90000000"
 bgpd_options="   -A 127.0.0.1"
+zebra_options="  -A 127.0.0.1 -s 90000000 --vrfwnetns"
 DAEMONS_EOF
 
 # Generate main configuration file
@@ -50,16 +50,17 @@ MAIN_EOF
 cat >> /etc/frr/frr.conf <<PEER_IPV4_EOF
  !
  ! eBGP Peering to Leaf Switch (IPv4)
- neighbor LEAF-V4 peer-group
- neighbor LEAF-V4 remote-as ${PEER_ASN}
- neighbor LEAF-V4 description "LEAF-IPv4"
- neighbor LEAF-V4 update-source br-ex
- neighbor LEAF-V4 send-community all
- neighbor LEAF-V4 ebgp-multihop 10
- neighbor LEAF-V4 timers 3 10
- neighbor LEAF-V4 timers connect 10
+ neighbor LEAF-IPV4 peer-group
+ neighbor LEAF-IPV4 remote-as ${PEER_ASN}
+ neighbor LEAF-IPV4 description "LEAF-IPv4"
+ neighbor LEAF-IPV4 update-source br-ex
+ neighbor LEAF-IPV4 send-community all
+ neighbor LEAF-IPV4 ebgp-multihop 10
+ neighbor LEAF-IPV4 bfd
+ neighbor LEAF-IPV4 timers 3 10
+ neighbor LEAF-IPV4 timers connect 10
  !
- neighbor ${PEER_IPV4} peer-group LEAF-V4
+ neighbor ${PEER_IPV4} peer-group LEAF-IPV4
 PEER_IPV4_EOF
 
 # 如果启用 IPv6，添加 IPv6 Leaf 对等体配置
@@ -67,16 +68,17 @@ if [ "${ENABLE_IPV6:-false}" = "true" ]; then
     cat >> /etc/frr/frr.conf <<PEER_IPV6_EOF
  !
  ! eBGP Peering to Leaf Switch (IPv6)
- neighbor LEAF-V6 peer-group
- neighbor LEAF-V6 remote-as ${PEER_ASN}
- neighbor LEAF-V6 description "LEAF-IPv6"
- neighbor LEAF-V6 update-source br-ex
- neighbor LEAF-V6 send-community all
- neighbor LEAF-V6 ebgp-multihop 10
- neighbor LEAF-V6 timers 3 10
- neighbor LEAF-V6 timers connect 10
+ neighbor LEAF-IPV6 peer-group
+ neighbor LEAF-IPV6 remote-as ${PEER_ASN}
+ neighbor LEAF-IPV6 description "LEAF-IPv6"
+ neighbor LEAF-IPV6 update-source br-ex
+ neighbor LEAF-IPV6 send-community all
+ neighbor LEAF-IPV6 ebgp-multihop 10
+ neighbor LEAF-IPV6 bfd
+ neighbor LEAF-IPV6 timers 3 10
+ neighbor LEAF-IPV6 timers connect 10
  !
- neighbor ${PEER_IPV6} peer-group LEAF-V6
+ neighbor ${PEER_IPV6} peer-group LEAF-IPV6
 PEER_IPV6_EOF
 fi
 
@@ -87,8 +89,11 @@ if [ "$EVPN_ENABLED" = "true" ]; then
  ! iBGP to EVPN Route Reflector
  neighbor EVPN-RR peer-group
  neighbor EVPN-RR remote-as ${EVPN_RR_ASN}
- neighbor EVPN-RR description "EVPN-Route-Reflector"
- neighbor EVPN-RR update-source ${LOCAL_IP}
+ neighbor EVPN-RR description "EVPN-RR"
+ neighbor EVPN-RR update-source ${LOCAL_IPV4}
+ neighbor EVPN-RR send-community all
+ neighbor EVPN-RR ebgp-multihop 10
+ neighbor EVPN-RR bfd
  neighbor EVPN-RR timers 3 10
  neighbor EVPN-RR timers connect 10
  !
@@ -100,9 +105,10 @@ fi
 cat >> /etc/frr/frr.conf <<IPV4_AF_EOF
  !
  address-family ipv4 unicast
-  neighbor LEAF-V4 activate
-  neighbor LEAF-V4 next-hop-self
-  neighbor LEAF-V4 soft-reconfiguration inbound
+  network ${LOCAL_IPV4}/32
+  neighbor LEAF-IPV4 activate
+  neighbor LEAF-IPV4 next-hop-self
+  neighbor LEAF-IPV4 soft-reconfiguration inbound
   maximum-paths 4
  exit-address-family
 IPV4_AF_EOF
@@ -112,9 +118,10 @@ if [ "${ENABLE_IPV6:-false}" = "true" ]; then
     cat >> /etc/frr/frr.conf <<IPV6_AF_EOF
  !
  address-family ipv6 unicast
-  neighbor LEAF-V6 activate
-  neighbor LEAF-V6 next-hop-self
-  neighbor LEAF-V6 soft-reconfiguration inbound
+  network ${LOCAL_IPV6}/128
+  neighbor LEAF-IPV6 activate
+  neighbor LEAF-IPV6 next-hop-self
+  neighbor LEAF-IPV6 soft-reconfiguration inbound
   maximum-paths 4
  exit-address-family
 IPV6_AF_EOF

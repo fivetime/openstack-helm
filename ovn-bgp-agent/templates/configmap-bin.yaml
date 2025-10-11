@@ -20,6 +20,8 @@ kind: ConfigMap
 metadata:
   name: ovn-bgp-agent-bin
 data:
+  ip-utils.sh: |
+{{ tuple "bin/_ip-utils.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   ovn-bgp-agent.sh: |
 {{ tuple "bin/_ovn-bgp-agent.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   frr-init.sh: |

@@ -406,7 +406,10 @@ for bmap in `sed 's/[{}"]//g' /tmp/auto_bridge_add | tr "," "\n"`
 do
   bridge=${bmap%:*}
   iface=${bmap#*:}
-  ovs-vsctl --may-exist add-br $bridge -- set bridge $bridge protocols=OpenFlow13
+  # -------------- Modify by Simon Start --------------
+  ovs-vsctl --may-exist add-br $bridge      # Auto Negotiate
+  #ovs-vsctl --may-exist add-br $bridge -- set bridge $bridge protocols=OpenFlow13
+  # -------------- Modify by Simon End --------------
   if [ -n "$iface" ] && [ "$iface" != "null" ] && ( ip link show $iface 1>/dev/null 2>&1 );
   then
     ovs-vsctl --may-exist add-port $bridge $iface

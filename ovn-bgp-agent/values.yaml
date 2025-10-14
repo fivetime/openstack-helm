@@ -42,16 +42,28 @@ conf:
       debug: false
       use_stderr: true
       use_syslog: false
+      bgp_nic: bgp-nic
+      bgp_vrf: bgp-vrf
+      bgp_vrf_table_id: 10
+      reconcile_interval: 120
+      # Options: underlay | vrf | ovn
+      exposing_method: 'underlay'
       # Options: ovn_bgp_driver, nb_ovn_bgp_driver, ovn_evpn_driver, ovn_stretched_l2_bgp_driver
       driver: ovn_bgp_driver
-      bridge_mappings: external:br-ex
+      anycast_evpn_gateway_mode: false
       # OVS connection
       ovsdb_connection: unix:/run/openvswitch/db.sock
       ovsdb_connection_timeout: 180
       # Expose options
       expose_tenant_networks: false
-      expose_ipv6_gua_tenant_networks: false
+      expose_ipv6_gua_tenant_networks: true
+      require_snat_disabled_for_tenant_networks: false
       address_scopes: ""
+    local_ovn_cluster:
+      bgp_chassis_id: 'bgp'
+      external_nics: ['eth1', 'eth2']
+      ovn_nb_connection: 'unix:/run/ovn/ovnnb_db.sock'
+      ovn_sb_connection: 'unix:/run/ovn/ovnsb_db.sock'
     privsep:
       helper_command: "sudo /install/local/bin/privsep-helper"
 
@@ -107,10 +119,10 @@ bgp:
   # EVPN Configuration
   evpn:
     enabled: false
-    # Route Reflector IP (usually Spine loopback)
-    rr_ip: ""
-    # Route Reflector ASN (usually 16-bit private ASN 64512-65534)
-    rr_asn: ""
+    # Route Reflector IP
+    rr_ip: "172.17.0.0"
+    # Route Reflector ASN
+    rr_asn: "4200000000"
 
 # Networking
 network:
@@ -137,6 +149,22 @@ pod:
           runAsUser: 0
           privileged: true
           readOnlyRootFilesystem: false
+        ovn_northd:
+          runAsUser: 0
+          privileged: true
+          readOnlyRootFilesystem: false
+        ovn_controller:
+          runAsUser: 0
+          privileged: true
+          readOnlyRootFilesystem: false
+        init_local_ovn:
+          runAsUser: 0
+          privileged: true
+          readOnlyRootFilesystem: false
+        init_frr_config:
+          runAsUser: 0
+          privileged: true
+          readOnlyRootFilesystem: false
 
   tolerations:
     ovn_bgp_agent:
@@ -156,6 +184,13 @@ pod:
       frr:
         volumeMounts: []
         volumes: []
+      ovn_northd:
+        volumeMounts: []
+        volumes: []
+      ovn_controller:
+        volumeMounts: []
+        volumes: []
+
   lifecycle:
     upgrades:
       daemonsets:
@@ -167,6 +202,63 @@ pod:
     termination_grace_period:
       ovn_bgp_agent:
         timeout: 30
+
+  probes:
+    ovn_bgp_agent:
+      ovn_northd:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            periodSeconds: 30
+      ovn_controller:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            periodSeconds: 30
+      ovn_bgp_agent:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            periodSeconds: 10
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 30
+      frr:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            periodSeconds: 10
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
   resources:
     enabled: false
     ovn_bgp_agent:
@@ -183,6 +275,27 @@ pod:
       limits:
         memory: "2Gi"
         cpu: "2000m"
+    ovn_northd:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    ovn_controller:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    init:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
     jobs:
       image_repo_sync:
         requests:

@@ -26,7 +26,7 @@ fabricd=no
 vrrpd=no
 
 bgpd_options="   -A 127.0.0.1"
-zebra_options="  -A 127.0.0.1 -s 90000000 --vrfwnetns"
+zebra_options="  -A 127.0.0.1 -s 90000000"
 DAEMONS_EOF
 
 # Generate main configuration file

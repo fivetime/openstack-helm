@@ -343,10 +343,14 @@ echo ""
 echo "FRR configuration initialized successfully"
 
 # 导出给 ovn-bgp-agent
-cat > /tmp/pod-shared/bgp-config.env <<EOF
+cat > /tmp/pod-shared/bgp-config.env << EOF
 BGP_AS=$LOCAL_ASN
 BGP_ROUTER_ID=$ROUTER_ID
-EVPN_LOCAL_IP=$LOCAL_IPV4
+LOCAL_SUBNET=$LOCAL_SUBNET
+PEER_IPV4=$PEER_IPV4
+{{- if .Values.bgp.evpn.enabled }}
+EVPN_LOCAL_IP=$EVPN_LOCAL_IP
+{{- end }}
 EOF
 
 echo "BGP configuration exported to ovn-bgp-agent"

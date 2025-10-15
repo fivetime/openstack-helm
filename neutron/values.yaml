@@ -2089,6 +2089,8 @@ conf:
     taas:
       taas:
         enabled: False
+    bgpvpn:
+      enabled: False
     openvswitch_agent:
       agent:
         tunnel_types: vxlan

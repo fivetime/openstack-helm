@@ -45,7 +45,7 @@ helm3_hook: true
 images:
   tags:
     bootstrap: quay.io/airshipit/heat:2025.1-ubuntu_noble
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_focal
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
     db_init: quay.io/airshipit/heat:2025.1-ubuntu_noble
     manila_db_sync: quay.io/airshipit/manila:2025.1-ubuntu_noble
     db_drop: quay.io/airshipit/heat:2025.1-ubuntu_noble
@@ -866,6 +866,8 @@ conf:
       thunder-lock: true
       worker-reload-mercy: 80
       module: "manila.wsgi.api:application"
+      stats: 0.0.0.0:1717
+      stats-http: true
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:

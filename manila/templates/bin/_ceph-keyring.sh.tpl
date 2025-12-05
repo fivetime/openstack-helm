@@ -14,14 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-set -x
+set -ex
+export HOME=/tmp
 
-exec neutron-ovn-metadata-agent \
-      --config-file /etc/neutron/neutron.conf \
-      --config-file /etc/neutron/ovn_metadata_agent.ini \
-{{- if and ( empty .Values.conf.neutron.DEFAULT.host ) ( .Values.pod.use_fqdn.neutron_agent ) }}
-  --config-file /tmp/pod-shared/neutron-agent.ini \
-{{- end }}
-      --config-file /tmp/pod-shared/ovn.ini \
-      --config-dir /etc/neutron/neutron.conf.d
-
+cat > /etc/ceph/ceph.client.manila.keyring <<EOF
+[client.manila]
+    key = $(cat /tmp/client-keyring)
+EOF

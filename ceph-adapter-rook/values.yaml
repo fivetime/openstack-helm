@@ -16,6 +16,10 @@ labels:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
 
+tolerations:
+  job:
+    - operator: "Exists"
+
 pod:
   security_context:
     namespace_client_key:

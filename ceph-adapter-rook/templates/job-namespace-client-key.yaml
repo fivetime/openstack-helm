@@ -101,6 +101,10 @@ spec:
       restartPolicy: OnFailure
       nodeSelector:
         {{ $envAll.Values.labels.job.node_selector_key }}: {{ $envAll.Values.labels.job.node_selector_value }}
+{{- if $envAll.Values.tolerations.job }}
+      tolerations:
+{{ $envAll.Values.tolerations.job | toYaml | indent 8 }}
+{{- end }}
       initContainers:
 {{ tuple $envAll "namespace-client-key-init" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:

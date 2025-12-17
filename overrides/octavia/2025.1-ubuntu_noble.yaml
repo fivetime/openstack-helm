@@ -1,103 +1,28 @@
 ---
 images:
   tags:
-    db_init: "quay.io/airshipit/heat:2025.1-ubuntu_noble"
-    db_drop: "quay.io/airshipit/heat:2025.1-ubuntu_noble"
-    ks_user: "quay.io/airshipit/heat:2025.1-ubuntu_noble"
-    bootstrap: "quay.io/airshipit/heat:2025.1-ubuntu_noble"
-    ks_service: "quay.io/airshipit/heat:2025.1-ubuntu_noble"
-    ks_endpoints: "quay.io/airshipit/heat:2025.1-ubuntu_noble"
-
-    octavia_api: docker.io/kolla/octavia-api:2025.1-ubuntu-noble
-    octavia_db_sync: docker.io/kolla/octavia-api:2025.1-ubuntu-noble
-    octavia_worker: docker.io/kolla/octavia-worker:2025.1-ubuntu-noble
-    octavia_driver_agent: docker.io/kolla/octavia-driver-agent:2025.1-ubuntu-noble
-    octavia_housekeeping: docker.io/kolla/octavia-housekeeping:2025.1-ubuntu-noble
-    octavia_health_manager: docker.io/kolla/octavia-health-manager:2025.1-ubuntu-noble
-    octavia_health_manager_init: docker.io/kolla/octavia-health-manager:2025.1-ubuntu-noble
-    openvswitch_vswitchd: docker.io/kolla/openvswitch-vswitchd:2025.1-ubuntu-noble
-
-    #octavia_api: quay.io/openstack.kolla/octavia-api:2025.1-ubuntu-noble
-    #octavia_db_sync: quay.io/openstack.kolla/octavia-api:2025.1-ubuntu-noble
-    #octavia_worker: quay.io/openstack.kolla/octavia-worker:2025.1-ubuntu-noble
-    #octavia_driver_agent: quay.io/openstack.kolla/octavia-driver-agent:2025.1-ubuntu-noble
-    #octavia_housekeeping: quay.io/openstack.kolla/octavia-housekeeping:2025.1-ubuntu-noble
-    #octavia_health_manager: quay.io/openstack.kolla/octavia-health-manager:2025.1-ubuntu-noble
-    #octavia_health_manager_init: quay.io/openstack.kolla/octavia-health-manager:2025.1-ubuntu-noble
-    #openvswitch_vswitchd: quay.io/openstack.kolla/openvswitch-vswitchd:2025.1-ubuntu-noble
-
-    image_repo_sync: docker.io/docker:28.1.1
-    test: docker.io/xrally/xrally-openstack:3.0.0
-    rabbit_init: "docker.io/rabbitmq:3.13-management"
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
-pod:
-  mounts:
-    octavia_api:
-      octavia_api:
-        volumeMounts:
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/private/cakey.pem
-            subPath: cakey.pem
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/ca_01.pem
-            subPath: ca_01.pem
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/client.pem
-            subPath: client.pem
-        volumes:
-          - name: octavia-certs
-            secret:
-              secretName: octavia-certs
-              defaultMode: 0644
-    octavia_worker:
-      octavia_worker:
-        volumeMounts:
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/private/cakey.pem
-            subPath: cakey.pem
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/ca_01.pem
-            subPath: ca_01.pem
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/client.pem
-            subPath: client.pem
-        volumes:
-          - name: octavia-certs
-            secret:
-              secretName: octavia-certs
-              defaultMode: 0644
-    octavia_housekeeping:
-      octavia_housekeeping:
-        volumeMounts:
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/private/cakey.pem
-            subPath: cakey.pem
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/ca_01.pem
-            subPath: ca_01.pem
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/client.pem
-            subPath: client.pem
-        volumes:
-          - name: octavia-certs
-            secret:
-              secretName: octavia-certs
-              defaultMode: 0644
-    octavia_health_manager:
-      octavia_health_manager:
-        volumeMounts:
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/private/cakey.pem
-            subPath: cakey.pem
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/ca_01.pem
-            subPath: ca_01.pem
-          - name: octavia-certs
-            mountPath: /etc/octavia/certs/client.pem
-            subPath: client.pem
-        volumes:
-          - name: octavia-certs
-            secret:
-              secretName: octavia-certs
-              defaultMode: 0644
+    test: docker.io/xrally/xrally-openstack:2.0.0
+    bootstrap: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    db_init: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    octavia_db_sync: quay.io/airshipit/octavia:2025.1-ubuntu_noble
+    db_drop: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    rabbit_init: docker.io/rabbitmq:3.13-management
+    ks_user: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    ks_service: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    ks_endpoints: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
+    image_repo_sync: docker.io/docker:17.07.0
+    octavia_api: quay.io/airshipit/octavia:2025.1-ubuntu_noble
+    octavia_driver_agent: quay.io/airshipit/octavia:2025.1-ubuntu_noble
+    octavia_worker: quay.io/airshipit/octavia:2025.1-ubuntu_noble
+    octavia_worker_init: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
+    octavia_housekeeping: quay.io/airshipit/octavia:2025.1-ubuntu_noble
+    octavia_health_manager: quay.io/airshipit/octavia:2025.1-ubuntu_noble
+    octavia_health_manager_init: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
+    openvswitch_vswitchd: docker.io/openstackhelm/openvswitch:latest-ubuntu_noble
+conf:
+  octavia_api_uwsgi:
+    uwsgi:
+      # in 2025.2 the wsgi script was removed
+      wsgi-file: /var/lib/openstack/bin/octavia-wsgi
 ...

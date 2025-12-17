@@ -13,73 +13,10 @@ images:
     neutron_l2gw: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
     neutron_linuxbridge_agent: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
     neutron_metadata: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
-    neutron_ovn_db_sync: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
     neutron_ovn_metadata: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
     neutron_openvswitch_agent: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
     neutron_server: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
     neutron_rpc_server: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
     neutron_bagpipe_bgp: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
     neutron_netns_cleanup_cron: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
-    neutron_ovn_vpn: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
-    neutron_bgp_dragent: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
-    neutron_ironic_agent: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
-    neutron_sriov_agent: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
-    neutron_sriov_agent_init: "quay.io/airshipit/neutron:2025.1-ubuntu_noble"
-
-    image_repo_sync: docker.io/docker:28.1.1
-    test: docker.io/xrally/xrally-openstack:3.0.0
-    purge_test: "docker.io/openstackhelm/ospurge:latest"
-    rabbit_init: "docker.io/rabbitmq:3.13-management"
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
-    netoffload: "ghcr.io/vexxhost/netoffload:v1.0.1"
-labels:
-  agent:
-    l3:
-      node_selector_key: l3-agent
-      node_selector_value: enabled
-    dhcp:
-      node_selector_key: openstack-network-node
-      node_selector_value: enabled
-    metadata:
-      node_selector_key: openstack-compute-node
-      node_selector_value: enabled
-    l2gw:
-      node_selector_key: openstack-network-node
-      node_selector_value: enabled
-    ovn_vpn:
-      node_selector_key: openstack-network-node
-      node_selector_value: enabled
-  job:
-    node_selector_key: openstack-control-plane
-    node_selector_value: enabled
-  lb:
-    node_selector_key: linuxbridge
-    node_selector_value: enabled
-  ovs:
-    node_selector_key: openvswitch
-    node_selector_value: enabled
-  sriov:
-    node_selector_key: sriov
-    node_selector_value: enabled
-  bagpipe_bgp:
-    node_selector_key: openstack-compute-node
-    node_selector_value: enabled
-  bgp_dragent:
-    node_selector_key: openstack-compute-node
-    node_selector_value: enabled
-  server:
-    node_selector_key: openstack-control-plane
-    node_selector_value: enabled
-  rpc_server:
-    node_selector_key: openstack-control-plane
-    node_selector_value: enabled
-  ironic_agent:
-    node_selector_key: openstack-control-plane
-    node_selector_value: enabled
-  netns_cleanup_cron:
-    node_selector_key: openstack-network-node
-    node_selector_value: enabled
-  test:
-    node_selector_key: openstack-control-plane
-    node_selector_value: enabled
 ...

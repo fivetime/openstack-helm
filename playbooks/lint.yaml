@@ -17,10 +17,8 @@
   roles:
     - ensure-python
     - ensure-pip
-    - name: ensure-helm
-      helm_version: "3.16.4"
-    - name: ensure-chart-testing
-      chart_testing_version: "3.11.0"
+    - ensure-helm
+    - ensure-chart-testing
     - name: chart-testing
       chart_testing_options: "--target-branch=master --chart-dirs=. --validate-maintainers=false --check-version-increment=false"
       zuul_work_dir: "{{ work_dir }}"

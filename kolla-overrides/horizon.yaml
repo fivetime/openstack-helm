@@ -1,0 +1,42 @@
+conf:
+  horizon:
+    apache: |
+      Listen 0.0.0.0:{{ tuple "dashboard" "internal" "web" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+      
+      LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
+      LogFormat "%{X-Forwarded-For}i %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" proxy
+
+      SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+      CustomLog /dev/stdout combined env=!forwarded
+      CustomLog /dev/stdout proxy env=forwarded
+
+      <VirtualHost *:{{ tuple "dashboard" "internal" "web" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}>
+          WSGIApplicationGroup %{GLOBAL}
+          WSGIScriptReloading On
+          WSGIDaemonProcess horizon-http processes=5 threads=1 user=horizon group=horizon display-name=%{GROUP}
+          WSGIProcessGroup horizon-http
+          WSGIScriptAlias / /var/www/cgi-bin/horizon/django.wsgi
+          WSGIPassAuthorization On
+          RewriteEngine on
+          RewriteCond %{REQUEST_METHOD} !^(POST|PUT|GET|DELETE|PATCH)
+          RewriteRule .* - [F]
+
+          <Location "/">
+              Require all granted
+          </Location>
+
+          Alias /static /var/www/html/horizon
+          <Location "/static">
+              SetHandler static
+          </Location>
+
+          <IfVersion >= 2.4>
+            ErrorLogFormat "%{cu}t %M"
+          </IfVersion>
+          ErrorLog /dev/stdout
+          TransferLog /dev/stdout
+
+          SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+          CustomLog /dev/stdout combined env=!forwarded
+          CustomLog /dev/stdout proxy env=forwarded
+      </VirtualHost>

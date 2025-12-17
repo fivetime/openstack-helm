@@ -42,9 +42,9 @@ conf:
       debug: false
       use_stderr: true
       use_syslog: false
-      bgp_nic: bgp-nic
-      bgp_vrf: bgp-vrf
-      bgp_vrf_table_id: 10
+      #bgp_nic: bgp-nic
+      #bgp_vrf: bgp-vrf
+      #bgp_vrf_table_id: 10
       reconcile_interval: 120
       # Options: underlay | vrf | ovn
       exposing_method: 'underlay'
@@ -58,7 +58,7 @@ conf:
       expose_tenant_networks: false
       expose_ipv6_gua_tenant_networks: true
       require_snat_disabled_for_tenant_networks: false
-      address_scopes: ""
+      #address_scopes: ""
     local_ovn_cluster:
       bgp_chassis_id: 'bgp'
       external_nics: ['eth1', 'eth2']

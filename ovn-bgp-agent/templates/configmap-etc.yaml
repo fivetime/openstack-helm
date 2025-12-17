@@ -13,6 +13,14 @@
 {{- $ovnSbPort := tuple "ovn_sb" "internal" "sb" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
 {{- $_ := set .Values.conf.ovn_bgp_agent.ovn "ovn_sb_connection" (printf "tcp:%s:%s" $ovnSbHost $ovnSbPort) }}
 {{- end }}
+{{- /* Remove local_ovn_cluster section if exposing_method is not 'ovn' */ -}}
+{{- if and (hasKey .Values.conf.ovn_bgp_agent "DEFAULT") (hasKey .Values.conf.ovn_bgp_agent.DEFAULT "exposing_method") }}
+{{- if ne .Values.conf.ovn_bgp_agent.DEFAULT.exposing_method "ovn" }}
+{{- if hasKey .Values.conf.ovn_bgp_agent "local_ovn_cluster" }}
+{{- $_ := unset .Values.conf.ovn_bgp_agent "local_ovn_cluster" }}
+{{- end }}
+{{- end }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap

@@ -16,7 +16,7 @@ limitations under the License.
 {{- $envAll := . }}
 
 {{- $serviceAccountName := printf "%s-%s" $envAll.Release.Name "namespace-client-key" }}
-{{ tuple $envAll "namespace_client_key" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "namespace-client-key" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

@@ -79,7 +79,6 @@ subjects:
     name: {{ $serviceAccountName }}
     namespace: {{ $envAll.Release.Namespace }}
 {{- end }}
-{{- /* External mode doesn't need cross-namespace access for config */ -}}
 ---
 apiVersion: batch/v1
 kind: Job

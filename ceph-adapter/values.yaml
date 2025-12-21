@@ -1,0 +1,215 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+images:
+  pull_policy: IfNotPresent
+  tags:
+    ceph_config_helper: 'quay.io/openstack.kolla/ceph-config-helper:2024.1-ubuntu-jammy'
+    dep_check: 'quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy'
+    image_repo_sync: 'docker.io/library/docker:17.07.0'
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+labels:
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+tolerations:
+  job:
+    - operator: "Exists"
+
+pod:
+  security_context:
+    namespace_client_key:
+      pod:
+        runAsUser: 65534
+        runAsNonRoot: true
+      container:
+        namespace_client_key:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+    namespace_client_ceph_config:
+      pod:
+        runAsUser: 65534
+        runAsNonRoot: true
+      container:
+        namespace_client_ceph_config:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+  dns_policy: "ClusterFirstWithHostNet"
+  resources:
+    enabled: false
+    jobs:
+      namespace_client_key:
+        limits:
+          memory: "128Mi"
+          cpu: "500m"
+        requests:
+          memory: "64Mi"
+          cpu: "100m"
+      namespace_client_ceph_config:
+        limits:
+          memory: "128Mi"
+          cpu: "500m"
+        requests:
+          memory: "64Mi"
+          cpu: "100m"
+
+# =============================================================================
+# Deployment Mode Configuration
+# =============================================================================
+#
+# Three deployment modes are supported:
+#
+#   provider: Local Rook-Ceph cluster with full management access.
+#             Auto-discovers mon_host and exports admin keyring.
+#             Supports OpenStack storage-init jobs (user/pool creation).
+#             This is the default mode for backward compatibility.
+#
+#   consumer: Rook-Ceph external/consumer cluster.
+#             Auto-discovers mon_host from imported Rook resources.
+#             Exports CSI provisioner keyring (limited permissions).
+#             Requires pools and users to be pre-created on provider.
+#
+#   external: Non-Rook Ceph cluster (cephadm, manual deployment, etc.).
+#             Requires manual configuration of mon_host and keyring.
+#             No Rook Operator or CSI driver in the cluster.
+#
+deployment:
+  # Mode: provider | consumer | external
+  mode: provider
+
+# =============================================================================
+# Provider Mode Configuration
+# =============================================================================
+# Used when deployment.mode is "provider"
+# For local Rook-Ceph clusters with full administrative access
+#
+provider:
+  # Namespace where Rook-Ceph cluster is deployed
+  cluster_namespace: rook-ceph
+
+  # Rook mon endpoints configmap name for mon_host discovery
+  mon_endpoints_configmap: rook-ceph-mon-endpoints
+
+  # Rook mon secret name containing admin keyring
+  admin_secret: rook-ceph-mon
+
+# =============================================================================
+# Consumer Mode Configuration
+# =============================================================================
+# Used when deployment.mode is "consumer"
+# For Rook-Ceph external/consumer clusters connected to a provider cluster
+#
+consumer:
+  # Namespace where Rook-Ceph external cluster resources are deployed
+  cluster_namespace: rook-ceph
+
+  # Rook mon endpoints configmap name (imported from provider)
+  mon_endpoints_configmap: rook-ceph-mon-endpoints
+
+  # Rook CSI provisioner secret name (imported from provider)
+  csi_rbd_provisioner_secret: rook-csi-rbd-provisioner
+
+# =============================================================================
+# External Mode Configuration
+# =============================================================================
+# Used when deployment.mode is "external"
+# For non-Rook Ceph clusters (cephadm, manual deployment, etc.)
+#
+external:
+  # Ceph monitor hosts (required for external mode)
+  # Format: "IP1:PORT1,IP2:PORT2,IP3:PORT3" or "IP1:PORT1 IP2:PORT2 IP3:PORT3"
+  mon_host: ""
+
+  # Ceph client keyring configuration
+  keyring:
+    # Option 1: Provide key directly (plain text)
+    key: ""
+
+    # Option 2: Reference an existing secret
+    secret_ref:
+      # Name of the existing secret containing the keyring
+      name: ""
+      # Namespace of the existing secret (defaults to deployment namespace)
+      namespace: ""
+      # Key within the secret that contains the keyring
+      key: "key"
+
+  # Ceph user name associated with the keyring
+  ceph_user: "admin"
+
+# =============================================================================
+# Output Resources Configuration
+# =============================================================================
+# These resources will be created in the deployment namespace
+# for consumption by OpenStack services (Cinder, Nova, Glance, etc.)
+#
+output:
+  # Secret name for the Ceph client keyring
+  secret_name: pvc-ceph-client-key
+
+  # ConfigMap name for ceph.conf
+  configmap_name: ceph-etc
+
+# =============================================================================
+# Additional ceph.conf Settings
+# =============================================================================
+# These settings are merged with auto-discovered values (mon_host)
+#
+conf:
+  ceph:
+    global:
+      auth_cluster_required: cephx
+      auth_service_required: cephx
+      auth_client_required: cephx
+    # Additional sections can be added here, for example:
+    # client:
+    #   rbd_cache: "true"
+    #   rbd_cache_size: "134217728"
+
+# =============================================================================
+# Job Dependencies
+# =============================================================================
+dependencies:
+  dynamic:
+    targeted:
+      rook_ceph_cluster:
+        namespace_client_key:
+          jobs: null
+        namespace_client_ceph_config:
+          jobs: null
+  static:
+    namespace_client_key:
+      jobs: null
+    namespace_client_ceph_config:
+      jobs: null
+
+# =============================================================================
+# Manifests
+# =============================================================================
+manifests:
+  configmap_bin: true
+  job_namespace_client_key: true
+  job_namespace_client_ceph_config: true
+...

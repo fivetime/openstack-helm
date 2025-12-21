@@ -47,21 +47,21 @@ subjects:
   - kind: ServiceAccount
     name: {{ $serviceAccountName }}
     namespace: {{ $envAll.Release.Namespace }}
-{{- if eq .Values.deployment.mode "provider" }}
+{{- if or (eq .Values.cluster.mode "provider") (eq .Values.cluster.mode "consumer") }}
 ---
-# Provider mode: Read mon endpoints from Rook namespace
+# Provider/Consumer mode: Read mon endpoints from Rook namespace
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $serviceAccountName }}
-  namespace: {{ .Values.provider.cluster_namespace }}
+  namespace: {{ .Values.cluster.namespace }}
 rules:
   - apiGroups:
       - ""
     resources:
       - configmaps
     resourceNames:
-      - {{ .Values.provider.mon_endpoints_configmap }}
+      - {{ .Values.cluster.mon_endpoints_configmap }}
     verbs:
       - get
 ---
@@ -69,38 +69,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ $serviceAccountName }}
-  namespace: {{ .Values.provider.cluster_namespace }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ $serviceAccountName }}
-subjects:
-  - kind: ServiceAccount
-    name: {{ $serviceAccountName }}
-    namespace: {{ $envAll.Release.Namespace }}
-{{- else if eq .Values.deployment.mode "consumer" }}
----
-# Consumer mode: Read mon endpoints from Rook namespace
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ $serviceAccountName }}
-  namespace: {{ .Values.consumer.cluster_namespace }}
-rules:
-  - apiGroups:
-      - ""
-    resources:
-      - configmaps
-    resourceNames:
-      - {{ .Values.consumer.mon_endpoints_configmap }}
-    verbs:
-      - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ $serviceAccountName }}
-  namespace: {{ .Values.consumer.cluster_namespace }}
+  namespace: {{ .Values.cluster.namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

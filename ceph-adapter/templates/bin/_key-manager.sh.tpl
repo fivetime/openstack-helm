@@ -20,12 +20,12 @@ set -ex
 SECRET_NAME="{{ .Values.output.secret_name }}"
 DEPLOYMENT_NAMESPACE="${DEPLOYMENT_NAMESPACE:-{{ $envAll.Release.Namespace }}}"
 
-{{- if eq .Values.deployment.mode "provider" }}
+{{- if eq .Values.cluster.mode "provider" }}
 # =============================================================================
 # Provider Mode: Local Rook-Ceph cluster with admin access
 # =============================================================================
-CLUSTER_NAMESPACE="{{ .Values.provider.cluster_namespace }}"
-ADMIN_SECRET="{{ .Values.provider.admin_secret }}"
+CLUSTER_NAMESPACE="{{ .Values.cluster.namespace }}"
+ADMIN_SECRET="{{ .Values.cluster.admin_secret }}"
 CEPH_USER="admin"
 
 echo "Mode: provider"
@@ -45,12 +45,12 @@ fi
 
 echo "Successfully retrieved admin keyring from Rook"
 
-{{- else if eq .Values.deployment.mode "consumer" }}
+{{- else if eq .Values.cluster.mode "consumer" }}
 # =============================================================================
 # Consumer Mode: Rook-Ceph external cluster with CSI access
 # =============================================================================
-CLUSTER_NAMESPACE="{{ .Values.consumer.cluster_namespace }}"
-CSI_SECRET="{{ .Values.consumer.csi_rbd_provisioner_secret }}"
+CLUSTER_NAMESPACE="{{ .Values.cluster.namespace }}"
+CSI_SECRET="{{ .Values.cluster.csi_secret }}"
 CEPH_USER="csi-rbd-provisioner"
 
 echo "Mode: consumer"
@@ -69,20 +69,20 @@ fi
 
 echo "Successfully retrieved CSI provisioner keyring from Rook"
 
-{{- else if eq .Values.deployment.mode "external" }}
+{{- else if eq .Values.cluster.mode "external" }}
 # =============================================================================
 # External Mode: Non-Rook Ceph cluster with manual configuration
 # =============================================================================
-CEPH_USER="{{ .Values.external.ceph_user }}"
+CEPH_USER="{{ .Values.cluster.user }}"
 
 echo "Mode: external"
 
-{{- if .Values.external.keyring.secret_ref.name }}
+{{- if .Values.cluster.keyring.secret_ref.name }}
 # Get keyring from existing secret reference
-EXTERNAL_SECRET_NAME="{{ .Values.external.keyring.secret_ref.name }}"
-EXTERNAL_SECRET_KEY="{{ .Values.external.keyring.secret_ref.key | default "key" }}"
-{{- if .Values.external.keyring.secret_ref.namespace }}
-EXTERNAL_SECRET_NAMESPACE="{{ .Values.external.keyring.secret_ref.namespace }}"
+EXTERNAL_SECRET_NAME="{{ .Values.cluster.keyring.secret_ref.name }}"
+EXTERNAL_SECRET_KEY="{{ .Values.cluster.keyring.secret_ref.key | default "key" }}"
+{{- if .Values.cluster.keyring.secret_ref.namespace }}
+EXTERNAL_SECRET_NAMESPACE="{{ .Values.cluster.keyring.secret_ref.namespace }}"
 {{- else }}
 EXTERNAL_SECRET_NAMESPACE="${DEPLOYMENT_NAMESPACE}"
 {{- end }}
@@ -101,18 +101,18 @@ fi
 
 echo "Successfully retrieved keyring from external secret"
 
-{{- else if .Values.external.keyring.key }}
+{{- else if .Values.cluster.keyring.key }}
 # Use directly provided keyring
-CEPH_CLIENT_KEY="{{ .Values.external.keyring.key }}"
+CEPH_CLIENT_KEY="{{ .Values.cluster.keyring.key }}"
 echo "Using directly provided keyring"
 
 {{- else }}
-echo "ERROR: External mode requires either keyring.key or keyring.secret_ref.name"
+echo "ERROR: External mode requires either cluster.keyring.key or cluster.keyring.secret_ref.name"
 exit 1
 {{- end }}
 
 {{- else }}
-echo "ERROR: Invalid deployment mode '{{ .Values.deployment.mode }}'"
+echo "ERROR: Invalid cluster mode '{{ .Values.cluster.mode }}'"
 echo "       Valid modes: provider, consumer, external"
 exit 1
 {{- end }}

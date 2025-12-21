@@ -29,18 +29,26 @@
 #   - Network connectivity to Ceph monitors
 #
 # Deploy with:
+#   # First create the keyring secret:
+#   kubectl -n openstack create secret generic external-ceph-keyring \
+#     --from-literal=key="AQDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxQ=="
+#
+#   # Then deploy:
 #   helm upgrade --install ceph-adapter-rook ./ceph-adapter-rook \
 #     --namespace=openstack \
 #     --create-namespace \
-#     -f examples/external-mode.yaml
+#     --set cluster.mode=external \
+#     --set cluster.mon_host="10.0.0.1:6789,10.0.0.2:6789,10.0.0.3:6789" \
+#     --set cluster.keyring.secret_ref.name=external-ceph-keyring
 
-deployment:
+cluster:
   mode: external
 
-external:
   # Ceph monitor hosts (required)
-  # Format: comma-separated or space-separated
   mon_host: "10.0.0.1:6789,10.0.0.2:6789,10.0.0.3:6789"
+
+  # Ceph user name
+  user: admin
 
   # Keyring configuration (one of the following is required)
   keyring:
@@ -48,22 +56,13 @@ external:
     # key: "AQDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxQ=="
 
     # Option 2: Reference an existing secret (recommended for production)
-    # First create the secret:
-    #   kubectl -n openstack create secret generic external-ceph-keyring \
-    #     --from-literal=key="AQDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxQ=="
     secret_ref:
       name: external-ceph-keyring
       # namespace: ""  # Optional: defaults to deployment namespace
       key: key
 
-  # Ceph user name associated with the keyring
-  ceph_user: admin
-
 output:
-  # Secret name for the Ceph client keyring
   secret_name: pvc-ceph-client-key
-
-  # ConfigMap name for ceph.conf
   configmap_name: ceph-etc
 
 conf:
@@ -72,8 +71,4 @@ conf:
       auth_cluster_required: cephx
       auth_service_required: cephx
       auth_client_required: cephx
-    # Optional: Add client-specific settings
-    # client:
-    #   rbd_cache: "true"
-    #   rbd_cache_size: "134217728"
 ...

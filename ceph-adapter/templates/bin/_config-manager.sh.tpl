@@ -20,14 +20,14 @@ set -ex
 CONFIGMAP_NAME="{{ .Values.output.configmap_name }}"
 DEPLOYMENT_NAMESPACE="${DEPLOYMENT_NAMESPACE:-{{ $envAll.Release.Namespace }}}"
 
-{{- if eq .Values.deployment.mode "provider" }}
+{{- if or (eq .Values.cluster.mode "provider") (eq .Values.cluster.mode "consumer") }}
 # =============================================================================
-# Provider Mode: Discover mon_host from local Rook-Ceph cluster
+# Provider/Consumer Mode: Discover mon_host from Rook resources
 # =============================================================================
-CLUSTER_NAMESPACE="{{ .Values.provider.cluster_namespace }}"
-MON_ENDPOINTS_CONFIGMAP="{{ .Values.provider.mon_endpoints_configmap }}"
+CLUSTER_NAMESPACE="{{ .Values.cluster.namespace }}"
+MON_ENDPOINTS_CONFIGMAP="{{ .Values.cluster.mon_endpoints_configmap }}"
 
-echo "Mode: provider"
+echo "Mode: {{ .Values.cluster.mode }}"
 echo "  Cluster namespace: ${CLUSTER_NAMESPACE}"
 echo "  Mon endpoints configmap: ${MON_ENDPOINTS_CONFIGMAP}"
 
@@ -46,46 +46,21 @@ fi
 MON_HOST=$(echo "${MON_ENDPOINTS_RAW}" | sed 's/[a-z]=//g')
 echo "Discovered mon_host: ${MON_HOST}"
 
-{{- else if eq .Values.deployment.mode "consumer" }}
-# =============================================================================
-# Consumer Mode: Discover mon_host from Rook external cluster resources
-# =============================================================================
-CLUSTER_NAMESPACE="{{ .Values.consumer.cluster_namespace }}"
-MON_ENDPOINTS_CONFIGMAP="{{ .Values.consumer.mon_endpoints_configmap }}"
-
-echo "Mode: consumer"
-echo "  Cluster namespace: ${CLUSTER_NAMESPACE}"
-echo "  Mon endpoints configmap: ${MON_ENDPOINTS_CONFIGMAP}"
-
-# Get mon endpoints from imported Rook configmap
-MON_ENDPOINTS_RAW=$(kubectl -n "${CLUSTER_NAMESPACE}" get configmap "${MON_ENDPOINTS_CONFIGMAP}" \
-  -o jsonpath='{.data.data}')
-
-if [ -z "${MON_ENDPOINTS_RAW}" ]; then
-  echo "ERROR: Failed to retrieve mon endpoints from configmap ${MON_ENDPOINTS_CONFIGMAP}"
-  echo "       in namespace ${CLUSTER_NAMESPACE}"
-  exit 1
-fi
-
-# Remove mon identifiers (a=, b=, c=, etc.)
-MON_HOST=$(echo "${MON_ENDPOINTS_RAW}" | sed 's/[a-z]=//g')
-echo "Discovered mon_host: ${MON_HOST}"
-
-{{- else if eq .Values.deployment.mode "external" }}
+{{- else if eq .Values.cluster.mode "external" }}
 # =============================================================================
 # External Mode: Use manually provided mon_host
 # =============================================================================
-{{- if .Values.external.mon_host }}
-MON_HOST="{{ .Values.external.mon_host }}"
+{{- if .Values.cluster.mon_host }}
+MON_HOST="{{ .Values.cluster.mon_host }}"
 echo "Mode: external"
 echo "Using provided mon_host: ${MON_HOST}"
 {{- else }}
-echo "ERROR: External mode requires mon_host to be configured"
+echo "ERROR: External mode requires cluster.mon_host to be configured"
 exit 1
 {{- end }}
 
 {{- else }}
-echo "ERROR: Invalid deployment mode '{{ .Values.deployment.mode }}'"
+echo "ERROR: Invalid cluster mode '{{ .Values.cluster.mode }}'"
 echo "       Valid modes: provider, consumer, external"
 exit 1
 {{- end }}

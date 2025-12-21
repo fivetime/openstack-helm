@@ -76,7 +76,7 @@ pod:
           cpu: "100m"
 
 # =============================================================================
-# Deployment Mode Configuration
+# Cluster Configuration
 # =============================================================================
 #
 # Three deployment modes are supported:
@@ -95,52 +95,39 @@ pod:
 #             Requires manual configuration of mon_host and keyring.
 #             No Rook Operator or CSI driver in the cluster.
 #
-deployment:
-  # Mode: provider | consumer | external
+cluster:
+  # Deployment mode: provider | consumer | external
   mode: provider
 
-# =============================================================================
-# Provider Mode Configuration
-# =============================================================================
-# Used when deployment.mode is "provider"
-# For local Rook-Ceph clusters with full administrative access
-#
-provider:
-  # Namespace where Rook-Ceph cluster is deployed
-  cluster_namespace: rook-ceph
+  # Namespace where Rook-Ceph resources are deployed
+  # Used by provider and consumer modes
+  namespace: rook-ceph
 
   # Rook mon endpoints configmap name for mon_host discovery
+  # Used by provider and consumer modes
   mon_endpoints_configmap: rook-ceph-mon-endpoints
 
+  # ---------------------------------------------------------------------------
+  # Provider mode settings
+  # ---------------------------------------------------------------------------
   # Rook mon secret name containing admin keyring
   admin_secret: rook-ceph-mon
 
-# =============================================================================
-# Consumer Mode Configuration
-# =============================================================================
-# Used when deployment.mode is "consumer"
-# For Rook-Ceph external/consumer clusters connected to a provider cluster
-#
-consumer:
-  # Namespace where Rook-Ceph external cluster resources are deployed
-  cluster_namespace: rook-ceph
-
-  # Rook mon endpoints configmap name (imported from provider)
-  mon_endpoints_configmap: rook-ceph-mon-endpoints
-
+  # ---------------------------------------------------------------------------
+  # Consumer mode settings
+  # ---------------------------------------------------------------------------
   # Rook CSI provisioner secret name (imported from provider)
-  csi_rbd_provisioner_secret: rook-csi-rbd-provisioner
+  csi_secret: rook-csi-rbd-provisioner
 
-# =============================================================================
-# External Mode Configuration
-# =============================================================================
-# Used when deployment.mode is "external"
-# For non-Rook Ceph clusters (cephadm, manual deployment, etc.)
-#
-external:
+  # ---------------------------------------------------------------------------
+  # External mode settings
+  # ---------------------------------------------------------------------------
   # Ceph monitor hosts (required for external mode)
-  # Format: "IP1:PORT1,IP2:PORT2,IP3:PORT3" or "IP1:PORT1 IP2:PORT2 IP3:PORT3"
+  # Format: "IP1:PORT1,IP2:PORT2,IP3:PORT3"
   mon_host: ""
+
+  # Ceph user name associated with the keyring
+  user: admin
 
   # Ceph client keyring configuration
   keyring:
@@ -155,9 +142,6 @@ external:
       namespace: ""
       # Key within the secret that contains the keyring
       key: "key"
-
-  # Ceph user name associated with the keyring
-  ceph_user: "admin"
 
 # =============================================================================
 # Output Resources Configuration

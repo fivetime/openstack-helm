@@ -47,21 +47,21 @@ subjects:
   - kind: ServiceAccount
     name: {{ $serviceAccountName }}
     namespace: {{ $envAll.Release.Namespace }}
-{{- if eq .Values.deployment.mode "provider" }}
+{{- if eq .Values.cluster.mode "provider" }}
 ---
 # Provider mode: Read admin secret from Rook namespace
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $serviceAccountName }}
-  namespace: {{ .Values.provider.cluster_namespace }}
+  namespace: {{ .Values.cluster.namespace }}
 rules:
   - apiGroups:
       - ""
     resources:
       - secrets
     resourceNames:
-      - {{ .Values.provider.admin_secret }}
+      - {{ .Values.cluster.admin_secret }}
     verbs:
       - get
 ---
@@ -69,7 +69,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ $serviceAccountName }}
-  namespace: {{ .Values.provider.cluster_namespace }}
+  namespace: {{ .Values.cluster.namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -78,21 +78,21 @@ subjects:
   - kind: ServiceAccount
     name: {{ $serviceAccountName }}
     namespace: {{ $envAll.Release.Namespace }}
-{{- else if eq .Values.deployment.mode "consumer" }}
+{{- else if eq .Values.cluster.mode "consumer" }}
 ---
 # Consumer mode: Read CSI secret from Rook namespace
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $serviceAccountName }}
-  namespace: {{ .Values.consumer.cluster_namespace }}
+  namespace: {{ .Values.cluster.namespace }}
 rules:
   - apiGroups:
       - ""
     resources:
       - secrets
     resourceNames:
-      - {{ .Values.consumer.csi_rbd_provisioner_secret }}
+      - {{ .Values.cluster.csi_secret }}
     verbs:
       - get
 ---
@@ -100,7 +100,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ $serviceAccountName }}
-  namespace: {{ .Values.consumer.cluster_namespace }}
+  namespace: {{ .Values.cluster.namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -109,9 +109,9 @@ subjects:
   - kind: ServiceAccount
     name: {{ $serviceAccountName }}
     namespace: {{ $envAll.Release.Namespace }}
-{{- else if eq .Values.deployment.mode "external" }}
-{{- if .Values.external.keyring.secret_ref.name }}
-{{- $externalSecretNamespace := .Values.external.keyring.secret_ref.namespace | default $envAll.Release.Namespace }}
+{{- else if eq .Values.cluster.mode "external" }}
+{{- if .Values.cluster.keyring.secret_ref.name }}
+{{- $externalSecretNamespace := .Values.cluster.keyring.secret_ref.namespace | default $envAll.Release.Namespace }}
 {{- if ne $externalSecretNamespace $envAll.Release.Namespace }}
 ---
 # External mode: Read keyring from external secret namespace
@@ -126,7 +126,7 @@ rules:
     resources:
       - secrets
     resourceNames:
-      - {{ .Values.external.keyring.secret_ref.name }}
+      - {{ .Values.cluster.keyring.secret_ref.name }}
     verbs:
       - get
 ---

@@ -29,31 +29,20 @@
 #   helm upgrade --install ceph-adapter-rook ./ceph-adapter-rook \
 #     --namespace=openstack \
 #     --create-namespace \
-#     -f examples/provider-mode.yaml
+#     --set cluster.namespace=rook-ceph
 #
-# Or simply use defaults (provider mode is default):
+# Or simply use all defaults:
 #   helm upgrade --install ceph-adapter-rook ./ceph-adapter-rook \
-#     --namespace=openstack \
-#     --create-namespace
+#     --namespace=openstack
 
-deployment:
+cluster:
   mode: provider
-
-provider:
-  # Namespace where Rook-Ceph cluster is deployed
-  cluster_namespace: rook-ceph
-
-  # Rook mon endpoints configmap name
+  namespace: rook-ceph
   mon_endpoints_configmap: rook-ceph-mon-endpoints
-
-  # Rook mon secret containing admin keyring
   admin_secret: rook-ceph-mon
 
 output:
-  # Secret name for the Ceph client keyring
   secret_name: pvc-ceph-client-key
-
-  # ConfigMap name for ceph.conf
   configmap_name: ceph-etc
 
 conf:

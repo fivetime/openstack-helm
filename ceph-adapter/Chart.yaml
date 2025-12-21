@@ -13,20 +13,20 @@
 ---
 apiVersion: v2
 appVersion: v1.0.0
-description: OpenStack-Helm Ceph Adapter for Rook
-name: ceph-adapter-rook
+description: OpenStack-Helm Ceph Adapter for Rook-Ceph
+name: ceph-adapter
 version: 0.1.0
 maintainers:
   - name: OpenStack-Helm Authors
-    url: https://opendev.org/openstack/openstack-helm-infra
+    url: https://opendev.org/openstack/openstack-helm
 keywords:
   - ceph
-  - rook
+  - rook-ceph
   - openstack
   - storage
 home: https://docs.openstack.org/openstack-helm
 sources:
-  - https://opendev.org/openstack/openstack-helm-infra
+  - https://opendev.org/openstack/openstack-helm
 dependencies:
   - name: helm-toolkit
     repository: file://../helm-toolkit

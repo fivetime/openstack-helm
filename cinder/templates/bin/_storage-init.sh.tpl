@@ -27,6 +27,8 @@ fi
 set -ex
 if [ "x$STORAGE_BACKEND" == "xcinder.volume.drivers.rbd.RBDDriver" ]; then
   ceph -s
+
+  # Pool management function
   function ensure_pool () {
     ceph osd pool stats $1 || ceph osd pool create $1 $2
     if [[ $(ceph mgr versions | awk '/version/{print $3}' | cut -d. -f1) -ge 12 ]]; then
@@ -38,8 +40,17 @@ if [ "x$STORAGE_BACKEND" == "xcinder.volume.drivers.rbd.RBDDriver" ]; then
     ceph osd pool set $1 nosizechange ${size_protection}
     ceph osd pool set $1 crush_rule "${RBD_POOL_CRUSH_RULE}"
   }
-  ensure_pool ${RBD_POOL_NAME} ${RBD_POOL_CHUNK_SIZE} ${RBD_POOL_APP_NAME}
 
+  # Only create/manage pool if SKIP_POOL_MANAGEMENT is not set to "true"
+  # When conf.ceph.pools is empty/null, SKIP_POOL_MANAGEMENT will be "true"
+  if [ "x${SKIP_POOL_MANAGEMENT}" != "xtrue" ]; then
+    echo "Managing pool ${RBD_POOL_NAME}..."
+    ensure_pool ${RBD_POOL_NAME} ${RBD_POOL_CHUNK_SIZE} ${RBD_POOL_APP_NAME}
+  else
+    echo "Skipping pool management (SKIP_POOL_MANAGEMENT=true)"
+  fi
+
+  # Always manage user and secret
   if USERINFO=$(ceph auth get client.${RBD_POOL_USER}); then
     echo "Cephx user client.${RBD_POOL_USER} already exist."
     echo "Update its cephx caps"

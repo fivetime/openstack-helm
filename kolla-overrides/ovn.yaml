@@ -1,0 +1,12 @@
+---
+labels:
+  ovn_ovsdb_nb:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  ovn_ovsdb_sb:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  ovn_northd:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+...

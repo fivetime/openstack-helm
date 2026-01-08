@@ -62,10 +62,11 @@ network:
     ingress:
       public: true
       classes:
-        namespace: "nginx"
-        cluster: "nginx-cluster"
+        namespace: "ingress-openstack"
+        cluster: "ingress-cluster"
       annotations:
         nginx.ingress.kubernetes.io/rewrite-target: /
+        haproxy.org/path-rewrite: /
     external_policy_local: false
     node_port:
       enabled: false
@@ -260,6 +261,7 @@ conf:
       error_log_file: /dev/stdout
     openstack:
       interface_type: internal
+      default_region: RegionOne
   gunicorn: |
     import multiprocessing
     bind = "unix:/var/lib/skyline/skyline.sock"

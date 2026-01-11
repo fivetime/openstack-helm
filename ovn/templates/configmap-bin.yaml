@@ -26,6 +26,8 @@ data:
   image-repo-sync.sh: |
 {{- include "helm-toolkit.scripts.image_repo_sync" . | indent 4 }}
 {{- end }}
+  ovn-lib.sh: |
+{{ tuple "bin/_ovn-lib.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   ovn-controller-init.sh: |
 {{ tuple "bin/_ovn-controller-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   ovn-network-logging-parser.sh: |

@@ -96,6 +96,10 @@ spec:
                   fieldPath: spec.nodeName
           volumeMounts:
             - name: ovn-bin
+              mountPath: /tmp/ovn-lib.sh
+              subPath: ovn-lib.sh
+              readOnly: true
+            - name: ovn-bin
               mountPath: /tmp/ovn-controller-init.sh
               subPath: ovn-controller-init.sh
               readOnly: true
@@ -253,4 +257,3 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 
 {{- end }}
-

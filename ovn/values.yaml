@@ -83,6 +83,21 @@ conf:
   # For DPDK enabled environments, enable netdev datapath type for br-int
   # ovn_bridge_datapath_type: netdev
 
+  # OVN Native BGP-EVPN Integration (Experimental)
+  # Requires OVN 25.03+ and external FRR for BGP-EVPN control plane
+  evpn:
+    # Enable OVN native EVPN support
+    enabled: false
+    # VTEP IP interface - the interface whose IP will be used as VTEP endpoint
+    # If not set, will use vtep_network_cidr to auto-detect, or fall back to tunnel interface
+    vtep_interface: null
+    # If vtep_interface is null, search for interface with routing to this CIDR
+    # If both vtep_interface and vtep_network_cidr are null, will use tunnel interface
+    vtep_network_cidr: null
+    # VXLAN destination port for EVPN traffic (default: 4789)
+    # This creates vxlan_sys_<port> interface in OVS for data plane
+    vxlan_port: 4789
+
   # auto_bridge_add:
   #   br-private: eth0
   #   br-public: eth1

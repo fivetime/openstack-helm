@@ -1,0 +1,74 @@
+---
+images:
+  tags:
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+    gnocchi_storage_init: docker.io/openstackhelm/ceph-config-helper:latest-ubuntu_jammy
+    db_init_indexer: docker.io/library/postgres:17-alpine
+
+    # 更新所有 Gnocchi 组件镜像
+    db_init: docker.io/kolla/gnocchi-api:2025.1-ubuntu-noble
+    db_sync: docker.io/kolla/gnocchi-api:2025.1-ubuntu-noble
+    gnocchi_api: docker.io/kolla/gnocchi-api:2025.1-ubuntu-noble
+    gnocchi_statsd: docker.io/kolla/gnocchi-statsd:2025.1-ubuntu-noble
+    gnocchi_metricd: docker.io/kolla/gnocchi-metricd:2025.1-ubuntu-noble
+    gnocchi_resources_cleaner: docker.io/kolla/gnocchi-base:2025.1-ubuntu-noble
+
+    # 更新 Keystone 相关的 Heat 镜像
+    ks_user: quay.io/airshipit/heat:2025.2-ubuntu_noble
+    ks_service: quay.io/airshipit/heat:2025.2-ubuntu_noble
+    ks_endpoints: quay.io/airshipit/heat:2025.2-ubuntu_noble
+
+    # 更新 Repo Sync 镜像
+    image_repo_sync: docker.io/docker:24.0
+conf:
+  paste:
+    # 修改主管道使用 keystone 认证
+    pipeline:main:
+      pipeline: gnocchi+keystone
+    # 添加 gnocchi+keystone 复合组件
+    composite:gnocchi+keystone:
+      use: egg:Paste#urlmap
+      /: gnocchiversions
+      /v1: gnocchiv1+auth
+    # 更新版本控制器类的路径
+    app:gnocchiversions:
+      root: gnocchi.rest.api.VersionsController
+    app:gnocchiv1:
+      root: gnocchi.rest.api.V1Controller
+  apache: |
+    Listen 0.0.0.0:{{ tuple "metric" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+
+    SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+    CustomLog /dev/stdout combined env=!forwarded
+    CustomLog /dev/stdout proxy env=forwarded
+    WSGIPythonPath /var/lib/kolla/venv/lib/python3.11/site-packages
+
+    <VirtualHost *:{{ tuple "metric" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}>
+        WSGIDaemonProcess gnocchi processes=1 threads=8 user=gnocchi group=gnocchi display-name=%{GROUP}
+        WSGIProcessGroup gnocchi
+        WSGIScriptAlias / /var/lib/kolla/venv/bin/gnocchi-api
+        WSGIApplicationGroup %{GLOBAL}
+        WSGIPassAuthorization On
+
+        ErrorLog /dev/stderr
+        SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+        CustomLog /dev/stdout combined env=!forwarded
+        CustomLog /dev/stdout proxy env=forwarded
+
+        <Directory "/var/lib/kolla/venv/bin">
+            Require all granted
+        </Directory>
+    </VirtualHost>
+
+# 覆盖依赖配置
+dependencies:
+  static:
+    db_sync:
+      jobs:
+        - gnocchi-storage-init
+        - gnocchi-db-init-indexer
+
+manifests:
+  job_db_init: false
+  secret_db: false
+...

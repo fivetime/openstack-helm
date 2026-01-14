@@ -67,6 +67,12 @@ dependencies:
       jobs:
         - gnocchi-storage-init
         - gnocchi-db-init-indexer
+    api:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: oslo_db_postgresql
 
 manifests:
   job_db_init: false

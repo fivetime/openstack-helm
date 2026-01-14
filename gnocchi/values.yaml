@@ -348,6 +348,16 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
 
+# Supported: pvc, ceph, file, rbd
+storage: pvc
+
+volume:
+  class_name: general
+  # Expansion only, no shrinking
+  size: 1Ti
+  mount_path: /var/lib/gnocchi
+  access_mode: ReadWriteMany
+
 conf:
   apache: |
     Listen 0.0.0.0:{{ tuple "metric" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
@@ -454,7 +464,8 @@ conf:
     database:
       max_retries: -1
     storage:
-      driver: ceph
+      # Supported: file, ceph
+      driver: file
       ceph_pool: gnocchi.metrics
       ceph_username: gnocchi
       ceph_keyring: /etc/ceph/ceph.client.gnocchi.keyring
@@ -659,4 +670,5 @@ manifests:
   service_api: true
   service_ingress_api: true
   service_statsd: true
+  pvc: true
 ...

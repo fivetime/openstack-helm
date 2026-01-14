@@ -41,6 +41,10 @@ spec:
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
       serviceAccountName: {{ $serviceAccountName }}
+      {{- if eq (.Values.storage | default "rbd") "pvc" }}
+      securityContext:
+        fsGroup: {{ .Values.pod.user.gnocchi.uid }}
+      {{- end }}
       nodeSelector:
         {{ .Values.labels.statsd.node_selector_key }}: {{ .Values.labels.statsd.node_selector_value }}
 {{ if $envAll.Values.pod.tolerations.gnocchi.enabled }}
@@ -48,6 +52,7 @@ spec:
 {{ end }}
       initContainers:
 {{ tuple $envAll "statsd" $mounts_gnocchi_statsd_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
         - name: ceph-keyring-placement
 {{ tuple $envAll "gnocchi_api" | include "helm-toolkit.snippets.image" | indent 10 }}
           command:
@@ -65,6 +70,7 @@ spec:
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
+        {{- end }}
       containers:
         - name: gnocchi-statsd
 {{ tuple $envAll "gnocchi_statsd" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -95,6 +101,11 @@ spec:
               mountPath: /tmp/gnocchi-statsd.sh
               subPath: gnocchi-statsd.sh
               readOnly: true
+            {{- if eq (.Values.storage | default "rbd") "pvc" }}
+            - name: gnocchi-data
+              mountPath: {{ .Values.volume.mount_path }}
+            {{- end }}
+            {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
             - name: etcceph
               mountPath: /etc/ceph
             - name: ceph-etc
@@ -105,6 +116,7 @@ spec:
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
+            {{- end }}
 {{ if $mounts_gnocchi_statsd.volumeMounts }}{{ toYaml $mounts_gnocchi_statsd.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: pod-tmp
@@ -119,6 +131,12 @@ spec:
           configMap:
             name: gnocchi-bin
             defaultMode: 0555
+        {{- if eq (.Values.storage | default "rbd") "pvc" }}
+        - name: gnocchi-data
+          persistentVolumeClaim:
+            claimName: gnocchi-data
+        {{- end }}
+        {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
         - name: etcceph
           emptyDir: {}
         - name: ceph-etc
@@ -127,5 +145,6 @@ spec:
         - name: ceph-keyring
           secret:
             secretName: {{ .Values.secrets.rbd | quote }}
+        {{- end }}
 {{ if $mounts_gnocchi_statsd.volumes }}{{ toYaml $mounts_gnocchi_statsd.volumes | indent 8 }}{{ end }}
 {{- end }}

@@ -39,6 +39,7 @@ spec:
 {{ end }}
       initContainers:
 {{ tuple $envAll "db_sync" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
         - name: ceph-keyring-placement
 {{ tuple $envAll "gnocchi_api" | include "helm-toolkit.snippets.image" | indent 10 }}
           command:
@@ -56,6 +57,7 @@ spec:
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
+        {{- end }}
       containers:
         - name: gnocchi-db-sync
 {{ tuple $envAll "db_sync" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -71,6 +73,7 @@ spec:
             - name: gnocchi-bin
               mountPath: /tmp/db-sync.sh
               subPath: db-sync.sh
+            {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
             - name: etcceph
               mountPath: /etc/ceph
             - name: ceph-etc
@@ -81,6 +84,7 @@ spec:
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
+            {{- end }}
       volumes:
         - name: pod-tmp
           emptyDir: {}
@@ -92,6 +96,7 @@ spec:
           configMap:
             name: gnocchi-bin
             defaultMode: 0555
+        {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
         - name: etcceph
           emptyDir: {}
         - name: ceph-etc
@@ -100,4 +105,5 @@ spec:
         - name: ceph-keyring
           secret:
             secretName: {{ .Values.secrets.rbd | quote }}
+        {{- end }}
 {{- end }}

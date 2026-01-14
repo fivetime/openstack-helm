@@ -67,6 +67,7 @@ spec:
 {{ end }}
       initContainers:
 {{ tuple $envAll "storage_init" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
         - name: ceph-keyring-placement
 {{ tuple $envAll "gnocchi_api" | include "helm-toolkit.snippets.image" | indent 10 }}
           securityContext:
@@ -86,6 +87,7 @@ spec:
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
+        {{- end }}
       containers:
         - name: gnocchi-storage-init
 {{ tuple $envAll "gnocchi_storage_init" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -95,6 +97,9 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: STORAGE_BACKEND
+              value: {{ .Values.storage | default "rbd" | quote }}
+            {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
             - name: RBD_POOL_NAME
               value: {{ .Values.conf.gnocchi.storage.ceph_pool | quote }}
             - name: RBD_POOL_USER
@@ -103,6 +108,7 @@ spec:
               value: "8"
             - name: RBD_POOL_SECRET
               value: {{ .Values.secrets.rbd | quote }}
+            {{- end }}
           command:
             - /tmp/storage-init.sh
           volumeMounts:
@@ -112,6 +118,7 @@ spec:
               mountPath: /tmp/storage-init.sh
               subPath: storage-init.sh
               readOnly: true
+            {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
             - name: etcceph
               mountPath: /etc/ceph
             - name: ceph-etc
@@ -122,6 +129,7 @@ spec:
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
+            {{- end }}
       volumes:
         - name: pod-tmp
           emptyDir: {}
@@ -129,6 +137,7 @@ spec:
           configMap:
             name: gnocchi-bin
             defaultMode: 0555
+        {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
         - name: etcceph
           emptyDir: {}
         - name: ceph-etc
@@ -138,4 +147,5 @@ spec:
         - name: ceph-keyring
           secret:
             secretName: {{ .Values.ceph_client.user_secret_name }}
+        {{- end }}
 {{- end }}

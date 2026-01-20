@@ -1,25 +1,4 @@
 ---
-images:
-  tags:
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
-    gnocchi_storage_init: quay.io/airshipit/ceph-config-helper:latest-ubuntu_jammy
-    db_init_indexer: docker.io/library/postgres:17-alpine
-
-    # 更新所有 Gnocchi 组件镜像
-    db_init: quay.io/openstack.kolla/gnocchi-api:2025.2-ubuntu-noble
-    db_sync: quay.io/openstack.kolla/gnocchi-api:2025.2-ubuntu-noble
-    gnocchi_api: quay.io/openstack.kolla/gnocchi-api:2025.2-ubuntu-noble
-    gnocchi_statsd: quay.io/openstack.kolla/gnocchi-statsd:2025.2-ubuntu-noble
-    gnocchi_metricd: quay.io/openstack.kolla/gnocchi-metricd:2025.2-ubuntu-noble
-    gnocchi_resources_cleaner: quay.io/openstack.kolla/gnocchi-base:2025.2-ubuntu-noble
-
-    # 更新 Keystone 相关的 Heat 镜像
-    ks_user: quay.io/airshipit/heat:2025.2-ubuntu_noble
-    ks_service: quay.io/airshipit/heat:2025.2-ubuntu_noble
-    ks_endpoints: quay.io/airshipit/heat:2025.2-ubuntu_noble
-
-    # 更新 Repo Sync 镜像
-    image_repo_sync: quay.io/airshipit/docker:27.5.0
 conf:
   paste:
     # 修改主管道使用 keystone 认证
@@ -63,10 +42,10 @@ conf:
 # 覆盖依赖配置
 dependencies:
   static:
-    #db_sync:
-    #  jobs:
-    #    - gnocchi-storage-init
-    #    - gnocchi-db-init-indexer
+    db_sync:
+      jobs:
+        - gnocchi-storage-init
+        - gnocchi-db-init-indexer
     api:
       services:
         - endpoint: internal

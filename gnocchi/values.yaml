@@ -348,16 +348,6 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
 
-# Supported: pvc, ceph, file, rbd
-storage: pvc
-
-volume:
-  class_name: general
-  # Expansion only, no shrinking
-  size: 1Ti
-  mount_path: /var/lib/gnocchi
-  access_mode: ReadWriteMany
-
 conf:
   apache: |
     Listen 0.0.0.0:{{ tuple "metric" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
@@ -464,11 +454,9 @@ conf:
     database:
       max_retries: -1
     storage:
-      # Supported: file, ceph
-      driver: file
+      driver: ceph
       ceph_pool: gnocchi.metrics
       ceph_username: gnocchi
-      ceph_keyring: /etc/ceph/ceph.client.gnocchi.keyring
       ceph_conffile: /etc/ceph/ceph.conf
       file_basepath: /var/lib/gnocchi
       provided_keyring: null
@@ -478,6 +466,30 @@ conf:
       auth_type: password
       auth_version: v3
       memcache_security_strategy: ENCRYPT
+
+# Ceph pool settings for storage initialization
+ceph_pool:
+  # Set to true to create pool automatically (requires admin privileges)
+  # Set to false when using pre-existing pool (e.g., Rook CRD managed)
+  enabled: false
+  # Pool type: "replicated" or "erasure"
+  pool_type: replicated
+  # Number of placement groups
+  pg_num: 32
+  # CRUSH failure domain: host, osd, rack, room, datacenter
+  failure_domain: host
+  # Device class filter: ssd, hdd, nvme, or empty string for any
+  device_class: ssd
+  # Settings for replicated pools
+  replicated:
+    # Number of replicas
+    size: 3
+  # Settings for erasure-coded pools
+  erasure_coded:
+    # Number of data chunks (k)
+    data_chunks: 4
+    # Number of coding/parity chunks (m)
+    coding_chunks: 2
 
 ceph_client:
   configmap: ceph-etc
@@ -670,5 +682,4 @@ manifests:
   service_api: true
   service_ingress_api: true
   service_statsd: true
-  pvc: true
 ...

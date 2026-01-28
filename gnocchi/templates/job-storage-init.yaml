@@ -67,7 +67,6 @@ spec:
 {{ end }}
       initContainers:
 {{ tuple $envAll "storage_init" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
-        {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
         - name: ceph-keyring-placement
 {{ tuple $envAll "gnocchi_api" | include "helm-toolkit.snippets.image" | indent 10 }}
           securityContext:
@@ -87,7 +86,6 @@ spec:
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
-        {{- end }}
       containers:
         - name: gnocchi-storage-init
 {{ tuple $envAll "gnocchi_storage_init" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -97,18 +95,34 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: STORAGE_BACKEND
-              value: {{ .Values.storage | default "rbd" | quote }}
-            {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
             - name: RBD_POOL_NAME
               value: {{ .Values.conf.gnocchi.storage.ceph_pool | quote }}
             - name: RBD_POOL_USER
               value: {{ .Values.conf.gnocchi.storage.ceph_username | quote }}
             - name: RBD_POOL_CHUNK_SIZE
-              value: "8"
+              value: {{ .Values.ceph_pool.pg_num | default 32 | quote }}
             - name: RBD_POOL_SECRET
               value: {{ .Values.secrets.rbd | quote }}
-            {{- end }}
+            # Enable/disable pool creation
+            - name: POOL_CREATE_ENABLED
+              value: {{ .Values.ceph_pool.enabled | default false | quote }}
+            # Pool type: replicated or erasure
+            - name: POOL_TYPE
+              value: {{ .Values.ceph_pool.pool_type | default "replicated" | quote }}
+            # CRUSH failure domain: host, osd, rack, etc.
+            - name: FAILURE_DOMAIN
+              value: {{ .Values.ceph_pool.failure_domain | default "host" | quote }}
+            # Device class: ssd, hdd, nvme, or empty for any
+            - name: DEVICE_CLASS
+              value: {{ .Values.ceph_pool.device_class | default "ssd" | quote }}
+            # Replicated pool settings
+            - name: REPLICA_SIZE
+              value: {{ .Values.ceph_pool.replicated.size | default 3 | quote }}
+            # Erasure coded pool settings
+            - name: EC_DATA_CHUNKS
+              value: {{ .Values.ceph_pool.erasure_coded.data_chunks | default 4 | quote }}
+            - name: EC_CODING_CHUNKS
+              value: {{ .Values.ceph_pool.erasure_coded.coding_chunks | default 2 | quote }}
           command:
             - /tmp/storage-init.sh
           volumeMounts:
@@ -118,7 +132,6 @@ spec:
               mountPath: /tmp/storage-init.sh
               subPath: storage-init.sh
               readOnly: true
-            {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
             - name: etcceph
               mountPath: /etc/ceph
             - name: ceph-etc
@@ -129,7 +142,6 @@ spec:
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
-            {{- end }}
       volumes:
         - name: pod-tmp
           emptyDir: {}
@@ -137,7 +149,6 @@ spec:
           configMap:
             name: gnocchi-bin
             defaultMode: 0555
-        {{- if or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph") }}
         - name: etcceph
           emptyDir: {}
         - name: ceph-etc
@@ -147,5 +158,4 @@ spec:
         - name: ceph-keyring
           secret:
             secretName: {{ .Values.ceph_client.user_secret_name }}
-        {{- end }}
 {{- end }}

@@ -55,25 +55,15 @@ limitations under the License.
 {{- end -}}
 
 {{- if empty .Values.conf.gnocchi.database.connection -}}
-{{- $dbScheme := .Values.endpoints.oslo_db.scheme | default "mysql+pymysql" | toString | lower -}}
-{{- $dbPortKey := "mysql" -}}
-{{- if or (hasPrefix "postgresql" $dbScheme) (hasPrefix "postgres" $dbScheme) -}}
-  {{- $dbPortKey = "postgresql" -}}
-{{- end -}}
-{{- $_ := tuple "oslo_db" "internal" "gnocchi" $dbPortKey . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set .Values.conf.gnocchi.database "connection" -}}
+{{- $_ := tuple "oslo_db" "internal" "gnocchi" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set .Values.conf.gnocchi.database "connection" -}}
 {{- end -}}
 
 {{- if empty .Values.conf.gnocchi.indexer.url -}}
-{{- if eq .Values.conf.gnocchi.indexer.driver "postgresql" }}
+{{ if eq .Values.conf.gnocchi.indexer.driver "postgresql" }}
 {{- $_ := tuple "oslo_db_postgresql" "internal" "gnocchi" "postgresql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set .Values.conf.gnocchi.indexer "url" -}}
-{{- else }}
-{{- $dbScheme := .Values.endpoints.oslo_db.scheme | default "mysql+pymysql" | toString | lower -}}
-{{- $dbPortKey := "mysql" -}}
-{{- if or (hasPrefix "postgresql" $dbScheme) (hasPrefix "postgres" $dbScheme) -}}
-  {{- $dbPortKey = "postgresql" -}}
-{{- end -}}
-{{- $_ := tuple "oslo_db" "internal" "gnocchi" $dbPortKey . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set .Values.conf.gnocchi.indexer "url" -}}
-{{- end }}
+{{ else }}
+{{- $_ := tuple "oslo_db" "internal" "gnocchi" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set .Values.conf.gnocchi.indexer "url" -}}
+{{ end }}
 {{- end -}}
 
 {{- if empty .Values.conf.gnocchi.statsd.resource_id -}}
@@ -87,6 +77,9 @@ limitations under the License.
 {{- if empty .Values.conf.gnocchi.statsd.project_id -}}
 {{- $_ := uuidv4 | set .Values.conf.gnocchi.statsd "project_id" -}}
 {{- end -}}
+
+{{/* ceph_keyring 强制从 ceph_username 推导，确保一致性 */}}
+{{- $_ := printf "/etc/ceph/ceph.client.%s.keyring" .Values.conf.gnocchi.storage.ceph_username | set .Values.conf.gnocchi.storage "ceph_keyring" -}}
 
 {{- if empty .Values.conf.gnocchi.api.port -}}
 {{- $_ := tuple "metric" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | set .Values.conf.gnocchi.api "port" -}}

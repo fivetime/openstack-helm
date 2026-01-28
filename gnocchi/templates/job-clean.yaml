@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.job_clean (or (eq (.Values.storage | default "rbd") "rbd") (eq (.Values.storage | default "rbd") "ceph")) }}
+{{- if and .Values.manifests.job_clean .Values.ceph_pool.enabled }}
 {{- $envAll := . }}
 
 {{- $serviceAccountName := print "gnocchi-clean" }}

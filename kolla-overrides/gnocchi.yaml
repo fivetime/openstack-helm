@@ -39,23 +39,21 @@ conf:
         </Directory>
     </VirtualHost>
 
-# 覆盖依赖配置
+# 禁用相关依赖
 dependencies:
   static:
-    db_sync:
-      jobs:
-        - gnocchi-storage-init
-        - gnocchi-db-init-indexer
     api:
       services:
         - endpoint: internal
           service: identity
-        - endpoint: internal
-          service: oslo_db_postgresql
+    db_init:
+      services: null
+    db_sync:
+      jobs:
+        - gnocchi-storage-init
+        - gnocchi-db-init-indexer
     resources_cleaner:
       services:
-        - endpoint: internal
-          service: oslo_db_postgresql
         - endpoint: internal
           service: identity
         - endpoint: internal

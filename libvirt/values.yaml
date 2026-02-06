@@ -151,6 +151,10 @@ conf:
     group: "kvm"
   kubernetes:
     cgroup: "kubepods.slice"
+    # /dev/kvm access mode. In containerized deployments, the kvm GID inside
+    # the container typically differs from the host, so 0666 is the safe default.
+    # Set to "0660" only if you have ensured GID alignment between host and container.
+    dev_kvm_mode: "0666"
     # List of cgroup controller we want to use when breaking out of
     # Kubernetes defined groups
     cgroup_controllers:

@@ -42,8 +42,11 @@ fi
 rm -f /var/run/libvirtd.pid
 
 if [[ -c /dev/kvm ]]; then
-    chmod 660 /dev/kvm
-    chown root:kvm /dev/kvm
+    # NOTE: In containerized deployments the kvm GID inside the container
+    # often differs from the host kvm GID, causing "Permission denied" when
+    # QEMU tries to access /dev/kvm. Default to 0666 to avoid this mismatch.
+    # The mode is configurable via .Values.conf.kubernetes.dev_kvm_mode.
+    chmod {{ .Values.conf.kubernetes.dev_kvm_mode | default "0666" }} /dev/kvm
 fi
 
 #Setup Cgroups to use when breaking out of Kubernetes defined groups

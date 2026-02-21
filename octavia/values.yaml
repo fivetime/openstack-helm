@@ -862,7 +862,8 @@ manifests:
   configmap_bin: true
   configmap_etc: true
   daemonset_health_manager: true
-  daemonset_worker: true
+  daemonset_worker: false
+  deployment_worker: true
   deployment_api: true
   deployment_driver_agent: true
   deployment_housekeeping: true

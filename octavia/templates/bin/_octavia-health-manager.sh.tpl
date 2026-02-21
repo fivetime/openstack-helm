@@ -31,7 +31,8 @@ function start () {
 
   # 启动 Octavia 健康管理器
   exec octavia-health-manager \
-        --config-file /etc/octavia/octavia.conf
+        --config-file /etc/octavia/octavia.conf \
+        --config-dir /etc/octavia/octavia.conf.d
 }
 
 function stop () {

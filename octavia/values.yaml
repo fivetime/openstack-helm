@@ -722,6 +722,7 @@ pod:
     octavia_health_manager: []
   replicas:
     api: 1
+    worker: 1
     driver_agent: 1
     housekeeping: 1
   lifecycle:

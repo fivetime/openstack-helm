@@ -18,17 +18,15 @@ set -ex
 
 neutron-db-manage \
   --config-file /etc/neutron/neutron.conf \
-{{- if ( has "tungstenfabric" .Values.network.backend ) }}
-  --config-file /etc/neutron/plugins/tungstenfabric/tf_plugin.ini \
-{{- else }}
   --config-file /etc/neutron/plugins/ml2/ml2_conf.ini \
-{{- end }}
+  --config-dir /etc/neutron/neutron.conf.d \
   upgrade head
 
 {{- if .Values.conf.plugins.taas.taas.enabled }}
 neutron-db-manage \
   --config-file /etc/neutron/neutron.conf \
   --config-file /etc/neutron/plugins/ml2/ml2_conf.ini \
+  --config-dir /etc/neutron/neutron.conf.d \
   --subproject tap-as-a-service \
   upgrade head
 {{- end }}

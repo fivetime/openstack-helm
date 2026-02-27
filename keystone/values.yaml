@@ -287,6 +287,7 @@ pod:
   ## This is a list of projected volume source objects for each deployment/statefulset/daemonset/cronjob
   ## https://kubernetes.io/docs/concepts/storage/projected-volumes/
   etcSources:
+    keystone_db_sync: []
     keystone_api: []
     keystone_fernet_setup: []
     keystone_fernet_rotate: []
@@ -568,6 +569,8 @@ conf:
       enable_proxy_headers_parsing: true
     oslo_policy:
       policy_file: /etc/keystone/policy.yaml
+    oslo_concurrency:
+      lock_path: /var/lock
     security_compliance:
       # NOTE(vdrok): The following two options have effect only for SQL backend
       lockout_failure_attempts: 5

@@ -80,6 +80,8 @@ conf:
       topics:
         - notifications
         - profiler
+    oslo_concurrency:
+      lock_path: /var/lock
     cache:
       enabled: true
       backend: dogpile.cache.memcached
@@ -1541,6 +1543,7 @@ pod:
     ceilometer_central: []
     ceilometer_ipmi: []
     ceilometer_notification: []
+    ceilometer_db_sync: []
   replicas:
     central: 1
     notification: 1

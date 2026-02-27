@@ -303,7 +303,7 @@ conf:
     database:
       max_retries: -1
     oslo_concurrency:
-      lock_path: "/var/lib/glance/tmp"
+      lock_path: /var/lock
     oslo_messaging_notifications:
       driver: messagingv2
     oslo_messaging_rabbit:
@@ -912,7 +912,8 @@ pod:
   ## This is a list of projected volume source objects for each deployment/statefulset/daemonset/cronjob
   ## https://kubernetes.io/docs/concepts/storage/projected-volumes/
   etcSources:
-    glance_api:
+    glance_api: []
+    glance_db_sync: []
   replicas:
     api: 1
   lifecycle:

@@ -428,6 +428,13 @@ pod:
       cloudkitty_db_sync:
         volumeMounts:
         volumes:
+  # -- This allows users to add Kubernetes Projected Volumes to be mounted at /etc/cloudkitty/cloudkitty.conf.d/
+  ## This is a list of projected volume source objects for each deployment/statefulset/daemonset/cronjob
+  ## https://kubernetes.io/docs/concepts/storage/projected-volumes/
+  etcSources:
+    cloudkitty_api: []
+    cloudkitty_processor: []
+    cloudkitty_db_sync: []
   resources:
     enabled: false
     cloudkitty_api:
@@ -739,10 +746,6 @@ conf:
         metadata:
           - volume_type
         unit: GiB
-
-# Note(xuxant): Hooks will break the upgrade for helm2
-# Set to false if using helm2.
-helm3_hook: true
 
 network:
   api:

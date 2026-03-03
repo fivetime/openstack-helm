@@ -2682,8 +2682,6 @@ network_policy:
     egress:
       - {}
 
-helm3_hook: true
-
 health_probe:
   logging:
     level: ERROR

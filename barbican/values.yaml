@@ -29,10 +29,6 @@ labels:
 
 release_group: null
 
-# NOTE(philsphicas): the pre-install hook breaks upgrade for helm2
-# Set to false to upgrade using helm2
-helm3_hook: true
-
 images:
   tags:
     bootstrap: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
@@ -108,6 +104,12 @@ pod:
       barbican_db_sync:
         volumeMounts:
         volumes:
+  # -- This allows users to add Kubernetes Projected Volumes to be mounted at /etc/barbican/barbican.conf.d/
+  ## This is a list of projected volume source objects for each deployment/statefulset/daemonset/cronjob
+  ## https://kubernetes.io/docs/concepts/storage/projected-volumes/
+  etcSources:
+    barbican_api: []
+    barbican_db_sync: []
   replicas:
     api: 1
   lifecycle:

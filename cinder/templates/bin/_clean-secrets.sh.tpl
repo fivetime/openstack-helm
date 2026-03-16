@@ -16,7 +16,18 @@ limitations under the License.
 
 set -ex
 
-exec kubectl delete secret \
+# Only delete secrets created by this release (release_group=cinder).
+# Skip externally injected secrets that have a different or missing release_group label.
+RELEASE_GROUP=$(kubectl get secret \
   --namespace ${NAMESPACE} \
-  --ignore-not-found=true \
-  ${RBD_POOL_SECRET}
+  ${RBD_POOL_SECRET} \
+  -o jsonpath='{.metadata.labels.release_group}' 2>/dev/null || true)
+
+if [ "${RELEASE_GROUP}" = "cinder" ]; then
+  kubectl delete secret \
+    --namespace ${NAMESPACE} \
+    --ignore-not-found=true \
+    ${RBD_POOL_SECRET}
+else
+  echo "Secret ${RBD_POOL_SECRET} is externally managed (release_group=${RELEASE_GROUP}), skipping deletion."
+fi

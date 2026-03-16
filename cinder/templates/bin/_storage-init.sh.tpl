@@ -72,6 +72,8 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: "${RBD_POOL_SECRET}"
+  labels:
+    release_group: cinder
 type: kubernetes.io/rbd
 data:
   key: $( echo ${ENCODED_KEYRING} )

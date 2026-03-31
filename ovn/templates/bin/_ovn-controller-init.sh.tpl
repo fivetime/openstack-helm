@@ -70,7 +70,7 @@ fi
   {{- $sb_service_list = printf "tcp:%s-%d.%s:%s" $sb_svc_name $i $sb_svc $sb_port | append $sb_service_list -}}
 {{- end }}
 ovs-vsctl set open . external-ids:ovn-remote="{{ include "helm-toolkit.utils.joinListWithComma" $sb_service_list }}"
-{{- else -}}
+{{- else }}
 ovs-vsctl set open . external-ids:ovn-remote="{{ .Values.conf.ovn_remote }}"
 {{- end }}
 

@@ -16,7 +16,7 @@
 - project:
     vars:
       # shared across all jobs
-      helm_version: "3.18.1"
+      helm_version: "4.1.1"
       chart_testing_version: "3.11.0"
       virtualenv: "{{ ansible_user_dir }}/venv"
       base_version: "2025.2.0"
@@ -58,7 +58,6 @@
         # Infra jobs
         - openstack-helm-logging
         - openstack-helm-monitoring
-        - openstack-helm-metacontroller
     gate:
       jobs:
         - openstack-helm-linter
@@ -66,7 +65,6 @@
         - openstack-helm-compute-kit-2025-1-ubuntu_jammy
         # - openstack-helm-logging
         # - openstack-helm-monitoring
-        - openstack-helm-metacontroller
     post:
       jobs:
         - openstack-helm-publish-charts

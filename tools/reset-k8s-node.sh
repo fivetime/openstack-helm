@@ -569,6 +569,21 @@ cleanup_network_interfaces() {
 
 cleanup_directories() {
     step "清理 K8s 相关目录"
+
+    # 先卸载可能存在的 bind mount（Cilium cgroupv2、kubelet 等）
+    local mount_prefixes=(
+        /var/run/cilium
+        /run/cilium
+        /var/lib/kubelet
+    )
+    for prefix in "${mount_prefixes[@]}"; do
+        # 按挂载深度倒序卸载，避免 busy
+        while IFS= read -r mnt; do
+            [[ -z "$mnt" ]] && continue
+            run umount -l "$mnt" 2>/dev/null || true
+        done < <(findmnt -rno TARGET 2>/dev/null | grep "^${prefix}" | sort -r)
+    done
+
     local dirs=(
         # CNI
         /etc/cni/net.d
@@ -593,7 +608,7 @@ cleanup_directories() {
 
     for dir in "${dirs[@]}"; do
         if [[ -d "$dir" ]]; then
-            run rm -rf "${dir:?}"/*
+            run rm -rf "${dir:?}"/* 2>/dev/null || true
             log "已清理: $dir"
         fi
     done

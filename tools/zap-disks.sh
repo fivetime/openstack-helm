@@ -197,17 +197,80 @@ get_protected_disks() {
     done < <(awk 'NR>1{print $1}' /proc/swaps 2>/dev/null)
 
     # 4. device-mapper 活跃目标（LVM/LUKS/multipath）
+    #    区分"已挂载/活跃使用"和"未挂载的残留映射"
+    #    未挂载的残留不标记为受保护，留给用户选择清理
+    #    只追踪到物理磁盘（TYPE=disk），忽略 dm 设备本身
+
+    # 辅助函数：递归获取 dm 设备底层的所有物理磁盘
+    get_underlying_physical_disks() {
+        local dev_name="$1"
+        local slaves_dir="/sys/block/$dev_name/slaves"
+        [[ -d "$slaves_dir" ]] || return
+
+        for slave in "$slaves_dir"/*; do
+            [[ -e "$slave" ]] || continue
+            local slave_name
+            slave_name=$(basename "$slave")
+            local slave_type
+            slave_type=$(lsblk -rno TYPE "/dev/$slave_name" 2>/dev/null | head -1)
+
+            if [[ "$slave_type" == "disk" ]]; then
+                # 到达物理磁盘
+                echo "/dev/$slave_name"
+            else
+                # 还是 dm/lvm/part，继续递归
+                local parent
+                parent=$(lsblk -rno PKNAME "/dev/$slave_name" 2>/dev/null | head -1)
+                if [[ -n "$parent" ]]; then
+                    local parent_type
+                    parent_type=$(lsblk -rno TYPE "/dev/$parent" 2>/dev/null | head -1)
+                    if [[ "$parent_type" == "disk" ]]; then
+                        echo "/dev/$parent"
+                    else
+                        get_underlying_physical_disks "$parent"
+                    fi
+                else
+                    get_underlying_physical_disks "$slave_name"
+                fi
+            fi
+        done
+    }
+
     local dm_base
     for dm_base in /sys/block/dm-*; do
         [[ -d "$dm_base/slaves" ]] || continue
-        for slave in "$dm_base"/slaves/*; do
-            [[ -e "$slave" ]] || continue
-            local pdisk
-            pdisk=$(get_parent_disk "$(basename "$slave")")
-            if [[ -z "${protected[$pdisk]+_}" ]]; then
-                protected["$pdisk"]="device-mapper ($(basename "$dm_base"))"
+        local dm_name
+        dm_name=$(basename "$dm_base")
+        local dm_dev="/dev/$dm_name"
+
+        # 检查这个 dm 设备是否被挂载或用作 swap
+        local dm_in_use=false
+        if findmnt -rn -S "$dm_dev" >/dev/null 2>&1; then
+            dm_in_use=true
+        fi
+        if awk 'NR>1{print $1}' /proc/swaps 2>/dev/null | grep -Fxq "$dm_dev"; then
+            dm_in_use=true
+        fi
+        local dm_mapper_name
+        dm_mapper_name=$(dmsetup info -c --noheadings -o name "$dm_name" 2>/dev/null || true)
+        if [[ -n "$dm_mapper_name" ]]; then
+            if findmnt -rn -S "/dev/mapper/$dm_mapper_name" >/dev/null 2>&1; then
+                dm_in_use=true
             fi
-        done
+            if awk 'NR>1{print $1}' /proc/swaps 2>/dev/null | grep -Fxq "/dev/mapper/$dm_mapper_name"; then
+                dm_in_use=true
+            fi
+        fi
+
+        # 只有活跃使用的 dm 才标记其底层物理磁盘为受保护
+        if [[ "$dm_in_use" == "true" ]]; then
+            while IFS= read -r pdisk; do
+                [[ -z "$pdisk" ]] && continue
+                if [[ -z "${protected[$pdisk]+_}" ]]; then
+                    protected["$pdisk"]="device-mapper 已挂载 ($dm_name)"
+                fi
+            done < <(get_underlying_physical_disks "$dm_name" | sort -u)
+        fi
     done
 
     # 5. 活跃的 Ceph OSD（cephadm/手动部署场景）
@@ -223,8 +286,12 @@ get_protected_disks() {
             | grep -oP '"path"\s*:\s*"\K[^"]+' 2>/dev/null)
     fi
 
-    # 输出
+    # 输出（只输出真正的物理磁盘，过滤掉 dm 设备本身）
     for disk in "${!protected[@]}"; do
+        local disk_base
+        disk_base=$(basename "$disk")
+        # dm-* 不是物理磁盘，跳过
+        [[ "$disk_base" == dm-* ]] && continue
         echo "${disk}|${protected[$disk]}"
     done
 }
@@ -259,9 +326,140 @@ check_not_mounted() {
 
 check_not_in_use() {
     local disk="$1"
-    local holders="/sys/block/$(basename "$disk")/holders"
+    local dev_name
+    dev_name=$(basename "$disk")
+    local holders="/sys/block/$dev_name/holders"
+
     if [[ -d "$holders" ]] && [[ -n "$(ls -A "$holders" 2>/dev/null)" ]]; then
-        die "$disk 有活跃的 device-mapper 持有者: $(ls "$holders")（LVM/LUKS/multipath，请先清理）"
+        # 递归检查整个 dm 链是否有活跃使用
+        # 递归检查整个设备树是否有活跃使用
+        for holder in "$holders"/*; do
+            [[ -e "$holder" ]] || continue
+            local h_name
+            h_name=$(basename "$holder")
+
+            # 检查挂载
+            if findmnt -rn -S "/dev/$h_name" >/dev/null 2>&1; then
+                die "$disk 有已挂载的 device-mapper 持有者 (/dev/$h_name)，请先 umount"
+            fi
+            local h_dm_name
+            h_dm_name=$(dmsetup info -c --noheadings -o name "$h_name" 2>/dev/null) || true
+            if [[ -n "$h_dm_name" ]]; then
+                if findmnt -rn -S "/dev/mapper/$h_dm_name" >/dev/null 2>&1; then
+                    die "$disk 有已挂载的 device-mapper 持有者 (/dev/mapper/$h_dm_name)，请先 umount"
+                fi
+                # 检查 open count
+                local open_count
+                open_count=$(dmsetup info -c --noheadings -o open "$h_name" 2>/dev/null) || true
+                if [[ -n "$open_count" && "$open_count" -gt 0 ]]; then
+                    die "$disk 的 dm 持有者 $h_dm_name 正在被使用 (open count: $open_count)"
+                fi
+            fi
+
+            # 递归检查 holder 的 holders
+            local hh_dir="/sys/block/$h_name/holders"
+            if [[ -d "$hh_dir" ]] && [[ -n "$(ls -A "$hh_dir" 2>/dev/null)" ]]; then
+                for hh in "$hh_dir"/*; do
+                    [[ -e "$hh" ]] || continue
+                    local hh_name
+                    hh_name=$(basename "$hh")
+                    local hh_dm_name
+                    hh_dm_name=$(dmsetup info -c --noheadings -o name "$hh_name" 2>/dev/null) || true
+                    if [[ -n "$hh_dm_name" ]]; then
+                        local hh_open
+                        hh_open=$(dmsetup info -c --noheadings -o open "$hh_name" 2>/dev/null) || true
+                        if [[ -n "$hh_open" && "$hh_open" -gt 0 ]]; then
+                            die "$disk 的 dm 持有者 $hh_dm_name 正在被使用 (open count: $hh_open)"
+                        fi
+                        if findmnt -rn -S "/dev/mapper/$hh_dm_name" >/dev/null 2>&1; then
+                            die "$disk 有已挂载的 device-mapper 持有者 (/dev/mapper/$hh_dm_name)，请先 umount"
+                        fi
+                    fi
+                done
+            fi
+        done
+    fi
+}
+
+# 检查磁盘是否有 dm holders 需要先清理
+disk_has_dm_holders() {
+    local disk="$1"
+    local dev_name
+    dev_name=$(basename "$disk")
+    local holders="/sys/block/$dev_name/holders"
+    [[ -d "$holders" ]] && [[ -n "$(ls -A "$holders" 2>/dev/null)" ]]
+}
+
+# 清理磁盘上的 LVM/LUKS/dm 残留映射
+# 策略：用 lsblk 获取完整设备树，从叶子节点（最深层）开始逐个拆除
+cleanup_disk_dm() {
+    local disk="$1"
+    local dev_name
+    dev_name=$(basename "$disk")
+
+    # 获取该磁盘下所有 dm/lvm/crypt 子设备，按层级深度倒序排列（叶子优先）
+    # lsblk 输出格式: NAME TYPE
+    local dm_devices
+    dm_devices=$(lsblk -rno NAME,TYPE "$disk" 2>/dev/null \
+        | awk '$2=="crypt" || $2=="lvm" {print $1}' \
+        | tac) || true
+
+    if [[ -n "$dm_devices" ]]; then
+        # 1. 从叶子到根逐个关闭 dm 映射
+        while IFS= read -r dm_dev; do
+            [[ -z "$dm_dev" ]] && continue
+            # 获取 mapper 名称
+            local dm_mapper_name
+            dm_mapper_name=$(cat "/sys/block/$dm_dev/dm/name" 2>/dev/null) || true
+
+            if [[ -z "$dm_mapper_name" ]]; then
+                dm_mapper_name=$(dmsetup info -c --noheadings -o name "$dm_dev" 2>/dev/null) || true
+            fi
+
+            if [[ -n "$dm_mapper_name" ]]; then
+                log "    关闭 dm: $dm_mapper_name"
+                if [[ "$DRY_RUN" != "1" ]]; then
+                    cryptsetup luksClose "$dm_mapper_name" 2>/dev/null \
+                        || dmsetup remove -f "$dm_mapper_name" 2>/dev/null \
+                        || true
+                fi
+            fi
+        done <<< "$dm_devices"
+    fi
+
+    # 2. 清理 LVM 元数据（VG/PV）
+    if command -v pvs >/dev/null 2>&1; then
+        local vg_name
+        vg_name=$(pvs --noheadings -o vg_name "$disk" 2>/dev/null | awk '{print $1}') || true
+        if [[ -n "$vg_name" ]]; then
+            log "    清理 LVM: VG=$vg_name"
+            if [[ "$DRY_RUN" != "1" ]]; then
+                lvremove -f "$vg_name" 2>/dev/null || true
+                vgremove -f "$vg_name" 2>/dev/null || true
+                pvremove -ff "$disk" 2>/dev/null || true
+            fi
+        fi
+    fi
+
+    # 3. 兜底：如果还有残留 dm，强制清除
+    local remaining
+    remaining=$(lsblk -rno NAME,TYPE "$disk" 2>/dev/null \
+        | awk '$2=="crypt" || $2=="lvm" {print $1}') || true
+    if [[ -n "$remaining" ]]; then
+        while IFS= read -r dm_dev; do
+            [[ -z "$dm_dev" ]] && continue
+            local dm_name
+            dm_name=$(cat "/sys/block/$dm_dev/dm/name" 2>/dev/null) || true
+            if [[ -n "$dm_name" ]]; then
+                log "    强制清理残留: $dm_name"
+                dmsetup remove -f "$dm_name" 2>/dev/null || true
+            fi
+        done <<< "$remaining"
+    fi
+
+    # 4. 等待内核释放
+    if [[ "$DRY_RUN" != "1" ]]; then
+        udevadm settle --timeout=5 2>/dev/null || true
     fi
 }
 
@@ -271,6 +469,100 @@ check_not_in_use() {
 
 # 列出所有可清理的磁盘（排除受保护磁盘）
 get_available_disks() {
+
+    # 检查单个设备是否正在被使用（不递归）
+    is_dev_in_use() {
+        local dev_name="$1"
+        local dev_path="/dev/$dev_name"
+
+        # 1. 挂载检查
+        if findmnt -rn -S "$dev_path" >/dev/null 2>&1; then
+            return 0
+        fi
+
+        # 2. /dev/mapper/ 路径挂载检查（dm 设备）
+        if [[ "$dev_name" == dm-* ]]; then
+            local mapper_name
+            mapper_name=$(dmsetup info -c --noheadings -o name "$dev_name" 2>/dev/null) || true
+            if [[ -n "$mapper_name" ]]; then
+                if findmnt -rn -S "/dev/mapper/$mapper_name" >/dev/null 2>&1; then
+                    return 0
+                fi
+            fi
+        fi
+
+        # 3. swap 检查
+        if awk 'NR>1{print $1}' /proc/swaps 2>/dev/null | grep -Fq "$dev_path"; then
+            return 0
+        fi
+
+        # 4. dm open count（进程直接用裸设备的场景，如 Ceph OSD BlueStore）
+        if [[ "$dev_name" == dm-* ]]; then
+            local open_count
+            open_count=$(dmsetup info -c --noheadings -o open "$dev_name" 2>/dev/null) || true
+            if [[ -n "$open_count" && "$open_count" -gt 0 ]]; then
+                return 0
+            fi
+        fi
+
+        # 5. fuser 检查（进程直接打开裸设备但没有 dm 层的场景）
+        if command -v fuser >/dev/null 2>&1; then
+            if fuser "$dev_path" >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+
+        return 1
+    }
+
+    # 递归检查一个磁盘及其所有下游设备是否正在被使用
+    # 覆盖场景：
+    #   - 磁盘自身被直接使用（挂载/swap/fuser）
+    #   - dm/LVM/md holders 链（多层嵌套）
+    #   - 分区被使用（GPT 分区表存在时检查每个分区）
+    is_device_tree_in_use() {
+        local dev_name="$1"
+
+        # 检查设备自身
+        if is_dev_in_use "$dev_name"; then
+            return 0
+        fi
+
+        # 递归检查所有 holders（dm/LVM/md）
+        local h_dir="/sys/block/$dev_name/holders"
+        if [[ -d "$h_dir" ]]; then
+            for h in "$h_dir"/*; do
+                [[ -e "$h" ]] || continue
+                if is_device_tree_in_use "$(basename "$h")"; then
+                    return 0
+                fi
+            done
+        fi
+
+        # 检查分区（磁盘有分区表时，每个分区也要检查）
+        local part
+        for part in /sys/block/"$dev_name"/"${dev_name}"*; do
+            [[ -d "$part" ]] || continue
+            local part_name
+            part_name=$(basename "$part")
+            # 检查分区自身
+            if is_dev_in_use "$part_name"; then
+                return 0
+            fi
+            # 检查分区的 holders（分区上的 LVM/dm）
+            local ph_dir="$part/holders"
+            if [[ -d "$ph_dir" ]]; then
+                for ph in "$ph_dir"/*; do
+                    [[ -e "$ph" ]] || continue
+                    if is_device_tree_in_use "$(basename "$ph")"; then
+                        return 0
+                    fi
+                done
+            fi
+        done
+
+        return 1
+    }
     local -a available=()
     local -A protected_set=()
 
@@ -301,10 +593,14 @@ get_available_disks() {
         dev_size=$(blockdev --getsize64 "$dev" 2>/dev/null || echo 0)
         [[ "$dev_size" -eq 0 ]] && continue
 
-        # 跳过有活跃 holders 的磁盘
+        # 跳过有活跃挂载的 holders（递归检查整个 dm 链）
+        # 有未挂载的 dm holders 仍然列入可选（LVM/LUKS 残留）
         local holders="/sys/block/$dev_name/holders"
         if [[ -d "$holders" ]] && [[ -n "$(ls -A "$holders" 2>/dev/null)" ]]; then
-            continue
+            if is_device_tree_in_use "$dev_name"; then
+                continue
+            fi
+            # 未挂载的 dm holders — 允许列入可选列表
         fi
 
         available+=("$dev")
@@ -344,7 +640,25 @@ interactive_select_disks() {
         sector_size=$(blockdev --getss "$dev" 2>/dev/null || echo "?")
 
         # 检查磁盘当前状态
-        if blkid "$dev" 2>/dev/null | grep -qi 'ceph'; then
+        local dev_name_short
+        dev_name_short=$(basename "$dev")
+        local has_holders=false
+        if [[ -d "/sys/block/$dev_name_short/holders" ]] && \
+           [[ -n "$(ls -A "/sys/block/$dev_name_short/holders" 2>/dev/null)" ]]; then
+            has_holders=true
+        fi
+
+        if [[ "$has_holders" == "true" ]]; then
+            # 有 dm holders 但未挂载（残留）
+            local holder_types=""
+            if command -v pvs >/dev/null 2>&1 && pvs --noheadings -o pv_name 2>/dev/null | awk '{print $1}' | grep -Fxq "$dev"; then
+                holder_types="LVM"
+            fi
+            if blkid "$dev" 2>/dev/null | grep -q 'crypto_LUKS'; then
+                holder_types="${holder_types:+$holder_types+}LUKS"
+            fi
+            note="${YELLOW}${holder_types:-dm} 残留（自动清理）${NC}"
+        elif blkid "$dev" 2>/dev/null | grep -qi 'ceph'; then
             note="BlueStore 签名"
         elif blkid "$dev" >/dev/null 2>&1; then
             note="有文件系统签名"
@@ -352,7 +666,7 @@ interactive_select_disks() {
             note="空盘"
         fi
 
-        printf "  %-4s %-12s %-10s %-8s %s\n" \
+        printf "  %-4s %-12s %-10s %-8s %b\n" \
             "$((i + 1))" "$dev" "$size_human" "${sector_size}B" "$note" >&2
     done
 
@@ -503,6 +817,8 @@ wipe_fs_signatures() {
 # 清除 BlueStore label（等价 ceph-bluestore-tool zap-device）
 wipe_bluestore_labels() {
     local disk="$1"
+    local step_num="${2:-}"
+    local step_total="${3:-}"
     local disk_size block_size off
 
     disk_size=$(blockdev --getsize64 "$disk")
@@ -513,7 +829,11 @@ wipe_bluestore_labels() {
         block_size="$LABEL_ZAP_SIZE"
     fi
 
-    log "  [4/5] 清除 BlueStore label 副本（5个偏移位置）"
+    if [[ -n "$step_num" && -n "$step_total" ]]; then
+        log "  [${step_num}/${step_total}] 清除 BlueStore label 副本（5个偏移位置）"
+    else
+        log "  清除 BlueStore label 副本（5个偏移位置）"
+    fi
 
     for off in "${BLUESTORE_LABEL_OFFSETS[@]}"; do
         if [[ "$off" -lt "$disk_size" ]]; then
@@ -583,13 +903,65 @@ wipe_disk() {
     check_not_in_use "$disk"
 
     show_disk_info "$disk"
-    show_residual_hints "$disk"
 
-    wipe_partition_table "$disk"
-    wipe_disk_head "$disk"
-    wipe_fs_signatures "$disk"
-    wipe_bluestore_labels "$disk"
-    reload_partition_table "$disk"
+    # 判断是否需要先清理 dm 映射
+    local has_dm=false
+    local total_steps=5
+    if disk_has_dm_holders "$disk"; then
+        has_dm=true
+        total_steps=6
+    fi
+
+    local step=0
+
+    # 步骤 0（可选）: 清理 LVM/LUKS/dm 残留
+    if [[ "$has_dm" == "true" ]]; then
+        step=$((step + 1))
+        log "  [${step}/${total_steps}] 清理 LVM/dm 残留映射"
+        cleanup_disk_dm "$disk"
+    fi
+
+    # 步骤 1: 清除分区表
+    step=$((step + 1))
+    log "  [${step}/${total_steps}] 清除分区表 (sgdisk --zap-all)"
+    if [[ "$DRY_RUN" == "1" ]]; then
+        log "  [DRY-RUN] sgdisk --zap-all $disk"
+    else
+        sgdisk --zap-all "$disk" >/dev/null 2>&1 || true
+    fi
+
+    # 步骤 2: 清零磁盘头部
+    step=$((step + 1))
+    log "  [${step}/${total_steps}] 清零磁盘头部 ${HEAD_ZAP_MIB}MiB"
+    if [[ "$DRY_RUN" == "1" ]]; then
+        log "  [DRY-RUN] dd if=/dev/zero of=$disk bs=1M count=$HEAD_ZAP_MIB"
+    else
+        dd if=/dev/zero of="$disk" \
+            bs=1M count="$HEAD_ZAP_MIB" \
+            oflag=direct,dsync >/dev/null 2>&1
+    fi
+
+    # 步骤 3: 清除文件系统签名
+    step=$((step + 1))
+    log "  [${step}/${total_steps}] 清除文件系统签名 (wipefs)"
+    if [[ "$DRY_RUN" == "1" ]]; then
+        log "  [DRY-RUN] wipefs -af $disk"
+    else
+        wipefs -af "$disk" >/dev/null 2>&1 || true
+    fi
+
+    # 步骤 4: 清除 BlueStore label
+    step=$((step + 1))
+    wipe_bluestore_labels "$disk" "$step" "$total_steps"
+
+    # 步骤 5: 通知内核
+    step=$((step + 1))
+    log "  [${step}/${total_steps}] 通知内核重新读取分区表 (partprobe)"
+    if [[ "$DRY_RUN" == "1" ]]; then
+        log "  [DRY-RUN] partprobe $disk"
+    else
+        partprobe "$disk" >/dev/null 2>&1 || true
+    fi
 
     if [[ "$DRY_RUN" != "1" ]]; then
         verify_clean "$disk"

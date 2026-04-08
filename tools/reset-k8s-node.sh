@@ -305,7 +305,7 @@ select_modules() {
     done
 
     echo >&2
-    printf "  ${GREEN}操作:${NC} 输入编号切换选中状态（如 4,5,6）    ${GREEN}确认:${NC} Enter    ${GREEN}全选:${NC} A    ${GREEN}退出:${NC} q\n" >&2
+    printf "  ${GREEN}操作:${NC} 输入编号切换选中状态（如 4,5,6）    ${GREEN}默认:${NC} Enter    ${GREEN}全选:${NC} A    ${GREEN}退出:${NC} q\n" >&2
     echo >&2
 
     local input

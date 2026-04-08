@@ -291,6 +291,16 @@ get_available_disks() {
         # 跳过受保护磁盘
         [[ -n "${protected_set[$dev_real]+_}" ]] && continue
 
+        # 跳过虚拟/无用设备（nbd、loop、ram、zram）
+        case "$dev_name" in
+            nbd*|loop*|ram*|zram*) continue ;;
+        esac
+
+        # 跳过容量为 0 的设备
+        local dev_size
+        dev_size=$(blockdev --getsize64 "$dev" 2>/dev/null || echo 0)
+        [[ "$dev_size" -eq 0 ]] && continue
+
         # 跳过有活跃 holders 的磁盘
         local holders="/sys/block/$dev_name/holders"
         if [[ -d "$holders" ]] && [[ -n "$(ls -A "$holders" 2>/dev/null)" ]]; then

@@ -19,7 +19,6 @@ Infra charts options
     elastic-packetbeat
     elasticsearch
     etcd
-    flannel
     fluentbit
     fluentd
     gnocchi
@@ -37,7 +36,6 @@ Infra charts options
     mariadb-backup
     mariadb-cluster
     memcached
-    mongodb
     nagios
     namespace-config
     nfs-provisioner
@@ -56,4 +54,3 @@ Infra charts options
     rabbitmq
     redis
     registry
-    shaker

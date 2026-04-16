@@ -32,7 +32,7 @@ release_group: null
 images:
   tags:
     bootstrap: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     scripted_test: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
     db_init: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
     barbican_db_sync: quay.io/airshipit/barbican:2025.1-ubuntu_noble
@@ -393,7 +393,7 @@ conf:
       route-user-agent: '^kube-probe.* donotlog:'
       thunder-lock: true
       worker-reload-mercy: 80
-      wsgi-file: /var/lib/openstack/bin/barbican-wsgi-api
+      module: barbican.wsgi.api:application
       processes: 1
       stats: 0.0.0.0:1717
       stats-http: true

@@ -37,7 +37,7 @@ images:
     db_init: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
     db_drop: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
     placement_db_sync: quay.io/airshipit/placement:2025.1-ubuntu_noble
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     image_repo_sync: docker.io/docker:17.07.0
   local_registry:
     active: false
@@ -159,7 +159,7 @@ conf:
       route-user-agent: '^kube-probe.* donotlog:'
       thunder-lock: true
       worker-reload-mercy: 80
-      wsgi-file: /var/lib/openstack/bin/placement-api
+      module: placement.wsgi.api:application
       stats: 0.0.0.0:1717
       stats-http: true
 endpoints:

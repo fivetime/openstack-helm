@@ -16,12 +16,7 @@ limitations under the License.
 
 set -ex
 
-keystone-manage \
-    --config-file=/etc/keystone/keystone.conf \
-    --config-dir=/etc/keystone/keystone.conf.d \
-    db_sync
-
-keystone-manage \
-    --config-file=/etc/keystone/keystone.conf \
-    --config-dir=/etc/keystone/keystone.conf.d \
-    bootstrap
+exec manila-manage \
+     --config-file /etc/manila/manila.conf \
+     --config-dir /etc/manila/manila.conf.d \
+     db purge {{ .Values.conf.manila.db_purge.before }}

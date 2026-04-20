@@ -16,12 +16,5 @@ limitations under the License.
 
 set -ex
 
-keystone-manage \
-    --config-file=/etc/keystone/keystone.conf \
-    --config-dir=/etc/keystone/keystone.conf.d \
-    db_sync
-
-keystone-manage \
-    --config-file=/etc/keystone/keystone.conf \
-    --config-dir=/etc/keystone/keystone.conf.d \
-    bootstrap
+exec ironic-novncproxy --config-file /etc/ironic/ironic.conf \
+      --config-dir /etc/ironic/ironic.conf.d

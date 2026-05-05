@@ -33,7 +33,7 @@
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/ceph/ceph-rook.sh
         - ./tools/deployment/ceph/ceph-adapter-rook.sh
-        - export NAMESPACE=osh-infra; ./tools/deployment/component/common/ldap.sh
+        # - export NAMESPACE=osh-infra; ./tools/deployment/component/common/ldap.sh
         - ./tools/deployment/logging/elasticsearch.sh
         - ./tools/deployment/logging/fluentd.sh
         - ./tools/deployment/logging/kibana.sh
@@ -60,7 +60,7 @@
         - ./tools/deployment/common/prepare-k8s.sh
         - ./tools/deployment/common/prepare-charts.sh
         - ./tools/deployment/common/deploy-docker-registry.sh
-        - export NAMESPACE=osh-infra; ./tools/deployment/component/common/ldap.sh
+        # - export NAMESPACE=osh-infra; ./tools/deployment/component/common/ldap.sh
         - export NAMESPACE=osh-infra; ./tools/deployment/db/mariadb.sh
         - export NAMESPACE=osh-infra; ./tools/deployment/db/postgresql.sh
         - ./tools/deployment/monitoring/prometheus.sh

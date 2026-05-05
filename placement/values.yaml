@@ -288,11 +288,8 @@ pod:
         runAsUser: 42424
       container:
         placement_api:
-          readOnlyRootFilesystem: false
-          runAsUser: 0
-        placement_mysql_migration:
-          readOnlyRootFilesystem: false
-          runAsUser: 0
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
   affinity:
     anti:
       type:

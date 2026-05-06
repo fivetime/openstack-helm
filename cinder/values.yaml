@@ -1055,6 +1055,7 @@ conf:
   enable_iscsi: false
   enable_conversion_tmpfs: false
   conversion_tmpfs_size: "10Gi"
+  enable_conversion_pvc: false
   cinder_api_uwsgi:
     uwsgi:
       add-header: "Connection: close"
@@ -1075,6 +1076,12 @@ conf:
       stats-http: true
   db_purge:
     before: 30
+
+conversion:
+  volume:
+    class_name: general
+    size: 50Gi
+    access_mode: ReadWriteOnce
 
 backup:
   external_ceph_rbd:
@@ -1542,6 +1549,7 @@ manifests:
   pdb_api: true
   pod_rally_test: true
   pvc_backup: true
+  pvc_conversion: false
   network_policy: false
   secret_db: true
   secret_ingress_tls: true

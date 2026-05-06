@@ -87,7 +87,9 @@ spec:
 {{ tuple $envAll "neutron" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
 {{ end }}
       nodeSelector:
-        {{ .Values.labels.ovs.node_selector_key }}: {{ .Values.labels.ovs.node_selector_value }}
+        # -------------- Modify by Simon Start --------------
+        {{ .Values.labels.agent.metadata.node_selector_key }}: {{ .Values.labels.agent.metadata.node_selector_value }}
+      # -------------- Add by Simon End --------------
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       shareProcessNamespace: true

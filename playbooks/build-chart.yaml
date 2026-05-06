@@ -34,6 +34,30 @@
       set_fact:
         changed_charts: "{{ changed_charts_output.stdout_lines }}"
 
+    - name: Get charts that depend on helm-toolkit
+      shell: |
+        set -o pipefail
+        find . -mindepth 2 -maxdepth 2 -name Chart.yaml -print \
+          | while read -r chart_file; do
+              if grep -Eq 'name:[[:space:]]*helm-toolkit' "${chart_file}"; then
+                basename "$(dirname "${chart_file}")"
+              fi
+            done \
+          | sort -u
+      args:
+        chdir: "{{ zuul.project.src_dir }}"
+      register: helm_toolkit_dependents_output
+      changed_when: false
+      when: "'helm-toolkit' in changed_charts"
+
+    - name: Expand changed charts when helm-toolkit changes
+      set_fact:
+        changed_charts_to_build: "{{ (changed_charts + (helm_toolkit_dependents_output.stdout_lines | default([]))) | unique }}"
+
+    - name: Display charts to build
+      debug:
+        msg: "Charts to build: {{ changed_charts_to_build }}"
+
     - name: Display changed charts
       debug:
         msg: "Changed charts: {{ changed_charts }}"
@@ -45,13 +69,13 @@
         params:
           PYTHON: "{{ virtualenv }}/bin/python"
           BASE_VERSION: "{{ base_version }}"
-      loop: "{{ changed_charts }}"
-      when: changed_charts | length > 0
+      loop: "{{ changed_charts_to_build }}"
+      when: changed_charts_to_build | length > 0
 
     - name: Move chart packages to subdirectories
       shell: |
         mkdir -p {{ zuul.project.src_dir }}/{{ item }}
         mv {{ zuul.project.src_dir }}/{{ item }}-*.tgz {{ zuul.project.src_dir }}/{{ item }}/
-      loop: "{{ changed_charts }}"
-      when: changed_charts | length > 0
+      loop: "{{ changed_charts_to_build }}"
+      when: changed_charts_to_build | length > 0
 ...

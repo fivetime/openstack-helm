@@ -76,6 +76,16 @@ limitations under the License.
 {{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set $envAll.Values.conf.metadata_agent.cache "memcache_servers" -}}
 {{- end -}}
 
+{{- if empty $envAll.Values.conf.ovn_agent.DEFAULT.nova_metadata_host -}}
+{{- $_ := tuple "compute_metadata" "internal" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" | set $envAll.Values.conf.ovn_agent.DEFAULT "nova_metadata_host" -}}
+{{- end -}}
+{{- if empty $envAll.Values.conf.ovn_agent.cache.memcache_servers -}}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set $envAll.Values.conf.ovn_agent.cache "memcache_servers" -}}
+{{- end -}}
+{{- if empty $envAll.Values.conf.ovn_agent.DEFAULT.nova_metadata_port -}}
+{{- $_ := tuple "compute_metadata" "internal" "metadata" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | set $envAll.Values.conf.ovn_agent.DEFAULT "nova_metadata_port" }}
+{{- end -}}
+
 {{- if empty $envAll.Values.conf.ovn_metadata_agent.DEFAULT.nova_metadata_host -}}
 {{- $_ := tuple "compute_metadata" "internal" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" | set $envAll.Values.conf.ovn_metadata_agent.DEFAULT "nova_metadata_host" -}}
 {{- end -}}
@@ -208,6 +218,7 @@ data:
   update_dpdk_bond_config: {{ $envAll.Values.conf.ovs_dpdk.update_dpdk_bond_config | toString | b64enc }}
 {{- if ( has "ovn" .Values.network.backend ) }}
   neutron_ovn_vpn_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.ovn_vpn_agent | b64enc }}
+  ovn_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.ovn_agent | b64enc }}
   ovn_metadata_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.ovn_metadata_agent | b64enc }}
 {{- else }}
   metadata_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.metadata_agent | b64enc }}

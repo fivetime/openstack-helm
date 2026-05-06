@@ -316,6 +316,11 @@ spec:
 {{ end }}
         - name: pod-shared
           emptyDir: {}
+        {{- if and .Values.manifests.pvc_conversion .Values.conf.enable_conversion_pvc }}
+        - name: cinder-conversion
+          persistentVolumeClaim:
+            claimName: cinder-conversion
+        {{- else }}
         - name: cinder-conversion
           emptyDir:
             {{- if .Values.conf.enable_conversion_tmpfs }}
@@ -324,6 +329,7 @@ spec:
             {{- else }}
             {}
             {{- end }}
+        {{- end }}
         {{- if eq "true" (include "cinder.utils.has_ceph_backend" $envAll) }}
         - name: etcceph
           emptyDir: {}

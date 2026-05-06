@@ -34,6 +34,7 @@ images:
     neutron_rpc_server: quay.io/airshipit/neutron:2025.1-ubuntu_noble
     neutron_dhcp: quay.io/airshipit/neutron:2025.1-ubuntu_noble
     neutron_metadata: quay.io/airshipit/neutron:2025.1-ubuntu_noble
+    neutron_ovn_agent: quay.io/airshipit/neutron:2025.1-ubuntu_noble
     neutron_ovn_metadata: quay.io/airshipit/neutron:2025.1-ubuntu_noble
     neutron_ovn_db_sync: quay.io/airshipit/neutron:2025.1-ubuntu_noble
     neutron_ovn_vpn: quay.io/airshipit/neutron:2025.1-ubuntu_noble
@@ -265,6 +266,17 @@ dependencies:
           service: compute
         - endpoint: internal
           service: compute_metadata
+    ovn_agent:
+      pod:
+        - requireSameNode: true
+          labels:
+            application: ovn
+            component: ovn-controller
+      services:
+        - endpoint: internal
+          service: compute_metadata
+        - endpoint: internal
+          service: network
     ovn_metadata:
       pod:
         - requireSameNode: true
@@ -416,6 +428,20 @@ pod:
             initialDelaySeconds: 120
             periodSeconds: 600
             timeoutSeconds: 580
+    ovn_agent:
+      ovn_agent:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            periodSeconds: 190
+            timeoutSeconds: 185
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 120
+            periodSeconds: 600
+            timeoutSeconds: 580
     ovn_metadata_agent:
       ovn_metadata_agent:
         readiness:
@@ -552,6 +578,13 @@ pod:
         neutron_metadata_agent_init:
           runAsUser: 0
           readOnlyRootFilesystem: true
+    neutron_ovn_agent:
+      pod:
+        runAsUser: 42424
+      container:
+        neutron_ovn_agent_init:
+          runAsUser: 0
+          readOnlyRootFilesystem: true
     neutron_ovn_metadata_agent:
       pod:
         runAsUser: 42424
@@ -682,6 +715,11 @@ pod:
       neutron_ovn_db_sync:
         volumeMounts:
         volumes:
+    neutron_ovn_agent:
+      init_container: null
+      neutron_ovn_agent:
+        volumeMounts:
+        volumes:
     neutron_ovn_metadata_agent:
       init_container: null
       neutron_ovn_metadata_agent:
@@ -755,6 +793,7 @@ pod:
     neutron_l3_agent: []
     neutron_metadata_agent: []
     neutron_ovn_db_sync: []
+    neutron_ovn_agent: []
     neutron_ovn_metadata_agent: []
     ovn_vpn_agent: []
     neutron_ovs_agent: []
@@ -790,6 +829,10 @@ pod:
           min_ready_seconds: 0
           max_unavailable: 1
         metadata_agent:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+        ovn_agent:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
@@ -841,6 +884,13 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
       metadata:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ovn:
         requests:
           memory: "128Mi"
           cpu: "100m"
@@ -1436,6 +1486,7 @@ conf:
         - dhcp_agent
         - l3_agent
         - metadata_agent
+        - ovn_agent
         - ovn_metadata_agent
         - ovn_vpn_agent
         - ovs_agent
@@ -1484,6 +1535,7 @@ conf:
         - dhcp_agent
         - l3_agent
         - metadata_agent
+        - ovn_agent
         - ovn_metadata_agent
         - ovn_vpn_agent
         - ovs_agent
@@ -1575,6 +1627,7 @@ conf:
         - dhcp_agent
         - l3_agent
         - metadata_agent
+        - ovn_agent
         - ovn_metadata_agent
         - ovn_vpn_agent
         - ovs_agent
@@ -1669,6 +1722,7 @@ conf:
         - dhcp_agent
         - l3_agent
         - metadata_agent
+        - ovn_agent
         - ovn_metadata_agent
         - ovn_vpn_agent
         - ovs_agent
@@ -1744,6 +1798,7 @@ conf:
         - dhcp_agent
         - l3_agent
         - metadata_agent
+        - ovn_agent
         - ovn_metadata_agent
         - ovn_vpn_agent
         - ovs_agent
@@ -2072,6 +2127,20 @@ conf:
       enabled: true
       backend: dogpile.cache.memcached
   bagpipe_bgp: {}
+  ovn_agent:
+    DEFAULT:
+      # we cannot change the proxy socket path as it is declared
+      # as a hostPath volume from agent daemonsets
+      metadata_proxy_socket: /var/lib/neutron/openstack-helm/metadata_proxy
+      metadata_proxy_shared_secret: "password"
+      metadata_workers: 2
+    agent:
+      extensions: metadata
+    cache:
+      enabled: true
+      backend: dogpile.cache.memcached
+    ovs:
+      ovsdb_connection: unix:/run/openvswitch/db.sock
   ovn_metadata_agent:
     DEFAULT:
       # we cannot change the proxy socket path as it is declared
@@ -2582,6 +2651,7 @@ manifests:
   daemonset_bagpipe_bgp: false
   daemonset_bgp_dragent: false
   daemonset_netns_cleanup_cron: true
+  daemonset_ovn_agent: false
   daemonset_ovn_metadata_agent: false
   daemonset_ovn_vpn_agent: false
   deployment_ironic_agent: false

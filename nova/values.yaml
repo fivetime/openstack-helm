@@ -57,33 +57,33 @@ labels:
 images:
   pull_policy: IfNotPresent
   tags:
-    bootstrap: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
-    db_drop: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
-    db_init: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
+    bootstrap: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    db_drop: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    db_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     rabbit_init: docker.io/rabbitmq:3.13-management
-    ks_user: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
-    ks_service: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
-    nova_archive_deleted_rows: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    ks_endpoints: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
-    nova_api: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_cell_setup: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_cell_setup_init: quay.io/airshipit/openstack-client:2025.1-ubuntu_noble
-    nova_compute: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_compute_ironic: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_compute_ssh: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_conductor: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_db_sync: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_novncproxy: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_novncproxy_assets: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_scheduler: quay.io/airshipit/nova:2025.1-ubuntu_noble
+    ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    ks_service: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    nova_archive_deleted_rows: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    nova_api: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_cell_setup: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_cell_setup_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    nova_compute: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_compute_ironic: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_compute_ssh: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_conductor: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_db_sync: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_novncproxy: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_novncproxy_assets: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_scheduler: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_storage_init: quay.io/airshipit/ceph-config-helper:latest-ubuntu_jammy
     # NOTE(portdirect): we simply use the ceph config helper here,
     # as it has both oscli and jq.
     nova_service_cleaner: quay.io/airshipit/ceph-config-helper:latest-ubuntu_jammy
-    nova_serialproxy: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_spiceproxy: quay.io/airshipit/nova:2025.1-ubuntu_noble
-    nova_spiceproxy_assets: quay.io/airshipit/nova:2025.1-ubuntu_noble
+    nova_serialproxy: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_spiceproxy: quay.io/airshipit/nova:2026.1-ubuntu_noble
+    nova_spiceproxy_assets: quay.io/airshipit/nova:2026.1-ubuntu_noble
     test: docker.io/xrally/xrally-openstack:2.0.0
     image_repo_sync: docker.io/docker:17.07.0
     nova_wait_for_computes_init: quay.io/airshipit/ceph-config-helper:latest-ubuntu_jammy

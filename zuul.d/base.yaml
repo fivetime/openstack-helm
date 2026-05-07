@@ -86,7 +86,7 @@
       gatewayapi_envoy_version: "v1.7.0"
       crictl_version: "v1.35.0"
       floating_network_setup: true
-      openstack_client_image_tag: "2025.2-ubuntu_noble"
+      openstack_client_image_tag: "2026.1-ubuntu_noble"
 
 - job:
     name: openstack-helm-linter
@@ -111,7 +111,4 @@
     required-projects:
       - openstack/openstack-helm
     post-run: playbooks/publish/post.yaml
-    vars:
-      base_version: "2025.2.0"
-
 ...

@@ -137,6 +137,14 @@ pod:
   replicas:
     conductor: 1
     server: 1
+  affinity:
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
+      weight:
+        default: 10
   tolerations:
     tacker:
       enabled: false

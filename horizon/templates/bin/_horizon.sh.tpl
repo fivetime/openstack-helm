@@ -31,6 +31,7 @@ function start () {
   # wsgi/horizon-http needs open files here, including secret_key_store
   chown -R horizon ${SITE_PACKAGES_ROOT}/openstack_dashboard/local/
 
+  {{- if ne .Values.conf.software.runner "uwsgi" }}
   {{- if .Values.conf.software.apache2.a2enmod }}
     {{- range .Values.conf.software.apache2.a2enmod }}
   a2enmod {{ . }}
@@ -54,6 +55,7 @@ function start () {
   fi
   rm -rf /var/run/apache2/*
   APACHE_DIR="apache2"
+  {{- end }}
 
   # Add extra panels if available
   {{- range .Values.conf.horizon.extra_panels }}
@@ -81,7 +83,11 @@ function start () {
     # if there are extra panels and the image has support for it, compile the translations
     {{- range .Values.conf.horizon.extra_panels }}
     PANEL_DIR="${SITE_PACKAGES_ROOT}/{{ . }}"
-    if [ -d ${PANEL_DIR} ]; then
+    # Only run compilemessages when the panel actually ships .po files;
+    # some plugins (e.g. blazar_dashboard, tacker_horizon in kolla images)
+    # have no locale tree, and Django would error out with
+    # "This script should be run from the Django Git checkout..." aborting startup.
+    if [ -d ${PANEL_DIR} ] && ls ${PANEL_DIR}/locale/*/LC_MESSAGES/*.po >/dev/null 2>&1; then
       cd ${PANEL_DIR}; /tmp/manage.py compilemessages
     fi
     {{- end }}
@@ -106,11 +112,21 @@ function start () {
   /tmp/manage.py compress --force
   rm -rf /tmp/_tmp_.secret_key_store.lock /tmp/.secret_key_store
   chmod +x ${SITE_PACKAGES_ROOT}/django/core/wsgi.py
+  {{- if eq .Values.conf.software.runner "uwsgi" }}
+  exec uwsgi --ini /etc/uwsgi/horizon.ini
+  {{- else }}
   exec {{ .Values.conf.software.apache2.binary }} {{ .Values.conf.software.apache2.start_parameters }}
+  {{- end }}
 }
 
 function stop () {
+  {{- if eq .Values.conf.software.runner "uwsgi" }}
+  # uwsgi stops on SIGTERM by default (die-on-term). Send it explicitly so
+  # preStop returns promptly without waiting for the kubelet to escalate.
+  pkill -TERM -f 'uwsgi' || true
+  {{- else }}
   {{ .Values.conf.software.apache2.binary }} -k graceful-stop
+  {{- end }}
 }
 
 $COMMAND

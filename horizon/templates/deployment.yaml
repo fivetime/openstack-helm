@@ -118,6 +118,13 @@ spec:
               mountPath: /tmp/manage.py
               subPath: manage.py
               readOnly: true
+
+            {{- if eq .Values.conf.software.runner "uwsgi" }}
+            - name: horizon-etc
+              mountPath: /etc/uwsgi/horizon.ini
+              subPath: horizon-uwsgi.ini
+              readOnly: true
+            {{- else }}
             - name: horizon-etc
               mountPath: {{ .Values.conf.software.apache2.site_dir }}/000-default.conf
               subPath: horizon.conf
@@ -127,6 +134,7 @@ spec:
               mountPath: {{ .Values.conf.software.apache2.conf_dir }}/security.conf
               subPath: security.conf
               readOnly: true
+            {{- end }}
             {{- end }}
             - name: horizon-bin
               mountPath: /var/www/cgi-bin/horizon/django.wsgi

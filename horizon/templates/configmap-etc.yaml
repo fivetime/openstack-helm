@@ -14,6 +14,13 @@ limitations under the License.
 
 {{- if .Values.manifests.configmap_etc }}
 {{- $envAll := . }}
+
+{{- if eq .Values.conf.software.runner "uwsgi" }}
+{{- if empty (index .Values.conf.horizon_api_uwsgi.uwsgi "http-socket") -}}
+{{- $port := tuple "dashboard" "internal" "web" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | toString -}}
+{{- $_ := set .Values.conf.horizon_api_uwsgi.uwsgi "http-socket" (printf "0.0.0.0:%s" $port) -}}
+{{- end -}}
+{{- end }}
 ---
 apiVersion: v1
 kind: Secret
@@ -21,7 +28,11 @@ metadata:
   name: horizon-etc
 type: Opaque
 data:
+{{- if eq .Values.conf.software.runner "uwsgi" }}
+  horizon-uwsgi.ini: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.horizon_api_uwsgi | b64enc }}
+{{- else }}
 {{- include "helm-toolkit.snippets.values_template_renderer" (dict "envAll" $envAll "template" .Values.conf.horizon.apache "key" "horizon.conf" "format" "Secret" ) | indent 2 }}
+{{- end }}
 {{- include "helm-toolkit.snippets.values_template_renderer" (dict "envAll" $envAll "template" .Values.conf.horizon.local_settings.template "key" "local_settings" "format" "Secret" ) | indent 2 }}
 {{- if .Values.conf.horizon.security }}
 {{- include "helm-toolkit.snippets.values_template_renderer" (dict "envAll" $envAll "template" .Values.conf.horizon.security "key" "security.conf" "format" "Secret" ) | indent 2 }}

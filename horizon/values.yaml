@@ -66,6 +66,10 @@ network:
 
 conf:
   software:
+    # Selects the WSGI runner. Default "apache2" preserves historical
+    # behavior; set to "uwsgi" to start horizon under uWSGI instead
+    # (uWSGI config then comes from conf.horizon_api_uwsgi below).
+    runner: apache2
     apache2:
       binary: apache2
       start_parameters: -DFOREGROUND
@@ -1061,6 +1065,32 @@ conf:
     extra_panels:
       - heat_dashboard
       - neutron_taas_dashboard
+  # uWSGI runner config. Used only when conf.software.runner == "uwsgi".
+  # Rendered as horizon-uwsgi.ini via to_oslo_conf, mirroring the
+  # magnum/ironic/nova chart pattern.
+  # Defaults target the airshipit horizon image (venv at /var/lib/openstack).
+  # Kolla horizon images use a different venv path and need plugins=python3 —
+  # override virtualenv / plugin-dir / plugins in values_overrides/horizon/kolla.yaml.
+  horizon_api_uwsgi:
+    uwsgi:
+      master: true
+      die-on-term: true
+      enable-threads: true
+      buffer-size: 65535
+      vacuum: true
+      processes: 5
+      threads: 1
+      virtualenv: /var/lib/openstack
+      # Load chart-rendered django.wsgi (it monkey-patches pymysql as MySQLdb
+      # before importing Django). Do not change unless you ship your own.
+      wsgi-file: /var/www/cgi-bin/horizon/django.wsgi
+      static-map: /static=/var/www/html/horizon
+      # http-socket is auto-populated from endpoint port when empty (see
+      # configmap-etc.yaml). uwsgi runs as the container user (root by
+      # default per pod.security_context.horizon.container.horizon.runAsUser),
+      # so no privilege drop is needed; uid/gid intentionally omitted.
+      http-socket:
+      log-format: '%(addr) - %(user) [%(ltime)] "%(method) %(uri) %(proto)" %(status) %(size) "%(referer)" "%(uagent)"'
 
 dependencies:
   dynamic:

@@ -95,11 +95,18 @@ spec:
             - -R
             - "glance:"
             - {{ .Values.conf.glance.file.filesystem_store_datadir }}
+            {{- if .Values.manifests.pvc_staging }}
+            - /var/lib/glance/tmp
+            {{- end }}
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp
             - name: glance-images
               mountPath: {{ .Values.conf.glance.file.filesystem_store_datadir }}
+            {{- if .Values.manifests.pvc_staging }}
+            - name: glance-tmp
+              mountPath: /var/lib/glance/tmp
+            {{- end }}
         {{ if eq .Values.storage "rbd" }}
         - name: ceph-keyring-placement
 {{ tuple $envAll "glance_api" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -310,8 +317,14 @@ spec:
           emptyDir: {}
         - name: oslo-lock-path
           emptyDir: {}
+        {{- if .Values.manifests.pvc_staging }}
+        - name: glance-tmp
+          persistentVolumeClaim:
+            claimName: glance-staging
+        {{- else }}
         - name: glance-tmp
           emptyDir: {}
+        {{- end }}
         - name: etcglance
           emptyDir: {}
         - name: glance-bin

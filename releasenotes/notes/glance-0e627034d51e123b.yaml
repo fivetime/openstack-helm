@@ -1,0 +1,14 @@
+---
+glance:
+  - |
+    Add support for a shared PersistentVolumeClaim backing the
+    Glance interoperable image import staging directory
+    (``/var/lib/glance/tmp``). When the ``glance-api`` Deployment is
+    scaled to more than one replica, the per-pod ``emptyDir`` used
+    previously caused ``glance-direct`` image imports to fail when
+    ``PUT /stage`` and ``POST /import`` were dispatched to different
+    pods. Setting ``manifests.pvc_staging=true`` together with a
+    ReadWriteMany ``volume_staging`` storage class makes all replicas
+    share the staging directory, which fixes the issue without
+    requiring per-pod self-reference URLs.
+...

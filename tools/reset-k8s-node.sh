@@ -23,6 +23,9 @@
 # 不清理:
 #   - 容器运行时本身（containerd/CRI-O 保持安装状态）
 #   - kubeadm/kubelet/kubectl 二进制
+#   - /opt/cni/bin 里的上游标准 CNI 插件（loopback/bridge/host-local 等任何
+#     CNI 都依赖的基础二进制；只删 multus/ovn-k8s-cni-overlay/cilium-cni 等
+#     CNI 实现专属的）
 #   - 系统网络配置（/etc/hosts 等）
 #   - 磁盘/OSD 数据（请使用 zap-disks.sh）
 #
@@ -585,9 +588,8 @@ cleanup_directories() {
     done
 
     local dirs=(
-        # CNI
+        # CNI 配置（活跃 CNI 选型，必须清）
         /etc/cni/net.d
-        /opt/cni/bin
         /var/lib/cni
         /run/flannel
         # Cilium
@@ -612,6 +614,30 @@ cleanup_directories() {
             log "已清理: $dir"
         fi
     done
+
+    # /opt/cni/bin 特殊处理：保留上游 cni-plugins 的标准二进制（任何 CNI 都依赖），
+    # 只删 CNI 实现专属的（multus / ovn-k8s-cni-overlay / cilium-cni / calico 等）。
+    # 这样 reset 后切换到任意 CNI 都能直接用，无需重装基础插件。
+    if [[ -d /opt/cni/bin ]]; then
+        local cni_standard_keep=(
+            bandwidth bridge dhcp dummy firewall host-device host-local
+            ipvlan loopback macvlan portmap ptp sbr static tap tuning vlan vrf
+            LICENSE README.md
+        )
+        local removed=0
+        while IFS= read -r f; do
+            local base keep=false
+            base=$(basename "$f")
+            for std in "${cni_standard_keep[@]}"; do
+                if [[ "$base" == "$std" ]]; then keep=true; break; fi
+            done
+            if [[ "$keep" == "false" ]]; then
+                run rm -f "$f"
+                removed=$((removed + 1))
+            fi
+        done < <(find /opt/cni/bin -mindepth 1 -maxdepth 1 \( -type f -o -type l \) 2>/dev/null)
+        log "已清理 /opt/cni/bin: 删除 $removed 个 CNI 实现专属二进制，保留上游标准插件"
+    fi
 
     # kubeconfig
     if [[ -f "$HOME/.kube/config" ]]; then

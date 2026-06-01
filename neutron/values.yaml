@@ -2153,6 +2153,8 @@ conf:
       backend: dogpile.cache.memcached
     ovs:
       ovsdb_connection: unix:/run/openvswitch/db.sock
+  ovn_metadata_agent_init:
+    chown_ovsdb_sock: true
   bgp_dragent: {}
 
   rabbitmq:
@@ -2309,6 +2311,11 @@ secrets:
     neutron: neutron-oci-image-registry
 
 # typically overridden by environmental
+identity:
+  openrc:
+    exclude_vars: []
+    extra_vars: []
+
 # values, but should include all endpoints
 # required by this chart
 endpoints:

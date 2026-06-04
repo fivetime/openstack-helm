@@ -20,6 +20,12 @@ set -ex
 mkdir -p /tmp/pod-shared
 tee > /tmp/pod-shared/ovn.ini << EOF
 [ovn]
-ovn_nb_connection={{ coalesce .Values.conf.plugins.ml2_conf.ovn.ovn_nb_connection "tcp:$OVN_OVSDB_NB_SERVICE_HOST:$OVN_OVSDB_NB_SERVICE_PORT_OVSDB" }}
-ovn_sb_connection={{ coalesce .Values.conf.plugins.ml2_conf.ovn.ovn_sb_connection "tcp:$OVN_OVSDB_SB_SERVICE_HOST:$OVN_OVSDB_SB_SERVICE_PORT_OVSDB" }}
+{{- /* Default to the full per-pod RAFT member list (built from
+       endpoints.ovn_ovsdb_nb/sb.statefulset) so the OVN ML2 client follows the
+       leader; a single ClusterIP/LB VIP makes it flap. An explicit
+       conf.plugins.ml2_conf.ovn.ovn_nb_connection override still wins (coalesce
+       -- but for a clustered OVN remove that single-VIP override so this
+       member list is used). */}}
+ovn_nb_connection={{ coalesce .Values.conf.plugins.ml2_conf.ovn.ovn_nb_connection (printf "tcp:%s" (tuple "ovn_ovsdb_nb" "internal" "ovsdb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | replace "," ",tcp:")) }}
+ovn_sb_connection={{ coalesce .Values.conf.plugins.ml2_conf.ovn.ovn_sb_connection (printf "tcp:%s" (tuple "ovn_ovsdb_sb" "internal" "ovsdb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | replace "," ",tcp:")) }}
 EOF

@@ -1,0 +1,304 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for neutron-ovnic.
+#
+# neutron-ovnic is the EXTERNAL ORCHESTRATOR that drives native OVN-IC (Transit
+# Switch / Transit Router) beneath Neutron. Deploy ONE agent release per AZ; it
+# is a pure TCP client of:
+#   * this AZ's local OVN NB/SB        (endpoints ovn_ovsdb_nb / ovn_ovsdb_sb,
+#                                        owned by the `ovn` chart)
+#   * the global Interconnection DBs   (endpoints ovn_ic_nb / ovn_ic_sb, the hub
+#                                        from the `ovn-ic` chart)
+# It needs no host mounts and no privileges. The ovn-ic DAEMON itself is run by
+# the `ovn-ic` chart's agent half, so here ovn_ic_daemon_ctl is a no-op
+# (/bin/true) -- this orchestrator only issues ovn-ic-nbctl/sbctl + reconciles.
+
+---
+release_group: null
+
+images:
+  tags:
+    neutron_ovnic: ghcr.io/fivetime/openstackhelm/neutron-ovnic:alpine_latest
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
+    image_repo_sync: quay.io/airshipit/docker:27.5.0
+  pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+labels:
+  agent:
+    node_selector_key: openstack-network-node
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-network-node
+    node_selector_value: enabled
+
+# Optional persistent volume for the agent's desired-state file
+# (interconnections.json). Default emptyDir is SAFE ONLY while you declare no
+# interconnections: once you do, a pod restart with a lost file resets desired
+# to [] and the next reconcile's _cleanup_stale() deletes the ovnic LRPs it
+# created (treating them as orphans). For any real per-AZ deployment, enable
+# this (RWO; replicas stays 1 -> single attach) so declarations survive
+# restarts. Alternatively drive desired state from a durable external source.
+volume:
+  agent:
+    enabled: false
+    class_name: general
+    size: 1Gi
+    path: /var/lib/neutron-ovnic
+
+pod:
+  use_fqdn:
+    compute: true
+  security_context:
+    agent:
+      container:
+        neutron_ovnic_agent:
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+  tolerations:
+    agent:
+      enabled: false
+  affinity:
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
+      weight:
+        default: 10
+  probes:
+    agent:
+      neutron_ovnic_agent:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 20
+            timeoutSeconds: 15
+            periodSeconds: 30
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 60
+            timeoutSeconds: 15
+            periodSeconds: 60
+  dns_policy: "ClusterFirstWithHostNet"
+  replicas:
+    # Single active per AZ. With replicas: 1 the agent runs without an OVSDB
+    # lock (conf.ovnic.ha_lock_name=""), which is also why a node reboot can
+    # never split-brain. For HA raise this AND set a non-empty ha_lock_name
+    # (ovsdb-lock) or ha_backend=tooz.
+    agent: 1
+  lifecycle:
+    upgrades:
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 1
+          max_surge: 3
+  resources:
+    enabled: false
+    agent:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "1000m"
+    jobs:
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+
+secrets:
+  oci_image_registry:
+    neutron-ovnic: neutron-ovnic-oci-image-registry-key
+
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  oci_image_registry:
+    name: oci-image-registry
+    namespace: oci-image-registry
+    auth:
+      enabled: false
+      neutron-ovnic:
+        username: neutron-ovnic
+        password: password
+    hosts:
+      default: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        default: null
+  # This AZ's local OVN databases (owned by the `ovn` chart). The agent drives
+  # them via native ovsdbapp (local NB) and passes them to ovn-ic.
+  ovn_ovsdb_nb:
+    name: ovn-ovsdb-nb
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-nb
+    host_fqdn_override:
+      default: null
+    # The local NB is a RAFT cluster: with a statefulset block, ovn_nb_connection
+    # is built as the per-pod member list so ovsdbapp follows the leader (a
+    # single ClusterIP/LB VIP flaps). SET replicas to match the ovn chart's
+    # pod.replicas.ovn_ovsdb_nb (set 1 / drop the block for single-node OVN).
+    statefulset:
+      name: ovn-ovsdb-nb
+      replicas: 3
+    port:
+      ovsdb:
+        default: 6641
+  ovn_ovsdb_sb:
+    name: ovn-ovsdb-sb
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-sb
+    host_fqdn_override:
+      default: null
+    statefulset:
+      name: ovn-ovsdb-sb
+      replicas: 3
+    port:
+      ovsdb:
+        default: 6642
+  # The global Interconnection databases (the `ovn-ic` chart hub). The agent
+  # drives them via ovn-ic-nbctl / ovn-ic-sbctl (Transit Router/Switch + IC-SB).
+  ovn_ic_nb:
+    name: ovn-ovsdb-ic-nb
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-ic-nb
+    host_fqdn_override:
+      default: null
+    port:
+      ovsdb:
+        default: 6645
+  ovn_ic_sb:
+    name: ovn-ovsdb-ic-sb
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-ic-sb
+    host_fqdn_override:
+      default: null
+    port:
+      ovsdb:
+        default: 6646
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - neutron-ovnic-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    # NOTE: `service` must be the ENDPOINT KEY (kubernetes-entrypoint does
+    # `replace "-" "_"` and looks it up under .Values.endpoints), NOT the k8s
+    # service name -- otherwise the namespace resolves empty.
+    agent:
+      services:
+        - endpoint: internal
+          service: ovn_ovsdb_nb
+        - endpoint: internal
+          service: ovn_ovsdb_sb
+        - endpoint: internal
+          service: ovn_ic_nb
+        - endpoint: internal
+          service: ovn_ic_sb
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+
+# neutron-ovnic.conf, rendered with helm-toolkit.utils.to_oslo_conf. The four
+# OVN connection strings are injected from `endpoints` at render time (see
+# templates/configmap-etc.yaml) UNLESS set explicitly here.
+conf:
+  neutron_ovnic:
+    DEFAULT:
+      debug: false
+    ovn_nb:
+      # ovn_nb_connection / ovn_sb_connection injected from endpoints.
+      ovsdb_probe_interval: 60000
+      ovsdb_connection_timeout: 180
+    ovn_ic:
+      # ovn_ic_nb_connection / ovn_ic_sb_connection injected from endpoints.
+      ovn_ic_nbctl_timeout: 30
+    ovnic:
+      # REQUIRED, override per AZ: globally-unique AZ name. MUST equal this
+      # AZ's NB_Global.name (what the `ovn` chart registers); otherwise the AZ
+      # registers under the wrong name in IC-SB.
+      az_name: az1
+      # auto = Transit Router when every AZ is OVN >= 26.03, else Transit
+      # Switch fallback. Force tr/ts for testing.
+      mode: auto
+      # FAIL-CLOSED: the agent refuses to provision until the operator asserts
+      # the local Neutron ML2/OVN has the coexistence hardening (won't let
+      # db-sync delete ovnic-owned objects). Set true once verified.
+      coexistence_verified: false
+      # The ovn-ic daemon is run by the `ovn-ic` chart, NOT here -> no-op the
+      # ctl so the agent does not also try start_ic/stop_ic.
+      ovn_ic_daemon_ctl: /bin/true
+      # replicas: 1 -> single active, no OVSDB lock needed (empty = no lock).
+      ha_lock_name: ""
+      # Ordered chassis eligible to host an interconnection's distributed
+      # gateway port (first reachable = active, rest = HA). Override per AZ,
+      # e.g. "chassis-a,chassis-b". Empty = none.
+      gateway_chassis: ""
+      # Desired-state file the agent reconciles every cycle. Seeded to [] by
+      # the start script on an emptyDir; edit it (or enable the REST API) to
+      # declare interconnections.
+      interconnections_file: /var/lib/neutron-ovnic/interconnections.json
+      reconcile_interval: 60
+      # Optional REST API (CRUD on the interconnections file + status). Off by
+      # default (loopback only when on). To expose it add a Service.
+      enable_rest_api: false
+      api_host: 0.0.0.0
+      api_port: 9696
+      api_auth_strategy: noauth
+
+manifests:
+  configmap_bin: true
+  configmap_etc: true
+  deployment_agent: true
+  job_image_repo_sync: true
+  secret_registry: true
+
+# -- Array of extra K8s manifests to deploy
+## Note: Supports use of custom Helm templates
+extraObjects: []
+...

@@ -86,6 +86,24 @@ limitations under the License.
 {{- $_ := tuple "compute_metadata" "internal" "metadata" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | set $envAll.Values.conf.ovn_agent.DEFAULT "nova_metadata_port" }}
 {{- end -}}
 
+{{- /* Local OVN NB/SB are a RAFT cluster: build ovn_nb/sb_connection as the
+       per-pod member list (from endpoints.ovn_ovsdb_nb/sb.statefulset) for BOTH
+       the ML2 driver (ml2_conf.ini) and the OVN agent (ovn_agent.ini), so the
+       ovsdbapp client follows the leader instead of flapping behind a single
+       ClusterIP/LB VIP. An explicit conf override (either tree) still wins. */}}
+{{- if empty (index $envAll.Values.conf.plugins.ml2_conf.ovn "ovn_nb_connection") -}}
+{{- $_ := set $envAll.Values.conf.plugins.ml2_conf.ovn "ovn_nb_connection" (printf "tcp:%s" (tuple "ovn_ovsdb_nb" "internal" "ovsdb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | replace "," ",tcp:")) -}}
+{{- end -}}
+{{- if empty (index $envAll.Values.conf.plugins.ml2_conf.ovn "ovn_sb_connection") -}}
+{{- $_ := set $envAll.Values.conf.plugins.ml2_conf.ovn "ovn_sb_connection" (printf "tcp:%s" (tuple "ovn_ovsdb_sb" "internal" "ovsdb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | replace "," ",tcp:")) -}}
+{{- end -}}
+{{- if empty (index $envAll.Values.conf.ovn_agent.ovn "ovn_nb_connection") -}}
+{{- $_ := set $envAll.Values.conf.ovn_agent.ovn "ovn_nb_connection" (printf "tcp:%s" (tuple "ovn_ovsdb_nb" "internal" "ovsdb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | replace "," ",tcp:")) -}}
+{{- end -}}
+{{- if empty (index $envAll.Values.conf.ovn_agent.ovn "ovn_sb_connection") -}}
+{{- $_ := set $envAll.Values.conf.ovn_agent.ovn "ovn_sb_connection" (printf "tcp:%s" (tuple "ovn_ovsdb_sb" "internal" "ovsdb" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | replace "," ",tcp:")) -}}
+{{- end -}}
+
 {{- if empty $envAll.Values.conf.ovn_metadata_agent.DEFAULT.nova_metadata_host -}}
 {{- $_ := tuple "compute_metadata" "internal" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" | set $envAll.Values.conf.ovn_metadata_agent.DEFAULT "nova_metadata_host" -}}
 {{- end -}}

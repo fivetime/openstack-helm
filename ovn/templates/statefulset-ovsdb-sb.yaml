@@ -101,9 +101,13 @@ spec:
               mountPath: {{ $envAll.Values.volume.ovn_ovsdb_sb.path }}
       volumes:
         - name: run-openvswitch
-          hostPath:
-            path: /run/openvswitch
-            type: DirectoryOrCreate
+          # Per-pod runtime dir for the central SB DB (sockets/pidfiles). It
+          # MUST NOT be the host's /run/openvswitch: with more than one RAFT
+          # replica co-located on a node, they would share one
+          # ovnsb_db.ctl/.sock/.pid and collide (pidfile-check abort /
+          # dual-identity / fragmented cluster). A central DB pod needs no host
+          # runtime access -- northd/controller/neutron reach it over TCP.
+          emptyDir: {}
 {{- if not .Values.volume.ovn_ovsdb_sb.enabled }}
         - name: data
           emptyDir: {}

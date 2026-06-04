@@ -1,0 +1,309 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for ovn-ic (OVN Interconnection).
+#
+# Two roles, toggled independently in `manifests:` so one chart serves both:
+#   * hub   -- the GLOBAL Interconnection databases (IC-NB / IC-SB), deployed
+#              ONCE for the whole interconnection fabric (shared by all AZs).
+#   * agent -- the per-AZ `ovn-ic` daemon, deployed in EACH AZ; it syncs the
+#              AZ's local OVN NB/SB with the global IC databases.
+#
+# Requires OVN >= 26.03 (Transit Router); the image is the same OVN image used
+# by the ovn chart (it already ships ovn-ic + the IC schemas).
+
+---
+release_group: null
+
+images:
+  tags:
+    ovn_ic_nb: quay.io/airshipit/ovn:ubuntu_noble
+    ovn_ic_sb: quay.io/airshipit/ovn:ubuntu_noble
+    ovn_ic: quay.io/airshipit/ovn:ubuntu_noble
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
+    image_repo_sync: quay.io/airshipit/docker:27.5.0
+  pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+labels:
+  ovn_ic_nb:
+    node_selector_key: openstack-network-node
+    node_selector_value: enabled
+  ovn_ic_sb:
+    node_selector_key: openstack-network-node
+    node_selector_value: enabled
+  ovn_ic:
+    node_selector_key: openstack-network-node
+    node_selector_value: enabled
+
+volume:
+  ovn_ic_nb:
+    path: /var/lib/ovn
+    enabled: true
+    class_name: general
+    size: 1Gi
+  ovn_ic_sb:
+    path: /var/lib/ovn
+    enabled: true
+    class_name: general
+    size: 1Gi
+
+pod:
+  use_fqdn:
+    compute: true
+  envs:
+    common:
+      - name: OVN_SSL_ENABLE
+        value: "no"
+  security_context:
+    ovn_ic:
+      container:
+        ovn_ic:
+          readOnlyRootFilesystem: false
+    ovn_ic_nb:
+      container:
+        ovsdb:
+          readOnlyRootFilesystem: false
+    ovn_ic_sb:
+      container:
+        ovsdb:
+          readOnlyRootFilesystem: false
+  tolerations:
+    ovn_ic_nb:
+      enabled: false
+    ovn_ic_sb:
+      enabled: false
+    ovn_ic:
+      enabled: false
+  affinity:
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
+      weight:
+        default: 10
+  probes:
+    ovn_ic_nb:
+      ovsdb:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 60
+    ovn_ic_sb:
+      ovsdb:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 60
+    ovn_ic:
+      ovn_ic:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            periodSeconds: 60
+  dns_policy: "ClusterFirstWithHostNet"
+  replicas:
+    # NOTE: IC databases run standalone (single-replica) in this chart; RAFT/HA
+    # for the IC databases is a follow-up. The per-AZ ovn-ic daemon is one per
+    # AZ release.
+    ovn_ic_nb: 1
+    ovn_ic_sb: 1
+    ovn_ic: 1
+  lifecycle:
+    upgrades:
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 1
+          max_surge: 3
+  resources:
+    enabled: false
+    ovn_ic_nb:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "1000m"
+    ovn_ic_sb:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "1000m"
+    ovn_ic:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "1000m"
+    jobs:
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+
+secrets:
+  oci_image_registry:
+    ovn-ic: ovn-ic-oci-image-registry-key
+
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  oci_image_registry:
+    name: oci-image-registry
+    namespace: oci-image-registry
+    auth:
+      enabled: false
+      ovn-ic:
+        username: openvswitch
+        password: password
+    hosts:
+      default: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        default: null
+  # Global Interconnection databases (the hub).
+  ovn_ic_nb:
+    name: ovn-ovsdb-ic-nb
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-ic-nb
+    host_fqdn_override:
+      default: null
+    port:
+      ovsdb:
+        default: 6645
+      raft:
+        default: 6647
+  ovn_ic_sb:
+    name: ovn-ovsdb-ic-sb
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-ic-sb
+    host_fqdn_override:
+      default: null
+    port:
+      ovsdb:
+        default: 6646
+      raft:
+        default: 6648
+  # This AZ's local OVN databases (owned by the ovn chart) that the per-AZ
+  # ovn-ic daemon connects to. Point these at the ovn release's services.
+  ovn_ovsdb_nb:
+    name: ovn-ovsdb-nb
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-nb
+    host_fqdn_override:
+      default: null
+    # The local NB is a RAFT cluster: with a statefulset block the connection
+    # is built as the per-pod member list (ovn-ovsdb-nb-0.ovn-ovsdb-nb...,
+    # -1, -2) so ovn-ic follows the leader. SET replicas to match the ovn
+    # chart's pod.replicas.ovn_ovsdb_nb. Remove the statefulset block (or set
+    # replicas: 1) for a single-node OVN.
+    statefulset:
+      name: ovn-ovsdb-nb
+      replicas: 3
+    port:
+      ovsdb:
+        default: 6641
+  ovn_ovsdb_sb:
+    name: ovn-ovsdb-sb
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-sb
+    host_fqdn_override:
+      default: null
+    statefulset:
+      name: ovn-ovsdb-sb
+      replicas: 3
+    port:
+      ovsdb:
+        default: 6642
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - ovn-ic-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    ovn_ic_nb: null
+    ovn_ic_sb: null
+    ovn_ic:
+      # NOTE: `service` is the ENDPOINT KEY (kubernetes-entrypoint does
+      # `replace "-" "_"` and looks it up under .Values.endpoints), not the
+      # k8s service name -- the IC keys are ovn_ic_nb/ovn_ic_sb.
+      services:
+        - endpoint: internal
+          service: ovn_ovsdb_nb
+        - endpoint: internal
+          service: ovn_ovsdb_sb
+        - endpoint: internal
+          service: ovn_ic_nb
+        - endpoint: internal
+          service: ovn_ic_sb
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+
+manifests:
+  configmap_bin: true
+  # hub (global, deploy once)
+  service_ovn_ovsdb_ic_nb: true
+  service_ovn_ovsdb_ic_sb: true
+  statefulset_ovn_ovsdb_ic_nb: true
+  statefulset_ovn_ovsdb_ic_sb: true
+  # agent (per-AZ)
+  deployment_ovn_ic: true
+  job_image_repo_sync: true
+  secret_registry: true
+
+# -- Array of extra K8s manifests to deploy
+## Note: Supports use of custom Helm templates
+extraObjects: []
+...

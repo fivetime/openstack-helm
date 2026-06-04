@@ -245,6 +245,14 @@ pod:
     anti:
       type:
         default: preferredDuringSchedulingIgnoredDuringExecution
+        # RAFT DB members must NOT share a node by default (a node failure must
+        # not take >1 member, and co-located members compete for the per-node
+        # runtime dir). Hard anti-affinity by default; override to
+        # preferredDuringSchedulingIgnoredDuringExecution for test clusters with
+        # fewer nodes than replicas (the per-pod emptyDir runtime makes
+        # co-location safe).
+        ovn-ovsdb-nb: requiredDuringSchedulingIgnoredDuringExecution
+        ovn-ovsdb-sb: requiredDuringSchedulingIgnoredDuringExecution
       topologyKey:
         default: kubernetes.io/hostname
       weight:

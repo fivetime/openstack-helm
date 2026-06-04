@@ -1,0 +1,108 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- define "neutronOvnicAgentReadinessProbe" }}
+exec:
+  command:
+    - /bin/bash
+    - -c
+    - pgrep -f neutron-ovnic-agent
+{{- end }}
+
+{{- define "neutronOvnicAgentLivenessProbe" }}
+exec:
+  command:
+    - /bin/bash
+    - -c
+    - pgrep -f neutron-ovnic-agent
+{{- end }}
+
+{{- if .Values.manifests.deployment_agent }}
+{{- $envAll := . }}
+
+{{- $serviceAccountName := "neutron-ovnic-agent" }}
+{{ tuple $envAll "agent" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: neutron-ovnic-agent
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "neutron-ovnic" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  replicas: {{ .Values.pod.replicas.agent }}
+  # Single-active orchestrator: replace the old pod before starting the new one
+  # so two lockless agents never reconcile concurrently (and an RWO data PVC
+  # reattaches cleanly).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ tuple $envAll "neutron-ovnic" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "neutron-ovnic" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+      {{- if and .Values.pod.tolerations.agent.enabled .Values.pod.tolerations.agent.tolerations }}
+      tolerations:
+      {{- toYaml .Values.pod.tolerations.agent.tolerations | nindent 8 }}
+      {{- end }}
+      nodeSelector:
+        {{ .Values.labels.agent.node_selector_key }}: {{ .Values.labels.agent.node_selector_value }}
+      initContainers:
+{{- tuple $envAll "agent" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: neutron-ovnic-agent
+          command:
+            - /tmp/neutron-ovnic-bin/neutron-ovnic-agent.sh
+{{ tuple $envAll "neutron_ovnic" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "agent" "container" "neutron_ovnic_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{ dict "envAll" . "component" "agent" "container" "neutron_ovnic_agent" "type" "readiness" "probeTemplate" (include "neutronOvnicAgentReadinessProbe" . | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+{{ dict "envAll" . "component" "agent" "container" "neutron_ovnic_agent" "type" "liveness" "probeTemplate" (include "neutronOvnicAgentLivenessProbe" . | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+          volumeMounts:
+            - name: neutron-ovnic-bin
+              mountPath: /tmp/neutron-ovnic-bin
+            - name: neutron-ovnic-etc
+              mountPath: /etc/neutron-ovnic/neutron-ovnic.conf
+              subPath: neutron-ovnic.conf
+              readOnly: true
+            - name: neutron-ovnic-data
+              mountPath: {{ .Values.volume.agent.path }}
+      volumes:
+        - name: neutron-ovnic-bin
+          configMap:
+            name: neutron-ovnic-bin
+            defaultMode: 0555
+        - name: neutron-ovnic-etc
+          secret:
+            secretName: neutron-ovnic-etc
+            defaultMode: 0444
+        - name: neutron-ovnic-data
+          {{- if .Values.volume.agent.enabled }}
+          persistentVolumeClaim:
+            claimName: neutron-ovnic-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

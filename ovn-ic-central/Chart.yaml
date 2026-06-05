@@ -13,12 +13,12 @@
 ---
 apiVersion: v2
 appVersion: v26.03.0
-description: OpenStack-Helm neutron-ovnic (native OVN-IC orchestrator for Neutron)
-name: neutron-ovnic
+description: OpenStack-Helm ovn-ic-central (native OVN-IC orchestrator for Neutron)
+name: ovn-ic-central
 version: 2026.1.0
-home: https://github.com/fivetime/neutron-ovnic
+home: https://github.com/fivetime/ovn-ic-central
 sources:
-  - https://github.com/fivetime/neutron-ovnic
+  - https://github.com/fivetime/ovn-ic-central
   - https://opendev.org/openstack/openstack-helm
 maintainers:
   - name: OpenStack-Helm Authors

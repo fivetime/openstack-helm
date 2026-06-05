@@ -1,6 +1,6 @@
-# neutron-ovnic
+# ovn-ic-central
 
-OpenStack-Helm chart for **neutron-ovnic** — the external orchestrator that
+OpenStack-Helm chart for **ovn-ic-central** — the external orchestrator that
 drives native **OVN Interconnection** (Transit Switch / Transit Router)
 *beneath* Neutron. It is the control plane that sits on top of the `ovn-ic`
 chart's plumbing: it reconciles a declared set of interconnections into native
@@ -8,8 +8,8 @@ OVN-IC objects (`ovn-ic-nbctl tr-add`/`ts-add`, transit ports, routes) and
 tags everything `ovnic:*` so it never touches Neutron-owned objects.
 
 Requires OVN **>= 26.03** (Transit Router) on every participating AZ. The image
-(`ghcr.io/fivetime/openstackhelm/neutron-ovnic`) is the `ovn` image plus the
-neutron-ovnic Python package, so it ships the 26.03 `ovn-ic-nbctl`/`-sbctl`.
+(`ghcr.io/fivetime/openstackhelm/ovn-ic-central`) is the `ovn` image plus the
+ovn-ic-central Python package, so it ships the 26.03 `ovn-ic-nbctl`/`-sbctl`.
 
 ## What it is (and is not)
 
@@ -26,15 +26,15 @@ The four OVN connection strings are derived from `endpoints`
 (`ovn_ovsdb_nb`/`_sb` = this AZ's local OVN; `ovn_ic_nb`/`_sb` = the hub), so a
 minimal install only needs the per-AZ identity and the coexistence assertion:
 
-    helm install neutron-ovnic ./neutron-ovnic --namespace openstack \
-      --set conf.neutron_ovnic.ovnic.az_name=az1 \
-      --set conf.neutron_ovnic.ovnic.coexistence_verified=true \
-      --set conf.neutron_ovnic.ovnic.gateway_chassis=chassis-a
+    helm install ovn-ic-central ./ovn-ic-central --namespace openstack \
+      --set conf.ovn_ic_central.ovnic.az_name=az1 \
+      --set conf.ovn_ic_central.ovnic.coexistence_verified=true \
+      --set conf.ovn_ic_central.ovnic.gateway_chassis=chassis-a
 
 If the local OVN or the IC hub live in another namespace, set
 `endpoints.<ep>.namespace` / `host_fqdn_override` accordingly.
 
-## Required / notable config (`conf.neutron_ovnic.ovnic`)
+## Required / notable config (`conf.ovn_ic_central.ovnic`)
 
 - **`az_name`** (default `az1`) — globally-unique AZ name; **must equal** this
   AZ's `NB_Global.name` (what the `ovn` chart registers). A mismatch registers
@@ -54,12 +54,32 @@ If the local OVN or the IC hub live in another namespace, set
 
 ## Notes
 
-- **Single active per AZ:** with `pod.replicas.agent: 1` the agent runs without
-  an OVSDB lock (`ha_lock_name=""`) — a node reboot can't split-brain. For HA,
-  raise replicas **and** set a non-empty `ha_lock_name` (ovsdb-lock) or
-  `ha_backend=tooz`. (The shipped image's oslo.service has no threading
-  backend, so ovsdb-lock single-active is reliable only single-replica; prefer
-  `tooz` for multi-replica HA.)
+- **HA — single active per AZ (active-passive):** the agent is a *stateless*
+  reconciler, so the default `pod.replicas.agent: 2` is 1 active + 1 hot standby
+  (soft anti-affinity spreads them across nodes). The replicas elect one active
+  by holding an **ovsdb-lock** on the local NB
+  (`conf.ovn_ic_central.ovnic.ha_lock_name`); only the lock holder reconciles,
+  the standby waits and takes over on leader loss. It is **not** active-active
+  and cannot be: every replica drives the *same* shared OVN-NB / IC-NB / IC-SB,
+  so concurrent writers would issue duplicate, conflicting `ovn-ic-nbctl` ops —
+  the lock serialises them to a single writer (the same single-active lock model
+  the `ovn` chart uses for northd). It is lock-based, **not RAFT**, so 2 replicas
+  suffice — no quorum / odd count needed. Raise for extra standbys, or set
+  `pod.replicas.agent: 1` to rely on k8s rescheduling (a brief reconcile gap,
+  harmless since reconcile is periodic and idempotent).
+  - The ovsdb-lock only advances under the image's oslo.service **threading**
+    backend; if yours lacks it, set `conf.ovn_ic_central.ovnic.ha_backend=tooz`
+    (+ `tooz_backend_url` to etcd/redis), or drop to `pod.replicas.agent: 1`
+    with `ha_lock_name: ""` (no lock — safe only single-replica).
+  - The desired-state file is **per-pod** (emptyDir by default). With >1 replica
+    a `ReadWriteOnce` PVC won't attach to every pod — use a RWX volume or drive
+    desired state from a durable external source (REST API / config) so a
+    standby that becomes leader doesn't reconcile against an empty list.
+- **Metrics:** set `monitoring.enabled=true` to turn on the agent's built-in
+  Prometheus endpoint (`[ovnic] enable_metrics`), expose the container port +
+  `prometheus.io` pod annotations, and create the headless
+  `ovn-ic-central-metrics` Service (port `conf.ovn_ic_central.ovnic.metrics_port`,
+  default 9105). Only the active leader emits live counters.
 - **Plumbing is separate:** this chart is the orchestrator. The OVN-IC
   databases + per-AZ `ovn-ic` daemon are the `ovn-ic` chart; the local OVN is
   the `ovn` chart. Deploy those first.

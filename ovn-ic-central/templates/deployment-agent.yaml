@@ -1,0 +1,117 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- define "ovnIcCentralAgentReadinessProbe" }}
+exec:
+  command:
+    - /bin/bash
+    - -c
+    - pgrep -f ovn-ic-central
+{{- end }}
+
+{{- define "ovnIcCentralAgentLivenessProbe" }}
+exec:
+  command:
+    - /bin/bash
+    - -c
+    - pgrep -f ovn-ic-central
+{{- end }}
+
+{{- if .Values.manifests.deployment_agent }}
+{{- $envAll := . }}
+
+{{- $serviceAccountName := "ovn-ic-central-agent" }}
+{{ tuple $envAll "agent" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: ovn-ic-central-agent
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "ovn-ic-central" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  replicas: {{ .Values.pod.replicas.agent }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "ovn-ic-central" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "ovn-ic-central" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{- if .Values.monitoring.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.conf.ovn_ic_central.ovnic.metrics_port | quote }}
+        prometheus.io/path: "/metrics"
+{{- end }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+      affinity:
+{{ tuple $envAll "ovn-ic-central" "agent" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      {{- if and .Values.pod.tolerations.agent.enabled .Values.pod.tolerations.agent.tolerations }}
+      tolerations:
+      {{- toYaml .Values.pod.tolerations.agent.tolerations | nindent 8 }}
+      {{- end }}
+      nodeSelector:
+        {{ .Values.labels.agent.node_selector_key }}: {{ .Values.labels.agent.node_selector_value }}
+      initContainers:
+{{- tuple $envAll "agent" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: ovn-ic-central-agent
+          command:
+            - /tmp/ovn-ic-central-bin/ovn-ic-central.sh
+{{ tuple $envAll "ovn_ic_central" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "agent" "container" "ovn_ic_central_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{ dict "envAll" . "component" "agent" "container" "ovn_ic_central_agent" "type" "readiness" "probeTemplate" (include "ovnIcCentralAgentReadinessProbe" . | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+{{ dict "envAll" . "component" "agent" "container" "ovn_ic_central_agent" "type" "liveness" "probeTemplate" (include "ovnIcCentralAgentLivenessProbe" . | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+{{- if .Values.monitoring.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.conf.ovn_ic_central.ovnic.metrics_port }}
+              protocol: TCP
+{{- end }}
+          volumeMounts:
+            - name: ovn-ic-central-bin
+              mountPath: /tmp/ovn-ic-central-bin
+            - name: ovn-ic-central-etc
+              mountPath: /etc/ovn-ic-central/ovn-ic-central.conf
+              subPath: ovn-ic-central.conf
+              readOnly: true
+            - name: ovn-ic-central-data
+              mountPath: {{ .Values.volume.agent.path }}
+      volumes:
+        - name: ovn-ic-central-bin
+          configMap:
+            name: ovn-ic-central-bin
+            defaultMode: 0555
+        - name: ovn-ic-central-etc
+          secret:
+            secretName: ovn-ic-central-etc
+            defaultMode: 0444
+        - name: ovn-ic-central-data
+          {{- if .Values.volume.agent.enabled }}
+          persistentVolumeClaim:
+            claimName: ovn-ic-central-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

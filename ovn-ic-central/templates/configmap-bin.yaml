@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- define "neutron-ovnic.configmap.bin" }}
+{{- define "ovn-ic-central.configmap.bin" }}
 {{- $configMapName := index . 0 }}
 {{- $envAll := index . 1 }}
 {{- with $envAll }}
@@ -26,11 +26,11 @@ data:
   image-repo-sync.sh: |
 {{- include "helm-toolkit.scripts.image_repo_sync" . | indent 4 }}
 {{- end }}
-  neutron-ovnic-agent.sh: |
-{{ tuple "bin/_neutron-ovnic-agent.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  ovn-ic-central.sh: |
+{{ tuple "bin/_ovn-ic-central.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- end }}
 {{- end }}
 
 {{- if .Values.manifests.configmap_bin }}
-{{- list "neutron-ovnic-bin" . | include "neutron-ovnic.configmap.bin" }}
+{{- list "ovn-ic-central-bin" . | include "ovn-ic-central.configmap.bin" }}
 {{- end }}

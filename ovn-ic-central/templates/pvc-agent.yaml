@@ -17,9 +17,9 @@ limitations under the License.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: neutron-ovnic-data
+  name: ovn-ic-central-data
   labels:
-{{ tuple . "neutron-ovnic" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{ tuple . "ovn-ic-central" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce

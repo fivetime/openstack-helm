@@ -16,36 +16,42 @@ limitations under the License.
 {{- $envAll := . }}
 
 {{- /* Inject the four OVN connection strings from `endpoints` unless the
-       operator set them explicitly. neutron-ovnic talks to all of them over
+       operator set them explicitly. ovn-ic-central talks to all of them over
        TCP: the local NB/SB via ovsdbapp, the IC NB/SB via ovn-ic-nbctl/sbctl. */}}
 {{- /* Local NB/SB: when the endpoint has a statefulset block, this builds the
        full per-pod RAFT member list (tcp:nb-0...,tcp:nb-1...,tcp:nb-2...) so
        ovsdbapp follows the leader; otherwise a single host:port. */}}
-{{- if not (index .Values.conf.neutron_ovnic.ovn_nb "ovn_nb_connection") }}
+{{- if not (index .Values.conf.ovn_ic_central.ovn_nb "ovn_nb_connection") }}
 {{- $conn := printf "tcp:%s" (tuple "ovn_ovsdb_nb" "internal" "ovsdb" $envAll | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | replace "," ",tcp:") }}
-{{- $_ := set .Values.conf.neutron_ovnic.ovn_nb "ovn_nb_connection" $conn }}
+{{- $_ := set .Values.conf.ovn_ic_central.ovn_nb "ovn_nb_connection" $conn }}
 {{- end }}
-{{- if not (index .Values.conf.neutron_ovnic.ovn_nb "ovn_sb_connection") }}
+{{- if not (index .Values.conf.ovn_ic_central.ovn_nb "ovn_sb_connection") }}
 {{- $conn := printf "tcp:%s" (tuple "ovn_ovsdb_sb" "internal" "ovsdb" $envAll | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | replace "," ",tcp:") }}
-{{- $_ := set .Values.conf.neutron_ovnic.ovn_nb "ovn_sb_connection" $conn }}
+{{- $_ := set .Values.conf.ovn_ic_central.ovn_nb "ovn_sb_connection" $conn }}
 {{- end }}
-{{- if not (index .Values.conf.neutron_ovnic.ovn_ic "ovn_ic_nb_connection") }}
+{{- if not (index .Values.conf.ovn_ic_central.ovn_ic "ovn_ic_nb_connection") }}
 {{- $host := tuple "ovn_ic_nb" "internal" $envAll | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" }}
 {{- $port := tuple "ovn_ic_nb" "internal" "ovsdb" $envAll | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-{{- $_ := set .Values.conf.neutron_ovnic.ovn_ic "ovn_ic_nb_connection" (printf "tcp:%s:%s" $host $port) }}
+{{- $_ := set .Values.conf.ovn_ic_central.ovn_ic "ovn_ic_nb_connection" (printf "tcp:%s:%s" $host $port) }}
 {{- end }}
-{{- if not (index .Values.conf.neutron_ovnic.ovn_ic "ovn_ic_sb_connection") }}
+{{- if not (index .Values.conf.ovn_ic_central.ovn_ic "ovn_ic_sb_connection") }}
 {{- $host := tuple "ovn_ic_sb" "internal" $envAll | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" }}
 {{- $port := tuple "ovn_ic_sb" "internal" "ovsdb" $envAll | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-{{- $_ := set .Values.conf.neutron_ovnic.ovn_ic "ovn_ic_sb_connection" (printf "tcp:%s:%s" $host $port) }}
+{{- $_ := set .Values.conf.ovn_ic_central.ovn_ic "ovn_ic_sb_connection" (printf "tcp:%s:%s" $host $port) }}
+{{- end }}
+
+{{- /* Single switch: monitoring.enabled drives the agent's Prometheus endpoint
+       ([ovnic] enable_metrics), the container port, and the metrics Service. */}}
+{{- if .Values.monitoring.enabled }}
+{{- $_ := set .Values.conf.ovn_ic_central.ovnic "enable_metrics" true }}
 {{- end }}
 
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: neutron-ovnic-etc
+  name: ovn-ic-central-etc
 type: Opaque
 data:
-  neutron-ovnic.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.neutron_ovnic | b64enc }}
+  ovn-ic-central.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.ovn_ic_central | b64enc }}
 {{- end }}

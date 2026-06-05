@@ -48,5 +48,5 @@ local OVN, owned by the `ovn` release) and `ovn_ic_nb` / `ovn_ic_sb` (the hub
 - **IC databases are standalone** (single-replica) in this chart; RAFT/HA for
   the IC databases is a follow-up (mirroring the `ovn` chart's `*-ovsdb-raft`).
 - **Orchestration is separate:** this chart is the OVN-IC *plumbing*. The
-  orchestrator that drives interconnections (e.g. `neutron-ovnic`) is its own
+  orchestrator that drives interconnections (e.g. `ovn-ic-central`) is its own
   chart/deployment and consumes this plumbing.

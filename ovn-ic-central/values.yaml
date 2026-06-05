@@ -10,9 +10,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Default values for neutron-ovnic.
+# Default values for ovn-ic-central.
 #
-# neutron-ovnic is the EXTERNAL ORCHESTRATOR that drives native OVN-IC (Transit
+# ovn-ic-central is the EXTERNAL ORCHESTRATOR that drives native OVN-IC (Transit
 # Switch / Transit Router) beneath Neutron. Deploy ONE agent release per AZ; it
 # is a pure TCP client of:
 #   * this AZ's local OVN NB/SB        (endpoints ovn_ovsdb_nb / ovn_ovsdb_sb,
@@ -28,7 +28,7 @@ release_group: null
 
 images:
   tags:
-    neutron_ovnic: ghcr.io/fivetime/openstackhelm/neutron-ovnic:alpine_latest
+    ovn_ic_central: ghcr.io/fivetime/openstackhelm/ovn-ic-central:alpine_latest
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     image_repo_sync: quay.io/airshipit/docker:27.5.0
   pull_policy: "IfNotPresent"
@@ -37,6 +37,13 @@ images:
     exclude:
       - dep_check
       - image_repo_sync
+
+# Single switch for the agent's built-in Prometheus metrics. When true it sets
+# [ovnic] enable_metrics on the agent, exposes the container metrics port +
+# prometheus.io pod annotations, and creates the ovn-ic-central-metrics Service.
+# Port is conf.ovn_ic_central.ovnic.metrics_port (default 9105).
+monitoring:
+  enabled: false
 
 labels:
   agent:
@@ -58,7 +65,7 @@ volume:
     enabled: false
     class_name: general
     size: 1Gi
-    path: /var/lib/neutron-ovnic
+    path: /var/lib/ovn-ic-central
 
 pod:
   use_fqdn:
@@ -66,7 +73,7 @@ pod:
   security_context:
     agent:
       container:
-        neutron_ovnic_agent:
+        ovn_ic_central_agent:
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
   tolerations:
@@ -82,7 +89,7 @@ pod:
         default: 10
   probes:
     agent:
-      neutron_ovnic_agent:
+      ovn_ic_central_agent:
         readiness:
           enabled: true
           params:
@@ -97,11 +104,19 @@ pod:
             periodSeconds: 60
   dns_policy: "ClusterFirstWithHostNet"
   replicas:
-    # Single active per AZ. With replicas: 1 the agent runs without an OVSDB
-    # lock (conf.ovnic.ha_lock_name=""), which is also why a node reboot can
-    # never split-brain. For HA raise this AND set a non-empty ha_lock_name
-    # (ovsdb-lock) or ha_backend=tooz.
-    agent: 1
+    # Active-passive. The agent is a stateless reconciler, so replicas elect ONE
+    # active by holding an ovsdb-lock on the local NB (conf.ovnic.ha_lock_name):
+    # only the lock holder reconciles, the rest hot-standby and take over on
+    # leader loss. It is NOT (and cannot be) active-active -- all replicas drive
+    # the same shared OVN-NB / IC-NB / IC-SB, so concurrent writers would issue
+    # duplicate, conflicting ovn-ic-nbctl ops; the lock serialises them to one
+    # writer. Same single-active lock model the `ovn` chart uses for northd.
+    # Lock-based, not RAFT -> 2 (1 active + 1 standby) is enough for HA; no
+    # quorum/odd count needed. Anti-affinity (pod.affinity.anti) spreads them.
+    # NOTE: the ovsdb-lock only advances under the image's oslo.service threading
+    # backend; if yours lacks it, switch to ha_backend=tooz (+ tooz_backend_url),
+    # or drop to agent: 1 (no lock, ha_lock_name: "").
+    agent: 2
   lifecycle:
     upgrades:
       deployments:
@@ -130,7 +145,7 @@ pod:
 
 secrets:
   oci_image_registry:
-    neutron-ovnic: neutron-ovnic-oci-image-registry-key
+    ovn-ic-central: ovn-ic-central-oci-image-registry-key
 
 endpoints:
   cluster_domain_suffix: cluster.local
@@ -151,8 +166,8 @@ endpoints:
     namespace: oci-image-registry
     auth:
       enabled: false
-      neutron-ovnic:
-        username: neutron-ovnic
+      ovn-ic-central:
+        username: ovn-ic-central
         password: password
     hosts:
       default: localhost
@@ -221,7 +236,7 @@ dependencies:
     common:
       local_image_registry:
         jobs:
-          - neutron-ovnic-image-repo-sync
+          - ovn-ic-central-image-repo-sync
         services:
           - endpoint: node
             service: local_image_registry
@@ -244,11 +259,11 @@ dependencies:
         - endpoint: internal
           service: local_image_registry
 
-# neutron-ovnic.conf, rendered with helm-toolkit.utils.to_oslo_conf. The four
+# ovn-ic-central.conf, rendered with helm-toolkit.utils.to_oslo_conf. The four
 # OVN connection strings are injected from `endpoints` at render time (see
 # templates/configmap-etc.yaml) UNLESS set explicitly here.
 conf:
-  neutron_ovnic:
+  ovn_ic_central:
     DEFAULT:
       debug: false
     ovn_nb:
@@ -273,8 +288,10 @@ conf:
       # The ovn-ic daemon is run by the `ovn-ic` chart, NOT here -> no-op the
       # ctl so the agent does not also try start_ic/stop_ic.
       ovn_ic_daemon_ctl: /bin/true
-      # replicas: 1 -> single active, no OVSDB lock needed (empty = no lock).
-      ha_lock_name: ""
+      # single-active across replicas: the agent holds this ovsdb-lock on the
+      # local NB so only the leader reconciles (all replicas share the name).
+      # Empty = no lock -- only safe at replicas: 1.
+      ha_lock_name: ovn-ic-central
       # Ordered chassis eligible to host an interconnection's distributed
       # gateway port (first reachable = active, rest = HA). Override per AZ,
       # e.g. "chassis-a,chassis-b". Empty = none.
@@ -282,7 +299,7 @@ conf:
       # Desired-state file the agent reconciles every cycle. Seeded to [] by
       # the start script on an emptyDir; edit it (or enable the REST API) to
       # declare interconnections.
-      interconnections_file: /var/lib/neutron-ovnic/interconnections.json
+      interconnections_file: /var/lib/ovn-ic-central/interconnections.json
       reconcile_interval: 60
       # Optional REST API (CRUD on the interconnections file + status). Off by
       # default (loopback only when on). To expose it add a Service.
@@ -290,6 +307,10 @@ conf:
       api_host: 0.0.0.0
       api_port: 9696
       api_auth_strategy: noauth
+      # Prometheus metrics endpoint port. [ovnic] enable_metrics is driven by
+      # the top-level monitoring.enabled toggle (see templates/configmap-etc.yaml),
+      # which also creates the metrics Service; override the port if 9105 clashes.
+      metrics_port: 9105
 
 manifests:
   configmap_bin: true
@@ -297,6 +318,7 @@ manifests:
   deployment_agent: true
   job_image_repo_sync: true
   secret_registry: true
+  service_metrics: true
 
 # -- Array of extra K8s manifests to deploy
 ## Note: Supports use of custom Helm templates

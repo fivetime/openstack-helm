@@ -1,0 +1,39 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if and .Values.manifests.service_metrics .Values.monitoring.enabled }}
+{{- $metricsPort := .Values.conf.ovn_ic_central.ovnic.metrics_port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ovn-ic-central-metrics
+  labels:
+{{ tuple . "ovn-ic-central" "metrics" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: {{ $metricsPort | quote }}
+    prometheus.io/path: "/metrics"
+spec:
+  # Headless: one DNS A record per agent pod so a scraper hits every replica
+  # (only the single-active leader emits live counters; standbys report idle).
+  type: ClusterIP
+  clusterIP: None
+  selector:
+{{ tuple . "ovn-ic-central" "agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+  ports:
+    - name: metrics
+      port: {{ $metricsPort }}
+      targetPort: metrics
+{{- end }}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-# Run the neutron-ovnic orchestrator agent (foreground / PID 1 for k8s). It is
+# Run the ovn-ic-central orchestrator agent (foreground / PID 1 for k8s). It is
 # a pure TCP client of the local OVN NB/SB and the global IC NB/SB; all
 # connection targets are stable Service DNS names (the agent re-resolves them on
 # every (re)connect via the ovsdb_dns patch, so a backend ClusterIP change does
@@ -22,7 +22,7 @@ limitations under the License.
 
 set -ex
 
-CONF="/etc/neutron-ovnic/neutron-ovnic.conf"
+CONF="/etc/ovn-ic-central/ovn-ic-central.conf"
 
 # Seed the desired-state file on first start so the reconcile loop loads
 # cleanly (empty list = manage nothing until interconnections are declared).
@@ -32,4 +32,4 @@ if [ -n "${IC_FILE}" ]; then
   [ -f "${IC_FILE}" ] || echo '[]' > "${IC_FILE}"
 fi
 
-exec neutron-ovnic-agent --config-file "${CONF}"
+exec ovn-ic-central --config-file "${CONF}"

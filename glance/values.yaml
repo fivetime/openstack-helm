@@ -474,8 +474,8 @@ volume:
 # Service, the 'glance-direct' import method stages the data on the
 # pod that handled PUT /stage and later expects the same data when
 # POST /import lands on a (possibly different) pod. A pod-local
-# emptyDir cannot satisfy that. When pod.replicas.api > 1, set
-# manifests.pvc_staging=true and provide a ReadWriteMany storage class
+# emptyDir cannot satisfy that. When pod.replicas.api > 1, keep
+# manifests.pvc_tmp=true and provide a ReadWriteMany storage class
 # here so all replicas share the staging directory.
 volume_staging:
   class_name: general
@@ -583,6 +583,9 @@ secrets:
     admin: glance-rabbitmq-admin
     glance: glance-rabbitmq-user
   tls:
+    oslo_db:
+      glance:
+        internal: glance-mariadb-client
     image:
       api:
         public: glance-tls-public
@@ -1099,7 +1102,7 @@ manifests:
   pdb_api: true
   pod_rally_test: true
   pvc_images: true
-  pvc_staging: false
+  pvc_tmp: true
   network_policy: false
   secret_db: true
   secret_ingress_tls: true

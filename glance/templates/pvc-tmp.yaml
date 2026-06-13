@@ -14,7 +14,6 @@ limitations under the License.
 
 {{- if .Values.manifests.pvc_tmp }}
 {{- $envAll := . }}
-{{- if eq .Values.storage "pvc" }}
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1
@@ -30,5 +29,4 @@ spec:
     requests:
       storage: {{ .Values.volume_staging.size }}
   storageClassName: {{ .Values.volume_staging.class_name }}
-{{- end }}
 {{- end }}

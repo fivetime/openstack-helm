@@ -1,3 +1,5 @@
+#!/bin/bash
+
 {{/*
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -12,7 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.service_ingress_api .Values.network.api.ingress.public }}
-{{- $serviceIngressOpts := dict "envAll" . "backendServiceType" "workflowv2" -}}
-{{ $serviceIngressOpts | include "helm-toolkit.manifests.service_ingress" }}
-{{- end }}
+set -ex
+
+if [ -r "/lib/lsb/init-functions" ]; then
+        . /lib/lsb/init-functions
+else
+        log_success_msg() {
+                echo "$@"
+        }
+        log_warning_msg() {
+                echo "$@" >&2
+        }
+        log_failure_msg() {
+                echo "$@" >&2
+        }
+fi
+
+source /usr/lib/frr/frrcommon.sh
+exec /usr/lib/frr/watchfrr $(daemon_list)

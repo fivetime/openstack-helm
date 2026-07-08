@@ -39,6 +39,10 @@ limitations under the License.
 {{- $_ := set .Values.conf.neutron.keystone_authtoken "memcache_secret_key" ( default ( randAlphaNum 64 ) .Values.endpoints.oslo_cache.auth.memcache_secret_key ) -}}
 {{- end -}}
 
+{{- if and (hasKey $envAll.Values.conf.neutron "cache") (kindIs "map" $envAll.Values.conf.neutron.cache) (empty $envAll.Values.conf.neutron.cache.memcache_servers) }}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" $envAll | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set $envAll.Values.conf.neutron.cache "memcache_servers" -}}
+{{- end -}}
+
 {{- if and (not (kindIs "invalid" $envAll.Values.conf.neutron.database.connection)) (empty $envAll.Values.conf.neutron.database.connection) -}}
 {{- $connection := tuple "oslo_db" "internal" "neutron" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" -}}
 {{- if .Values.tls.oslo_db -}}
@@ -242,9 +246,6 @@ data:
   metadata_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.metadata_agent | b64enc }}
 {{- end }}
 
-{{-  if .Values.manifests.certificates }}
-{{- include "helm-toolkit.snippets.values_template_renderer" ( dict "envAll" $envAll "template" .Values.conf.nginx "key" "nginx.conf" "format" "Secret" ) | indent 2 }}
-{{- end }}
 {{- range $key, $value := $envAll.Values.conf.rootwrap_filters }}
 {{- $filePrefix := replace "_" "-"  $key }}
   {{ printf "%s.filters" $filePrefix }}: {{ $value.content | b64enc }}

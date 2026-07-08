@@ -78,6 +78,10 @@ limitations under the License.
 {{- $_ := set .Values.conf.heat.keystone_authtoken "memcache_secret_key" ( default ( randAlphaNum 64 ) .Values.endpoints.oslo_cache.auth.memcache_secret_key ) -}}
 {{- end -}}
 
+{{- if and (hasKey .Values.conf.heat "cache") (kindIs "map" .Values.conf.heat.cache) (empty .Values.conf.heat.cache.memcache_servers) }}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set .Values.conf.heat.cache "memcache_servers" -}}
+{{- end -}}
+
 {{- if and (not (kindIs "invalid" .Values.conf.heat.database.connection)) (empty .Values.conf.heat.database.connection) -}}
 {{- $connection := tuple "oslo_db" "internal" "heat" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" -}}
 {{- if .Values.tls.oslo_db -}}
@@ -159,11 +163,6 @@ data:
   logging.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.logging | b64enc }}
   api-paste.ini: {{ include "helm-toolkit.utils.to_ini" .Values.conf.paste | b64enc }}
   policy.yaml: {{ toYaml .Values.conf.policy | b64enc }}
-{{- if .Values.manifests.certificates }}
-{{- include "helm-toolkit.snippets.values_template_renderer" (dict "envAll" $envAll "template" .Values.conf.mpm_event "key" "mpm_event.conf" "format" "Secret" ) | indent 2 }}
-{{- include "helm-toolkit.snippets.values_template_renderer" (dict "envAll" $envAll "template" .Values.conf.wsgi_heat "key" "wsgi-heat.conf" "format" "Secret" ) | indent 2 }}
-{{- include "helm-toolkit.snippets.values_template_renderer" (dict "envAll" $envAll "template" .Values.conf.wsgi_cfn "key" "wsgi-cnf.conf" "format" "Secret" ) | indent 2 }}
-{{- end }}
   api_audit_map.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.api_audit_map | b64enc }}
 {{- range $key, $value := $envAll.Values.conf.rally_tests.templates }}
   {{ printf "test_template_%d" $key }}: {{ $value.template | b64enc }}

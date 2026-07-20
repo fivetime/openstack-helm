@@ -73,7 +73,7 @@ images:
     nova_cell_setup: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_cell_setup_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     nova_compute: quay.io/airshipit/nova:2026.1-ubuntu_noble
-    nova_compute_incus: null
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus:2026.1-alpine_3.23
     nova_compute_ironic: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_compute_ssh: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_conductor: quay.io/airshipit/nova:2026.1-ubuntu_noble

@@ -129,12 +129,64 @@ spec:
               subPath: {{ base .Values.conf.octavia.DEFAULT.log_config_append }}
               readOnly: true
             {{- end }}
+            {{- if .Values.pod.sidecars.driver_agent }}
+            - name: octavia-driver-agents
+              mountPath: /var/run/octavia
+            {{- end }}
 {{ if $mounts_octavia_api.volumeMounts }}{{ toYaml $mounts_octavia_api.volumeMounts | indent 12 }}{{ end }}
+        {{- if .Values.pod.sidecars.driver_agent }}
+        # -------------- Add by Simon Start --------------
+        # OVN provider requires the driver agent sockets (/var/run/octavia/*.sock)
+        # to be reachable from the octavia-api process, so run the driver agent
+        # as a sidecar sharing an emptyDir instead of a separate deployment.
+        - name: octavia-driver-agent
+{{ tuple $envAll "octavia_driver_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.driver_agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "octavia_driver_agent" "container" "octavia_driver_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/octavia-driver-agent.sh
+            - start
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /tmp/octavia-driver-agent.sh
+                  - stop
+          volumeMounts:
+            - name: oslo-lock-path
+              mountPath: {{ .Values.conf.octavia.oslo_concurrency.lock_path }}
+            - name: pod-etc-octavia
+              mountPath: /etc/octavia
+            - name: octavia-bin
+              mountPath: /tmp/octavia-driver-agent.sh
+              subPath: octavia-driver-agent.sh
+              readOnly: true
+            - name: octavia-etc
+              mountPath: /etc/octavia/octavia.conf
+              subPath: octavia.conf
+              readOnly: true
+            - name: octavia-etc-snippets
+              mountPath: /etc/octavia/octavia.conf.d/
+              readOnly: true
+            {{- if .Values.conf.octavia.DEFAULT.log_config_append }}
+            - name: octavia-etc
+              mountPath: {{ .Values.conf.octavia.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.octavia.DEFAULT.log_config_append }}
+              readOnly: true
+            {{- end }}
+            - name: octavia-driver-agents
+              mountPath: /var/run/octavia
+        # -------------- Add by Simon End --------------
+        {{- end }}
       volumes:
         - name: oslo-lock-path
           emptyDir: {}
         - name: pod-etc-octavia
           emptyDir: {}
+        {{- if .Values.pod.sidecars.driver_agent }}
+        - name: octavia-driver-agents
+          emptyDir: {}
+        {{- end }}
         - name: octavia-bin
           configMap:
             name: octavia-bin

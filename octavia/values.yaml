@@ -675,6 +675,10 @@ pod:
           capabilities:
             add:
               - NET_ADMIN
+  sidecars:
+    # -- Run the driver agent as a sidecar of octavia-api so provider drivers
+    ## (e.g. OVN) can reach the driver agent unix sockets in /var/run/octavia.
+    driver_agent: false
   tolerations:
     octavia_api:
       enabled: false

@@ -205,7 +205,7 @@ spec:
         - name: nova-compute-incus-etc
           secret:
             secretName: nova-compute-incus-etc
-            defaultMode: 0440
+            defaultMode: 0444
         - name: nova-etc-snippets
 {{- if $etcSources }}
           projected:

@@ -1,0 +1,232 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- define "novaComputeIncusLivenessProbeTemplate" }}
+exec:
+  command:
+    - python
+    - /tmp/health-probe.py
+    - --config-file
+    - /etc/nova/nova.conf
+    - --config-file
+    - /etc/nova/nova-incus.conf
+    - --config-dir
+    - /etc/nova/nova.conf.d
+    - --service-queue-name
+    - compute
+    - --service-process-name
+    - nova-incus-compute
+    - --liveness-probe
+{{- end }}
+
+{{- define "novaComputeIncusReadinessProbeTemplate" }}
+exec:
+  command:
+    - python
+    - /tmp/health-probe.py
+    - --config-file
+    - /etc/nova/nova.conf
+    - --config-file
+    - /etc/nova/nova-incus.conf
+    - --config-dir
+    - /etc/nova/nova.conf.d
+    - --service-queue-name
+    - compute
+    - --service-process-name
+    - nova-incus-compute
+{{- end }}
+
+{{- if .Values.manifests.daemonset_compute_incus }}
+{{- $envAll := . }}
+{{- $_ := required "images.tags.nova_compute_incus is required when manifests.daemonset_compute_incus=true" .Values.images.tags.nova_compute_incus }}
+{{- $serviceAccountName := "nova-compute" }}
+{{- $mounts := .Values.pod.mounts.nova_compute_incus.nova_compute_incus }}
+{{- $mountsInit := .Values.pod.mounts.nova_compute_incus.init_container }}
+{{- $etcSources := .Values.pod.etcSources.nova_compute_incus }}
+{{- $hostPaths := .Values.pod.host_paths.nova_compute_incus }}
+{{- if eq .Values.manifests.secret_ks_etc true }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "nova-ks-etc")) }}
+{{- end }}
+
+{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "compute_incus" -}}
+{{- $_ := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
+
+{{- if not .Values.manifests.daemonset_compute }}
+{{ tuple $envAll "pod_dependency" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nova-compute-incus-etc
+type: Opaque
+data:
+  nova-incus.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.nova_incus | b64enc }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nova-compute-incus
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll .Chart.Name "compute-incus" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll .Chart.Name "compute-incus" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll "compute_incus" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll .Chart.Name "compute-incus" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        nova-compute-incus-etc-hash: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.nova_incus | sha256sum }}
+{{ tuple "nova_compute_incus" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+    spec:
+{{ tuple "nova_compute_incus" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "nova_compute_incus" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "nova_incus" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.agent.compute_incus.node_selector_key }}: {{ .Values.labels.agent.compute_incus.node_selector_value }}
+{{- if .Values.pod.tolerations.compute_incus.enabled }}
+      tolerations:
+{{ toYaml .Values.pod.tolerations.compute_incus.tolerations | indent 8 }}
+{{- end }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      initContainers:
+{{ tuple $envAll "pod_dependency" $mountsInit | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        - name: nova-compute-incus-init
+{{ tuple $envAll "nova_compute_incus" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "nova_incus" "container" "nova_compute_incus_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              mkdir -p /var/lib/nova/instances
+              mkdir -p {{ $hostPaths.manila_shares | quote }}
+              chown -R {{ .Values.pod.security_context.nova_incus.pod.runAsUser }}:{{ .Values.pod.security_context.nova_incus.pod.runAsGroup }} /var/lib/nova
+          volumeMounts:
+            - name: varlibnova-incus
+              mountPath: /var/lib/nova
+            - name: manila-shares
+              mountPath: {{ $hostPaths.manila_shares }}
+{{- if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
+      containers:
+        - name: nova-compute
+{{ tuple $envAll "nova_compute_incus" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.compute_incus | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "nova_incus" "container" "nova_compute_incus" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          env:
+            - name: RPC_PROBE_TIMEOUT
+              value: "{{ .Values.pod.probes.rpc_timeout }}"
+            - name: RPC_PROBE_RETRIES
+              value: "{{ .Values.pod.probes.rpc_retries }}"
+{{- if .Values.secrets.tls.ca }}
+            - name: REQUESTS_CA_BUNDLE
+              value: /etc/ssl/certs/openstack-helm.crt
+{{- end }}
+          command:
+            - nova-incus-compute
+            - --config-file
+            - /etc/nova/nova.conf
+            - --config-file
+            - /etc/nova/nova-incus.conf
+            - --config-dir
+            - /etc/nova/nova.conf.d
+{{ dict "envAll" $envAll "component" "compute_incus" "container" "default" "type" "liveness" "probeTemplate" (include "novaComputeIncusLivenessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+{{ dict "envAll" $envAll "component" "compute_incus" "container" "default" "type" "readiness" "probeTemplate" (include "novaComputeIncusReadinessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: oslo-lock-path
+              mountPath: {{ .Values.conf.nova.oslo_concurrency.lock_path }}
+            - name: nova-bin
+              mountPath: /tmp/health-probe.py
+              subPath: health-probe.py
+              readOnly: true
+            - name: nova-etc
+              mountPath: /etc/nova/nova.conf
+              subPath: nova-compute.conf
+              readOnly: true
+            - name: nova-compute-incus-etc
+              mountPath: /etc/nova/nova-incus.conf
+              subPath: nova-incus.conf
+              readOnly: true
+            - name: nova-etc-snippets
+              mountPath: /etc/nova/nova.conf.d
+              readOnly: true
+            {{- if .Values.conf.nova.DEFAULT.log_config_append }}
+            - name: nova-etc
+              mountPath: {{ .Values.conf.nova.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.nova.DEFAULT.log_config_append }}
+              readOnly: true
+            {{- end }}
+            - name: varlibnova-incus
+              mountPath: /var/lib/nova
+              mountPropagation: Bidirectional
+            - name: incus-state
+              mountPath: {{ $hostPaths.state_mount_path }}
+              readOnly: true
+            - name: manila-shares
+              mountPath: {{ $hostPaths.manila_shares }}
+              mountPropagation: Bidirectional
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{- dict "enabled" .Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{- if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: oslo-lock-path
+          emptyDir: {}
+        - name: nova-bin
+          configMap:
+            name: nova-bin
+            defaultMode: 0555
+        - name: nova-etc
+          secret:
+            secretName: nova-etc
+            defaultMode: 0444
+        - name: nova-compute-incus-etc
+          secret:
+            secretName: nova-compute-incus-etc
+            defaultMode: 0440
+        - name: nova-etc-snippets
+{{- if $etcSources }}
+          projected:
+            sources:
+{{ toYaml $etcSources | indent 14 }}
+{{- else }}
+          emptyDir: {}
+{{- end }}
+        - name: varlibnova-incus
+          hostPath:
+            path: {{ $hostPaths.nova_state }}
+            type: DirectoryOrCreate
+        - name: incus-state
+          hostPath:
+            path: {{ $hostPaths.state }}
+            type: Directory
+        - name: manila-shares
+          hostPath:
+            path: {{ $hostPaths.manila_shares }}
+            type: DirectoryOrCreate
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{- dict "enabled" .Values.tls.oslo_messaging "name" "client-certs" "secretName" .Values.secrets.tls.client.nova | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{- if $mounts.volumes }}{{ toYaml $mounts.volumes | indent 8 }}{{ end }}
+{{- end }}

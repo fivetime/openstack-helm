@@ -177,7 +177,7 @@ def test_tcp_socket(service):
     r_ports, d_ports = configured_port_in_conf()
 
     if service in dict_services:
-        proc = dict_services[service]
+        proc = cfg.CONF.service_process_name or dict_services[service]
         transport = oslo_messaging.TransportURL.parse(cfg.CONF)
         if r_ports and tcp_socket_status(proc, r_ports) == 0:
             sys.stderr.write("RabbitMQ socket not established for service "
@@ -207,6 +207,7 @@ def test_rpc_liveness():
                                 title='RabbitMQ options')
     cfg.CONF.register_group(rabbit_group)
     cfg.CONF.register_cli_opt(cfg.StrOpt('service-queue-name'))
+    cfg.CONF.register_cli_opt(cfg.StrOpt('service-process-name'))
     cfg.CONF.register_cli_opt(cfg.BoolOpt('liveness-probe', default=False,
                                           required=False))
     cfg.CONF.register_cli_opt(cfg.BoolOpt('use-fqdn', default=False,

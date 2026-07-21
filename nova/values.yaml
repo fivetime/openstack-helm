@@ -1407,6 +1407,9 @@ conf:
       root_dir: /var/lib/incus
       project: default
       migration_preflight_project: nova-preflight
+      # Keep tenant-controlled filesystem images out of the host kernel.
+      # Every supported system-container image must provide fuse2fs.
+      data_volume_mount_fuse: ext4=fuse2fs
   libvirt:
     address_search_enabled: true
     # When "address_search_enabled", get the IP address to be used as the target for live migration

@@ -10,6 +10,10 @@ incus_storage:
     ceph-rootfs:
       driver: ceph
       source: incus-rootfs-rbd-pool
+      config:
+        # Required when independent (non-clustered) Incus compute nodes share
+        # one Ceph pool under Nova's placement and fencing control.
+        ceph.osd.force_reuse: "true"
   boot_from_volume_pools:
     # Match Cinder's rbd_pool (the image namespace), not rbd_data_pool. EC
     # and replicated volume types can therefore share one cephext mapping.

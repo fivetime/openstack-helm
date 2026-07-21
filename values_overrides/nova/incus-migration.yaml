@@ -1,0 +1,17 @@
+# Combine this override with one Incus storage override. The Secret is created
+# by the deployment PKI workflow and is shared by the Incus compute DaemonSet.
+# Every Incus HTTPS server certificate must be signed by ca.crt and contain its
+# Kubernetes node InternalIP in subjectAltName.
+incus_migration:
+  enabled: true
+  allow_live: true
+  allow_cold: true
+  port: 8443
+  secret_name: nova-incus-migration
+
+# Required Secret keys:
+#   migration.crt  restricted client identity for the Nova Incus project
+#   migration.key
+#   preflight.crt  separate identity for the zero-instance preflight project
+#   preflight.key
+#   ca.crt         CA that issued every Incus HTTPS server certificate

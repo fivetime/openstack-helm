@@ -1,0 +1,18 @@
+---
+# Shared production storage. Ceph configuration and credentials are reused
+# from ceph_client and conf.ceph.cinder; this file only selects Incus pools.
+manifests:
+  daemonset_compute_incus: true
+
+incus_storage:
+  # Nova-managed local/ephemeral roots and flavor ephemeral disks.
+  default_root_pool: ceph-rootfs
+  root_pools:
+    ceph-rootfs:
+      driver: ceph
+      source: incus-rootfs-rbd-pool
+  boot_from_volume_pools:
+    cinder-bfv:
+      driver: cephext
+      # Must be the RBD pool used by the selected Cinder backend.
+      source: cinder-volumes-rbd-pool

@@ -1,0 +1,26 @@
+---
+# Offer both durable Ceph roots and node-local ZFS roots. Every selected
+# compute node must already have the named ZFS pool. Pool names become the
+# allowed values for the incus:root_storage_pool Flavor extra spec.
+manifests:
+  daemonset_compute_incus: true
+
+incus_storage:
+  default_root_pool: ceph-rootfs
+  root_pools:
+    ceph-rootfs:
+      driver: ceph
+      source: incus-rootfs-rbd-pool
+    local-nvme:
+      driver: zfs
+      source: incus-nvme
+
+# Example Flavor configuration:
+#   openstack flavor set durable \
+#     --property incus:root_storage_pool=ceph-rootfs \
+#     --property trait:CUSTOM_INCUS_STORAGE_POOL_CEPH_ROOTFS=required
+#   openstack flavor set local-nvme \
+#     --property incus:root_storage_pool=local-nvme \
+#     --property trait:CUSTOM_INCUS_STORAGE_POOL_LOCAL_NVME=required \
+#     --property resources:CUSTOM_INCUS_STORAGE_POOL_LOCAL_NVME_DISK_GB=20
+# The custom resource amount must exactly equal that Flavor's root_gb.

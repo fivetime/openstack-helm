@@ -1,0 +1,34 @@
+---
+# Shared rootfs plus BFV support for multiple Cinder RBD backends. Ceph
+# configuration and credentials are reused from ceph_client and conf.ceph.
+manifests:
+  daemonset_compute_incus: true
+
+incus_storage:
+  default_root_pool: ceph-rootfs
+  root_pools:
+    ceph-rootfs:
+      driver: ceph
+      source: incus-rootfs-rbd-pool
+  boot_from_volume_pools:
+    cinder-ssd-rep3:
+      driver: cephext
+      source: ssd-rep3-rbd-pool
+    cinder-ssd-ec42:
+      driver: cephext
+      source: ssd-ec42-rbd-pool
+    cinder-nvme-rep3:
+      driver: cephext
+      source: nvme-rep3-rbd-pool
+    cinder-nvme-ec42:
+      driver: cephext
+      source: nvme-ec42-rbd-pool
+    cinder-hybrid-rep3:
+      driver: cephext
+      source: hybrid-rep3-rbd-pool
+    cinder-hdd-rep3:
+      driver: cephext
+      source: hdd-rep3-rbd-pool
+    cinder-hdd-ec42:
+      driver: cephext
+      source: hdd-ec42-rbd-pool

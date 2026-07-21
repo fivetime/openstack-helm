@@ -1,0 +1,12 @@
+---
+# Development and trusted single-user deployments only. The dir driver does
+# not provide a reliable per-instance hard quota and can fill the host disk.
+manifests:
+  daemonset_compute_incus: true
+
+incus_storage:
+  default_root_pool: local-dir
+  root_pools:
+    local-dir:
+      driver: dir
+      source: /var/lib/incus/storage-pools/local-dir

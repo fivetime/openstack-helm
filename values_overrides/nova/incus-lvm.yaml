@@ -1,0 +1,14 @@
+---
+# Local persistent storage with thin-volume quotas. The named VG and thin
+# pool must exist on every node selected for the Incus compute DaemonSet.
+manifests:
+  daemonset_compute_incus: true
+
+incus_storage:
+  default_root_pool: local-lvm
+  root_pools:
+    local-lvm:
+      driver: lvm
+      source: incus-vg
+      config:
+        lvm.thinpool_name: incus-thinpool

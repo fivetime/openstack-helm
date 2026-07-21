@@ -1,0 +1,12 @@
+---
+# Local persistent storage with dataset quotas. The named ZFS dataset must
+# exist on every node selected for the Incus compute DaemonSet.
+manifests:
+  daemonset_compute_incus: true
+
+incus_storage:
+  default_root_pool: local-zfs
+  root_pools:
+    local-zfs:
+      driver: zfs
+      source: tank/incus

@@ -23,6 +23,10 @@ exec:
     - /etc/nova/nova-incus.conf
     - --config-dir
     - /etc/nova/nova.conf.d
+{{- if .Values.incus_migration.enabled }}
+    - --config-file
+    - /run/nova-incus/nova-incus-node.conf
+{{- end }}
     - --service-queue-name
     - compute
     - --service-process-name
@@ -41,6 +45,10 @@ exec:
     - /etc/nova/nova-incus.conf
     - --config-dir
     - /etc/nova/nova.conf.d
+{{- if .Values.incus_migration.enabled }}
+    - --config-file
+    - /run/nova-incus/nova-incus-node.conf
+{{- end }}
     - --service-queue-name
     - compute
     - --service-process-name
@@ -55,6 +63,94 @@ exec:
 {{- $mountsInit := .Values.pod.mounts.nova_compute_incus.init_container }}
 {{- $etcSources := .Values.pod.etcSources.nova_compute_incus }}
 {{- $hostPaths := .Values.pod.host_paths.nova_compute_incus }}
+{{- $rootStoragePools := .Values.incus_storage.root_pools }}
+{{- $bfvPoolDefinitions := .Values.incus_storage.boot_from_volume_pools }}
+{{- $rootStoragePool := required "incus_storage.default_root_pool must be explicitly configured" .Values.incus_storage.default_root_pool }}
+{{- $migrationEnabled := .Values.incus_migration.enabled }}
+{{- $migrationSecret := "" }}
+{{- if $migrationEnabled }}
+{{- $migrationSecret = required "incus_migration.secret_name is required when Incus migration is enabled" .Values.incus_migration.secret_name }}
+{{- end }}
+{{- if not (hasKey $rootStoragePools $rootStoragePool) }}
+{{- fail (printf "Nova root storage pool %q must be declared in incus_storage.root_pools" $rootStoragePool) }}
+{{- end }}
+{{- $bfvStoragePools := dict }}
+{{- $rootStoragePoolResourceClasses := dict }}
+{{- $allStoragePools := deepCopy $rootStoragePools }}
+{{- range $poolName, $pool := $rootStoragePools }}
+{{- if eq $pool.driver "cephext" }}
+{{- fail (printf "incus_storage.root_pools.%s cannot use the cephext driver" $poolName) }}
+{{- end }}
+{{- if or (contains ":" $poolName) (contains "," $poolName) }}
+{{- fail "root storage pool names cannot contain ':' or ','" }}
+{{- end }}
+{{- if has $pool.driver (list "btrfs" "lvm" "zfs") }}
+{{- $resourceClass := printf "CUSTOM_INCUS_STORAGE_POOL_%s_DISK_GB" (regexReplaceAll "[^A-Z0-9_]" (upper $poolName) "_") }}
+{{- $_ := set $rootStoragePoolResourceClasses $poolName $resourceClass }}
+{{- end }}
+{{- end }}
+{{- range $poolName, $pool := $bfvPoolDefinitions }}
+{{- if ne $pool.driver "cephext" }}
+{{- fail (printf "incus_storage.boot_from_volume_pools.%s must use the cephext driver" $poolName) }}
+{{- end }}
+{{- if hasKey $allStoragePools $poolName }}
+{{- fail (printf "Incus storage pool name %q is declared more than once" $poolName) }}
+{{- end }}
+{{- $_ := set $allStoragePools $poolName $pool }}
+{{- $source := required (printf "incus_storage.boot_from_volume_pools.%s.source is required" $poolName) $pool.source }}
+{{- if or (contains ":" $source) (contains "," $source) (contains ":" $poolName) (contains "," $poolName) }}
+{{- fail "cephext pool names and sources cannot contain ':' or ','" }}
+{{- end }}
+{{- if hasKey $bfvStoragePools $source }}
+{{- fail (printf "multiple cephext pools declare Cinder RBD source %q" $source) }}
+{{- end }}
+{{- $_ := set $bfvStoragePools $source $poolName }}
+{{- end }}
+{{- $novaIncusConf := deepCopy .Values.conf.nova_incus }}
+{{- $incusConf := default (dict) (get $novaIncusConf "incus") }}
+{{- $_ := set $incusConf "storage_pool" $rootStoragePool }}
+{{- if $migrationEnabled }}
+{{- $_ := set $incusConf "allow_live_migration" .Values.incus_migration.allow_live }}
+{{- $_ := set $incusConf "allow_cold_migration" .Values.incus_migration.allow_cold }}
+{{- end }}
+{{- $rootStoragePoolPairs := list }}
+{{- range $selector := keys $rootStoragePools | sortAlpha }}
+{{- $rootStoragePoolPairs = append $rootStoragePoolPairs (printf "%s:%s" $selector (get $rootStoragePools $selector)) }}
+{{- end }}
+{{- $_ := set $incusConf "root_storage_pools" (join "," $rootStoragePoolPairs) }}
+{{- if gt (len $rootStoragePoolResourceClasses) 0 }}
+{{- $rootStoragePoolResourceClassPairs := list }}
+{{- range $selector := keys $rootStoragePoolResourceClasses | sortAlpha }}
+{{- $rootStoragePoolResourceClassPairs = append $rootStoragePoolResourceClassPairs (printf "%s:%s" $selector (get $rootStoragePoolResourceClasses $selector)) }}
+{{- end }}
+{{- $_ := set $incusConf "root_storage_pool_resource_classes" (join "," $rootStoragePoolResourceClassPairs) }}
+{{- end }}
+{{- if gt (len $bfvStoragePools) 0 }}
+{{- $bfvStoragePoolPairs := list }}
+{{- range $source := keys $bfvStoragePools | sortAlpha }}
+{{- $bfvStoragePoolPairs = append $bfvStoragePoolPairs (printf "%s:%s" $source (get $bfvStoragePools $source)) }}
+{{- end }}
+{{- $_ := set $incusConf "boot_from_volume_storage_pools" (join "," $bfvStoragePoolPairs) }}
+{{- end }}
+{{- $_ := set $novaIncusConf "incus" $incusConf }}
+{{- $cephState := dict "enabled" false }}
+{{- range $pool := $allStoragePools }}
+{{- if or (eq $pool.driver "ceph") (eq $pool.driver "cephext") }}
+{{- $_ := set $cephState "enabled" true }}
+{{- end }}
+{{- end }}
+{{- $cephEnabled := get $cephState "enabled" }}
+{{- $cephUser := "" }}
+{{- $cephInlineKey := "" }}
+{{- $cephKeyringsMetadata := dict }}
+{{- if $cephEnabled }}
+{{- if not .Values.conf.ceph.enabled }}
+{{- fail "conf.ceph.enabled must be true when Incus Ceph storage pools are configured" }}
+{{- end }}
+{{- $cephUser = required "conf.ceph.cinder.user is required by Incus Ceph storage pools" .Values.conf.ceph.cinder.user }}
+{{- $cephInlineKey = default "" .Values.conf.ceph.cinder.keyring }}
+{{- $_ := set $cephKeyringsMetadata "cinder" (dict "user" $cephUser) }}
+{{- end }}
 {{- if eq .Values.manifests.secret_ks_etc true }}
 {{- $etcSources = append $etcSources (dict "secret" (dict "name" "nova-ks-etc")) }}
 {{- end }}
@@ -72,7 +168,17 @@ metadata:
   name: nova-compute-incus-etc
 type: Opaque
 data:
-  nova-incus.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.nova_incus | b64enc }}
+  nova-incus.conf: {{ include "helm-toolkit.utils.to_oslo_conf" $novaIncusConf | b64enc }}
+{{- if and $cephEnabled $cephInlineKey }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nova-compute-incus-storage
+type: Opaque
+data:
+  cinder: {{ $cephInlineKey | b64enc }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -94,7 +200,8 @@ spec:
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        nova-compute-incus-etc-hash: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.nova_incus | sha256sum }}
+        nova-compute-incus-etc-hash: {{ include "helm-toolkit.utils.to_oslo_conf" $novaIncusConf | sha256sum }}
+        nova-compute-incus-storage-hash: {{ printf "%s%s%s" (toJson .Values.incus_storage) (toJson .Values.conf.ceph) (toJson .Values.ceph_client) | sha256sum }}
 {{ tuple "nova_compute_incus" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ tuple "nova_compute_incus" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
@@ -121,11 +228,99 @@ spec:
               mkdir -p /var/lib/nova/instances
               mkdir -p {{ $hostPaths.manila_shares | quote }}
               chown -R {{ .Values.pod.security_context.nova_incus.pod.runAsUser }}:{{ .Values.pod.security_context.nova_incus.pod.runAsGroup }} /var/lib/nova
+{{- if $migrationEnabled }}
+              cat > /run/nova-incus/nova-incus-node.conf <<EOF
+              [incus]
+              migration_address = https://${HOST_IP}:{{ .Values.incus_migration.port }}
+              migration_tls_cert = /etc/nova/incus-migration/migration.crt
+              migration_tls_key = /etc/nova/incus-migration/migration.key
+              migration_tls_ca = /etc/nova/incus-migration/ca.crt
+{{- if gt (len $bfvStoragePools) 0 }}
+              migration_preflight_tls_cert = /etc/nova/incus-migration/preflight.crt
+              migration_preflight_tls_key = /etc/nova/incus-migration/preflight.key
+              migration_preflight_tls_ca = /etc/nova/incus-migration/ca.crt
+{{- end }}
+              migration_port = {{ .Values.incus_migration.port }}
+              EOF
+              chown {{ .Values.pod.security_context.nova_incus.pod.runAsUser }}:{{ .Values.pod.security_context.nova_incus.pod.runAsGroup }} /run/nova-incus/nova-incus-node.conf
+              chmod 0440 /run/nova-incus/nova-incus-node.conf
+{{- end }}
+          env:
+{{- if $migrationEnabled }}
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+{{- else }}
+            []
+{{- end }}
           volumeMounts:
             - name: varlibnova-incus
               mountPath: /var/lib/nova
             - name: manila-shares
               mountPath: {{ $hostPaths.manila_shares }}
+            - name: nova-incus-runtime
+              mountPath: /run/nova-incus
+{{- if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
+        - name: nova-compute-incus-storage-init
+{{ tuple $envAll "nova_compute_incus" | include "helm-toolkit.snippets.image" | indent 10 }}
+          securityContext:
+            runAsUser: 0
+            readOnlyRootFilesystem: true
+          command:
+            - python
+            - /tmp/incus-storage-init.py
+          env:
+            - name: INCUS_ENDPOINT
+              value: {{ .Values.conf.nova_incus.incus.endpoint | quote }}
+            - name: INCUS_STORAGE_INIT_TIMEOUT
+              value: {{ .Values.incus_storage.init_timeout | quote }}
+            - name: INCUS_STORAGE_POOLS
+              value: {{ toJson $allStoragePools | quote }}
+            - name: NOVA_INCUS_STORAGE_POOL
+              value: {{ $rootStoragePool | quote }}
+            - name: INCUS_PREFLIGHT_PROJECT
+              value: {{ default "nova-preflight" $incusConf.migration_preflight_project | quote }}
+            - name: INCUS_BFV_STORAGE_POOLS
+              value: {{ toJson $bfvStoragePools | quote }}
+            - name: NOVA_INCUS_PROJECT
+              value: {{ default "default" $incusConf.project | quote }}
+            - name: INCUS_MIGRATION_ENABLED
+              value: {{ $migrationEnabled | quote }}
+            - name: INCUS_CEPH_ENABLED
+              value: {{ $cephEnabled | quote }}
+{{- if $cephEnabled }}
+            - name: INCUS_CEPH_CLUSTER
+              value: "ceph"
+            - name: INCUS_CEPH_DEFAULT_KEYRING
+              value: "cinder"
+            - name: INCUS_CEPH_KEYRINGS
+              value: {{ toJson $cephKeyringsMetadata | quote }}
+{{- end }}
+          volumeMounts:
+            - name: nova-bin
+              mountPath: /tmp/incus-storage-init.py
+              subPath: incus-storage-init.py
+              readOnly: true
+            - name: incus-state
+              mountPath: {{ $hostPaths.state_mount_path }}
+              readOnly: true
+{{- if $migrationEnabled }}
+            - name: incus-migration
+              mountPath: /run/incus-migration
+              readOnly: true
+{{- end }}
+{{- if $cephEnabled }}
+            - name: host-etc-ceph
+              mountPath: /host/etc/ceph
+            - name: incus-ceph-config
+              mountPath: /run/incus-storage/ceph.conf
+              subPath: ceph.conf
+              readOnly: true
+            - name: incus-ceph-key
+              mountPath: /run/incus-storage/ceph-keys
+              readOnly: true
+{{- end }}
 {{- if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
       containers:
         - name: nova-compute
@@ -149,6 +344,10 @@ spec:
             - /etc/nova/nova-incus.conf
             - --config-dir
             - /etc/nova/nova.conf.d
+{{- if $migrationEnabled }}
+            - --config-file
+            - /run/nova-incus/nova-incus-node.conf
+{{- end }}
 {{ dict "envAll" $envAll "component" "compute_incus" "container" "default" "type" "liveness" "probeTemplate" (include "novaComputeIncusLivenessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
 {{ dict "envAll" $envAll "component" "compute_incus" "container" "default" "type" "readiness" "probeTemplate" (include "novaComputeIncusReadinessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
           volumeMounts:
@@ -164,10 +363,36 @@ spec:
               mountPath: /etc/nova/nova.conf
               subPath: nova-compute.conf
               readOnly: true
+            - name: nova-etc
+              mountPath: /etc/sudoers.d/kolla_nova_sudoers
+              subPath: nova_sudoers
+              readOnly: true
+            - name: nova-etc
+              mountPath: /etc/nova/rootwrap.conf
+              subPath: rootwrap.conf
+              readOnly: true
+            {{- range $key, $value := $envAll.Values.conf.rootwrap_filters }}
+            {{- if ( has "compute" $value.pods ) }}
+            {{- $filePrefix := replace "_" "-" $key }}
+            {{- $rootwrapFile := printf "/etc/nova/rootwrap.d/%s.filters" $filePrefix }}
+            - name: nova-etc
+              mountPath: {{ $rootwrapFile }}
+              subPath: {{ base $rootwrapFile }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
             - name: nova-compute-incus-etc
               mountPath: /etc/nova/nova-incus.conf
               subPath: nova-incus.conf
               readOnly: true
+            - name: nova-incus-runtime
+              mountPath: /run/nova-incus
+              readOnly: true
+{{- if $migrationEnabled }}
+            - name: incus-migration
+              mountPath: /etc/nova/incus-migration
+              readOnly: true
+{{- end }}
             - name: nova-etc-snippets
               mountPath: /etc/nova/nova.conf.d
               readOnly: true
@@ -206,6 +431,27 @@ spec:
           secret:
             secretName: nova-compute-incus-etc
             defaultMode: 0444
+        - name: nova-incus-runtime
+          emptyDir: {}
+{{- if $migrationEnabled }}
+        - name: incus-migration
+          secret:
+            secretName: {{ $migrationSecret }}
+            defaultMode: 0440
+            items:
+              - key: migration.crt
+                path: migration.crt
+              - key: migration.key
+                path: migration.key
+{{- if gt (len $bfvStoragePools) 0 }}
+              - key: preflight.crt
+                path: preflight.crt
+              - key: preflight.key
+                path: preflight.key
+{{- end }}
+              - key: ca.crt
+                path: ca.crt
+{{- end }}
         - name: nova-etc-snippets
 {{- if $etcSources }}
           projected:
@@ -226,6 +472,30 @@ spec:
           hostPath:
             path: {{ $hostPaths.manila_shares }}
             type: DirectoryOrCreate
+{{- if $cephEnabled }}
+        - name: host-etc-ceph
+          hostPath:
+            path: /etc/ceph
+            type: DirectoryOrCreate
+        - name: incus-ceph-config
+          configMap:
+            name: {{ .Values.ceph_client.configmap }}
+            defaultMode: 0444
+        - name: incus-ceph-key
+          secret:
+{{- if $cephInlineKey }}
+            secretName: nova-compute-incus-storage
+            items:
+              - key: cinder
+                path: cinder
+{{- else }}
+            secretName: {{ .Values.ceph_client.user_secret_name }}
+            items:
+              - key: key
+                path: cinder
+{{- end }}
+            defaultMode: 0400
+{{- end }}
 {{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
 {{- dict "enabled" .Values.tls.oslo_messaging "name" "client-certs" "secretName" .Values.secrets.tls.client.nova | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
 {{- if $mounts.volumes }}{{ toYaml $mounts.volumes | indent 8 }}{{ end }}

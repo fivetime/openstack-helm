@@ -291,11 +291,9 @@ dependencies:
                 application: neutron
                 component: neutron-ovs-agent
         compute_incus:
-          pod:
-            - requireSameNode: true
-              labels:
-                application: neutron
-                component: neutron-ovs-agent
+          # Incus ports are bound through OVN/OVS on the host. They do not use
+          # the legacy Neutron OVS agent required by the libvirt compute pod.
+          pod: []
       sriov:
         compute:
           pod:
@@ -567,6 +565,19 @@ rbd_pool:
   replication: 3
   crush_rule: replicated_rule
   chunk_size: 8
+
+incus_storage:
+  init_timeout: 120
+  default_root_pool: null
+  root_pools: {}
+  boot_from_volume_pools: {}
+
+incus_migration:
+  enabled: false
+  allow_live: true
+  allow_cold: true
+  port: 8443
+  secret_name: null
 
 conf:
   security: |
@@ -1395,6 +1406,7 @@ conf:
       endpoint: /var/lib/incus/unix.socket
       root_dir: /var/lib/incus
       project: default
+      migration_preflight_project: nova-preflight
   libvirt:
     address_search_enabled: true
     # When "address_search_enabled", get the IP address to be used as the target for live migration
@@ -2299,6 +2311,8 @@ pod:
       pod:
         runAsUser: 42424
         runAsGroup: 42424
+        fsGroup: 42424
+        fsGroupChangePolicy: OnRootMismatch
         supplementalGroups:
           - 42425
       container:

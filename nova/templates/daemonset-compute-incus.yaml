@@ -305,6 +305,7 @@ spec:
             - name: incus-state
               mountPath: {{ $hostPaths.state_mount_path }}
               readOnly: true
+              mountPropagation: HostToContainer
 {{- if $migrationEnabled }}
             - name: incus-migration
               mountPath: /run/incus-migration
@@ -408,6 +409,7 @@ spec:
             - name: incus-state
               mountPath: {{ $hostPaths.state_mount_path }}
               readOnly: true
+              mountPropagation: HostToContainer
             - name: host-dev
               mountPath: /dev
               mountPropagation: HostToContainer

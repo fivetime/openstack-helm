@@ -11,24 +11,17 @@ incus_storage:
       driver: ceph
       source: incus-rootfs-rbd-pool
   boot_from_volume_pools:
-    cinder-ssd-rep3:
+    # Match Cinder's rbd_pool (the image namespace), not rbd_data_pool. EC
+    # and replicated volume types can therefore share one cephext mapping.
+    cinder-ssd:
       driver: cephext
       source: ssd-rep3-rbd-pool
-    cinder-ssd-ec42:
-      driver: cephext
-      source: ssd-ec42-rbd-pool
-    cinder-nvme-rep3:
+    cinder-nvme:
       driver: cephext
       source: nvme-rep3-rbd-pool
-    cinder-nvme-ec42:
-      driver: cephext
-      source: nvme-ec42-rbd-pool
-    cinder-hybrid-rep3:
+    cinder-hybrid:
       driver: cephext
       source: hybrid-rep3-rbd-pool
-    cinder-hdd-rep3:
+    cinder-hdd:
       driver: cephext
       source: hdd-rep3-rbd-pool
-    cinder-hdd-ec42:
-      driver: cephext
-      source: hdd-ec42-rbd-pool

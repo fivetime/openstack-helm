@@ -64,7 +64,7 @@ def install_ceph_credentials():
         keyring = host_directory / f"{cluster}.client.{user}.keyring"
         temporary_keyring = pathlib.Path(f"{keyring}.tmp-{os.getpid()}")
         temporary_keyring.write_text(f"[client.{user}]\n\tkey = {key}\n")
-        os.chmod(temporary_keyring, 0o600)
+        os.chmod(temporary_keyring, 0o640)
         os.replace(temporary_keyring, keyring)
         print(f"incus-storage-init: installed Ceph keyring for client.{user}")
 

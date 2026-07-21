@@ -408,6 +408,11 @@ spec:
             - name: incus-state
               mountPath: {{ $hostPaths.state_mount_path }}
               readOnly: true
+{{- if $cephEnabled }}
+            - name: host-etc-ceph
+              mountPath: /etc/ceph
+              readOnly: true
+{{- end }}
             - name: manila-shares
               mountPath: {{ $hostPaths.manila_shares }}
               mountPropagation: Bidirectional

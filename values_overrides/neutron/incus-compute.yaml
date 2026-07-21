@@ -1,0 +1,17 @@
+---
+# The OVN agent DaemonSet also provides the local metadata proxy. Schedule it
+# on every OVS/OVN chassis, including dedicated Nova Incus compute nodes,
+# without applying the openstack-compute-node label that would also schedule
+# the libvirt nova-compute DaemonSet.
+labels:
+  agent:
+    metadata:
+      node_selector_key: openvswitch
+      node_selector_value: enabled
+
+pod:
+  tolerations:
+    neutron:
+      enabled: true
+      tolerations:
+        - operator: Exists

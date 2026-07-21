@@ -408,6 +408,9 @@ spec:
             - name: incus-state
               mountPath: {{ $hostPaths.state_mount_path }}
               readOnly: true
+            - name: host-dev
+              mountPath: /dev
+              mountPropagation: HostToContainer
 {{- if $cephEnabled }}
             - name: host-etc-ceph
               mountPath: /etc/ceph
@@ -472,6 +475,10 @@ spec:
         - name: incus-state
           hostPath:
             path: {{ $hostPaths.state }}
+            type: Directory
+        - name: host-dev
+          hostPath:
+            path: {{ $hostPaths.dev }}
             type: Directory
         - name: manila-shares
           hostPath:

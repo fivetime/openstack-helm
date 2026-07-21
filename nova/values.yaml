@@ -2162,6 +2162,7 @@ endpoints:
 pod:
   host_paths:
     nova_compute_incus:
+      dev: /dev
       nova_state: /var/lib/nova-incus
       state: /var/lib/incus
       state_mount_path: /var/lib/incus

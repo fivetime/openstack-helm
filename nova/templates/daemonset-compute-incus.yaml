@@ -115,7 +115,7 @@ exec:
 {{- end }}
 {{- $rootStoragePoolPairs := list }}
 {{- range $selector := keys $rootStoragePools | sortAlpha }}
-{{- $rootStoragePoolPairs = append $rootStoragePoolPairs (printf "%s:%s" $selector (get $rootStoragePools $selector)) }}
+{{- $rootStoragePoolPairs = append $rootStoragePoolPairs (printf "%s:%s" $selector $selector) }}
 {{- end }}
 {{- $_ := set $incusConf "root_storage_pools" (join "," $rootStoragePoolPairs) }}
 {{- if gt (len $rootStoragePoolResourceClasses) 0 }}

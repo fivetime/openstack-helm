@@ -28,6 +28,9 @@ function start () {
   ip addr flush dev o-hm0
   ip addr add ${HM_PORT_IP}/${HM_SUBNET_MASK} dev o-hm0
   ip link set dev o-hm0 up
+{{- if .Values.network.health_manager.interface_mtu }}
+  ip link set dev o-hm0 mtu {{ .Values.network.health_manager.interface_mtu }}
+{{- end }}
 
   # 启动 Octavia 健康管理器
   exec octavia-health-manager \

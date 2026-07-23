@@ -28,9 +28,13 @@ ovs-vsctl --may-exist add-port br-int o-hm0 \
         -- set Interface o-hm0 external-ids:iface-status=active \
         -- set Interface o-hm0 external-ids:attached-mac=$HM_PORT_MAC \
         -- set Interface o-hm0 external-ids:iface-id=$HM_PORT_ID \
-        -- set Interface o-hm0 external-ids:skip_cleanup=true
+        -- set Interface o-hm0 external-ids:skip_cleanup=true{{- if .Values.network.health_manager.interface_mtu }} \
+        -- set Interface o-hm0 mtu_request={{ .Values.network.health_manager.interface_mtu }}{{- end }}
 
 ip link set dev o-hm0 address $HM_PORT_MAC
+{{- if .Values.network.health_manager.interface_mtu }}
+ip link set dev o-hm0 mtu {{ .Values.network.health_manager.interface_mtu }}
+{{- end }}
 
 # 注释掉 iptables 规则 - 使用 OpenStack 安全组进行防火墙控制
 # 安全组 lb-health-mgr-sec-grp 已经允许 UDP 端口 {{ .Values.conf.octavia.health_manager.bind_port }}

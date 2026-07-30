@@ -199,12 +199,14 @@ conf:
         debug: "False"
         use_ssl: "False"
         endpoint_type: "internalURL"
+        secondary_endpoint_type: "publicURL"
         keystone_multidomain_support: "True"
         keystone_multidomain_dropdown: "False"
         keystone_domains:
           Default: "Default"
           example_domain: "example"
         keystone_default_domain: Default
+        default_service_regions: []
         disable_password_reveal: "True"
         show_openrc_file: "True"
         csrf_cookie_secure: "False"
@@ -449,6 +451,12 @@ conf:
         #    ('http://cluster2.example.com:5000/v2.0', 'cluster2'),
         #]
 
+        DEFAULT_SERVICE_REGIONS = {
+          {{- range $i, $service_region := .Values.conf.horizon.local_settings.config.default_service_regions }}
+            '{{ $service_region.service }}': '{{ $service_region.region }}',
+          {{- end }}
+        }
+
         OPENSTACK_KEYSTONE_URL = "{{ tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" }}"
         OPENSTACK_KEYSTONE_DEFAULT_ROLE = "member"
 
@@ -630,7 +638,7 @@ conf:
         # in the Keystone service catalog. Use this setting when Horizon is running
         # external to the OpenStack environment. The default is None.  This
         # value should differ from OPENSTACK_ENDPOINT_TYPE if used.
-        SECONDARY_ENDPOINT_TYPE = "publicURL"
+        SECONDARY_ENDPOINT_TYPE = "{{ .Values.conf.horizon.local_settings.config.secondary_endpoint_type }}"
 
         # The number of objects (Swift containers/objects or images) to display
         # on a single page before providing a paging element (a "more" link)
@@ -1383,9 +1391,6 @@ endpoints:
       admin:
         username: root
         password: password
-        secret:
-          tls:
-            internal: mariadb-tls-direct
       horizon:
         username: horizon
         password: password

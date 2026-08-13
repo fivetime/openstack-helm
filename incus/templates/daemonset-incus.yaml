@@ -39,7 +39,9 @@ metadata:
 spec:
   selector:
     matchLabels:
-{{ tuple $envAll .Chart.Name "incusd" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+      # Keep the immutable selector stable across helm-toolkit label changes.
+      application: incus
+      component: incusd
 {{ tuple $envAll "incus" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
   template:
     metadata:

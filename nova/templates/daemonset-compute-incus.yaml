@@ -67,6 +67,21 @@ exec:
 {{- $bfvPoolDefinitions := .Values.incus_storage.boot_from_volume_pools }}
 {{- $rootStoragePool := required "incus_storage.default_root_pool must be explicitly configured" .Values.incus_storage.default_root_pool }}
 {{- $migrationEnabled := .Values.incus_migration.enabled }}
+{{- $idmapEnabled := .Values.incus_idmap.enabled }}
+{{- $idmapSecret := "" }}
+{{- if and $migrationEnabled (or .Values.incus_migration.allow_live .Values.incus_migration.allow_cold) (not $idmapEnabled) }}
+{{- fail "incus_idmap.enabled must be true when Incus migration is enabled" }}
+{{- end }}
+{{- if $idmapEnabled }}
+{{- $_ := required "incus_idmap.endpoint is required when the allocator is enabled" .Values.incus_idmap.endpoint }}
+{{- $_ := required "incus_idmap.namespace is required when the allocator is enabled" .Values.incus_idmap.namespace }}
+{{- if or (le (int .Values.incus_idmap.base) 0) (le (int .Values.incus_idmap.size) 0) (le (int .Values.incus_idmap.count) 0) }}
+{{- fail "incus_idmap base, size and count must be positive" }}
+{{- end }}
+{{- if or (not .Values.incus_idmap.allow_insecure) .Values.incus_idmap.username }}
+{{- $idmapSecret = required "incus_idmap.secret_name is required for TLS or username authentication" .Values.incus_idmap.secret_name }}
+{{- end }}
+{{- end }}
 {{- $migrationSecret := "" }}
 {{- if $migrationEnabled }}
 {{- $migrationSecret = required "incus_migration.secret_name is required when Incus migration is enabled" .Values.incus_migration.secret_name }}
@@ -112,6 +127,23 @@ exec:
 {{- if $migrationEnabled }}
 {{- $_ := set $incusConf "allow_live_migration" .Values.incus_migration.allow_live }}
 {{- $_ := set $incusConf "allow_cold_migration" .Values.incus_migration.allow_cold }}
+{{- end }}
+{{- if $idmapEnabled }}
+{{- $_ := set $incusConf "idmap_allocator_endpoint" .Values.incus_idmap.endpoint }}
+{{- $_ := set $incusConf "idmap_allocator_namespace" .Values.incus_idmap.namespace }}
+{{- $_ := set $incusConf "idmap_allocator_base" (int .Values.incus_idmap.base) }}
+{{- $_ := set $incusConf "idmap_allocator_size" (int .Values.incus_idmap.size) }}
+{{- $_ := set $incusConf "idmap_allocator_count" (int .Values.incus_idmap.count) }}
+{{- $_ := set $incusConf "idmap_allocator_allow_insecure" .Values.incus_idmap.allow_insecure }}
+{{- if not .Values.incus_idmap.allow_insecure }}
+{{- $_ := set $incusConf "idmap_allocator_ca_cert" (printf "%s/%s" .Values.incus_idmap.mount_path .Values.incus_idmap.secret_keys.ca_cert) }}
+{{- $_ := set $incusConf "idmap_allocator_client_cert" (printf "%s/%s" .Values.incus_idmap.mount_path .Values.incus_idmap.secret_keys.client_cert) }}
+{{- $_ := set $incusConf "idmap_allocator_client_key" (printf "%s/%s" .Values.incus_idmap.mount_path .Values.incus_idmap.secret_keys.client_key) }}
+{{- end }}
+{{- if .Values.incus_idmap.username }}
+{{- $_ := set $incusConf "idmap_allocator_username" .Values.incus_idmap.username }}
+{{- $_ := set $incusConf "idmap_allocator_password_file" (printf "%s/%s" .Values.incus_idmap.mount_path .Values.incus_idmap.secret_keys.password) }}
+{{- end }}
 {{- end }}
 {{- $rootStoragePoolPairs := list }}
 {{- range $selector := keys $rootStoragePools | sortAlpha }}
@@ -392,6 +424,11 @@ spec:
               mountPath: /etc/nova/incus-migration
               readOnly: true
 {{- end }}
+{{- if $idmapSecret }}
+            - name: incus-idmap-etcd
+              mountPath: {{ .Values.incus_idmap.mount_path }}
+              readOnly: true
+{{- end }}
             - name: nova-etc-snippets
               mountPath: /etc/nova/nova.conf.d
               readOnly: true
@@ -467,6 +504,12 @@ spec:
 {{- end }}
               - key: ca.crt
                 path: ca.crt
+{{- end }}
+{{- if $idmapSecret }}
+        - name: incus-idmap-etcd
+          secret:
+            secretName: {{ $idmapSecret }}
+            defaultMode: 0440
 {{- end }}
         - name: nova-etc-snippets
 {{- if $etcSources }}

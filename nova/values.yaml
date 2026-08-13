@@ -581,6 +581,25 @@ incus_migration:
   # through the local Unix socket and derives migration_address and
   # migration_port from it. The TLS CA must cover that listener address.
 
+incus_idmap:
+  enabled: false
+  endpoint: null
+  namespace: null
+  base: 1000000
+  size: 65536
+  count: 10000
+  # Plain HTTP exists for isolated test deployments only. Production should
+  # mount a TLS/authentication Secret and leave this false.
+  allow_insecure: false
+  secret_name: null
+  username: null
+  mount_path: /etc/nova/idmap-etcd
+  secret_keys:
+    ca_cert: ca.crt
+    client_cert: client.crt
+    client_key: client.key
+    password: password
+
 conf:
   security: |
     #

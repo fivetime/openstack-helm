@@ -1,0 +1,14 @@
+---
+# ID-map allocation is a fleet-wide ownership protocol. Every Incus compute
+# in one migration domain must use the same endpoint, namespace and geometry.
+# This test deployment uses isolated in-cluster HTTP. Production deployments
+# should use HTTPS, set allow_insecure=false and provide secret_name with
+# ca.crt, client.crt and client.key (plus password when username is set).
+incus_idmap:
+  enabled: true
+  endpoint: http://coordination-etcd.openstack.svc.cluster.local:2379
+  namespace: regionone-cell1
+  base: 1000000
+  size: 65536
+  count: 10000
+  allow_insecure: true

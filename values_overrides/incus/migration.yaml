@@ -1,0 +1,13 @@
+---
+# Enable the Incus HTTPS listener used by Nova migration. Nova reads the
+# resulting core.https_address through the local Unix socket; do not duplicate
+# these listener fields in the Nova chart values.
+incus:
+  migration:
+    enabled: true
+    # Set an explicit migration interface, or set network_cidr to select the
+    # interface holding that route. With both null, the Kubernetes node
+    # InternalIP is used and must be covered by the Incus server certificate.
+    interface: null
+    network_cidr: null
+    port: 8443

@@ -51,12 +51,30 @@ Readiness requires all of the following:
 - the Incus Unix socket and API respond;
 - the host LXCFS mount responds;
 - the shared Incus runtime directory is present.
+- when migration is enabled, `core.https_address` exactly matches the selected
+  node IPv4 address and port.
 
 Readiness deliberately does not enumerate instances or networks. The Nova
 compute init container performs the fail-closed ownership and runtime audit
 once before admitting the compute service, and Nova periodic reconciliation
 owns per-instance health. A stale instance must not make Kubernetes restart or
 withdraw an otherwise healthy node-local Incus control plane.
+
+## Migration listener
+
+Set `incus.migration.enabled=true` when Nova Incus migration is enabled. An
+explicit `interface` selects its first global IPv4 address; otherwise
+`network_cidr` selects the interface holding that route. With both unset, the
+Kubernetes node address is used. The DaemonSet reconciles
+`core.https_address` once after `incusd` starts, while readiness only verifies
+the resulting value.
+
+The Nova chart reads the resulting listener through the local Incus Unix
+socket and derives its migration address and port from that authoritative
+value. It does not duplicate the interface, CIDR, or port settings. Enable
+migration in both charts as an explicit deployment policy. When migration is
+disabled here, the chart removes `core.https_address` so an unused remote
+Incus API listener is not left exposed.
 
 ## Upgrade boundary
 

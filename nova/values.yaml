@@ -576,18 +576,10 @@ incus_migration:
   enabled: false
   allow_live: true
   allow_cold: true
-  port: 8443
   secret_name: null
-  # Interface carrying migration traffic, mirroring
-  # conf.libvirt.live_migration_interface. When null, network_cidr selects the
-  # interface holding that route; when both are null the kubelet node address
-  # is used, which is rarely the right network for CRIU state transfer.
-  #
-  # The Incus daemon must listen on the matching address. The Incus chart and
-  # node bootstrap own "incus config set core.https_address <addr>:<port>";
-  # the certificate that migration_tls_ca pins must cover that address.
-  interface: null
-  network_cidr: null
+  # The Incus chart owns core.https_address. Nova reads the actual listener
+  # through the local Unix socket and derives migration_address and
+  # migration_port from it. The TLS CA must cover that listener address.
 
 conf:
   security: |

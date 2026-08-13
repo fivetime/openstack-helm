@@ -10,3 +10,9 @@ incus:
     service through its host Unix socket. Init and health checks now verify the
     Incus API, runtime state, LXCFS mount, storage pools, and the absence of
     Incus-managed tenant networks before Nova compute is admitted.
+  - |
+    Let the Incus chart own and verify ``core.https_address`` for migration,
+    and make Nova compute admission derive its advertised address and port
+    directly from that listener. Incus availability remains a Nova readiness
+    condition but no longer restarts a healthy Nova process through its
+    liveness probe.

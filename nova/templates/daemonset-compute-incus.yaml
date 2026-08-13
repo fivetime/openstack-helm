@@ -15,23 +15,23 @@ limitations under the License.
 {{- define "novaComputeIncusLivenessProbeTemplate" }}
 exec:
   command:
-    - /bin/sh
-    - -ec
-    - |
-      python /tmp/incus-runtime-health.py \
-        --endpoint {{ .Values.conf.nova_incus.incus.endpoint | quote }} \
-        --runtime {{ .Values.pod.host_paths.nova_compute_incus.runtime | quote }} \
-        --lxcfs {{ .Values.pod.host_paths.nova_compute_incus.lxcfs | quote }}
-      exec python /tmp/health-probe.py \
-        --config-file /etc/nova/nova.conf \
-        --config-file /etc/nova/nova-incus.conf \
-        --config-dir /etc/nova/nova.conf.d \
+    - python
+    - /tmp/health-probe.py
+    - --config-file
+    - /etc/nova/nova.conf
+    - --config-file
+    - /etc/nova/nova-incus.conf
+    - --config-dir
+    - /etc/nova/nova.conf.d
 {{- if .Values.incus_migration.enabled }}
-        --config-file /run/nova-incus/nova-incus-node.conf \
+    - --config-file
+    - /run/nova-incus/nova-incus-node.conf
 {{- end }}
-        --service-queue-name compute \
-        --service-process-name nova-incus-compute \
-        --liveness-probe
+    - --service-queue-name
+    - compute
+    - --service-process-name
+    - nova-incus-compute
+    - --liveness-probe
 {{- end }}
 
 {{- define "novaComputeIncusReadinessProbeTemplate" }}
@@ -228,55 +228,6 @@ spec:
               mkdir -p /var/lib/nova/instances
               mkdir -p {{ $hostPaths.manila_shares | quote }}
               chown -R {{ .Values.pod.security_context.nova_incus.pod.runAsUser }}:{{ .Values.pod.security_context.nova_incus.pod.runAsGroup }} /var/lib/nova
-{{- if $migrationEnabled }}
-              # Same selection order as conf.libvirt.live_migration_interface:
-              # an explicit interface wins, otherwise the interface holding the
-              # route to network_cidr. Both unset keeps the historical
-              # behaviour of migrating over the kubelet node address.
-              migration_interface="{{- .Values.incus_migration.interface -}}"
-              migration_network_cidr="{{- .Values.incus_migration.network_cidr -}}"
-              if [ -z "${migration_interface}" ] && [ -n "${migration_network_cidr}" ]; then
-                  migration_interface=$(ip -4 route list ${migration_network_cidr} \
-                      | awk -F 'dev' '{ print $2; exit }' | awk '{ print $1 }') || exit 1
-              fi
-              if [ -z "${migration_interface}" ]; then
-                  migration_address="${HOST_IP}"
-              else
-                  migration_address=$(ip -4 -o addr show dev "${migration_interface}" scope global \
-                      | awk '{ print $4 }' | cut -d/ -f1 | head -1)
-              fi
-              # Refuse to publish a half-configured endpoint: an empty address
-              # would render "https://:8443" and every peer would fail its
-              # pre-check with a connection error that names no cause.
-              if [ -z "${migration_address}" ]; then
-                  echo "no IPv4 address for Incus migration interface '${migration_interface}'" >&2
-                  exit 1
-              fi
-              cat > /run/nova-incus/nova-incus-node.conf <<EOF
-              [incus]
-              migration_address = https://${migration_address}:{{ .Values.incus_migration.port }}
-              migration_tls_cert = /etc/nova/incus-migration/migration.crt
-              migration_tls_key = /etc/nova/incus-migration/migration.key
-              migration_tls_ca = /etc/nova/incus-migration/ca.crt
-{{- if gt (len $bfvStoragePools) 0 }}
-              migration_preflight_tls_cert = /etc/nova/incus-migration/preflight.crt
-              migration_preflight_tls_key = /etc/nova/incus-migration/preflight.key
-              migration_preflight_tls_ca = /etc/nova/incus-migration/ca.crt
-{{- end }}
-              migration_port = {{ .Values.incus_migration.port }}
-              EOF
-              chown {{ .Values.pod.security_context.nova_incus.pod.runAsUser }}:{{ .Values.pod.security_context.nova_incus.pod.runAsGroup }} /run/nova-incus/nova-incus-node.conf
-              chmod 0440 /run/nova-incus/nova-incus-node.conf
-{{- end }}
-          env:
-{{- if $migrationEnabled }}
-            - name: HOST_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
-{{- else }}
-            []
-{{- end }}
           volumeMounts:
             - name: varlibnova-incus
               mountPath: /var/lib/nova
@@ -314,6 +265,12 @@ spec:
               value: {{ default "default" $incusConf.project | quote }}
             - name: INCUS_MIGRATION_ENABLED
               value: {{ $migrationEnabled | quote }}
+            - name: INCUS_MIGRATION_CONFIG
+              value: /run/nova-incus/nova-incus-node.conf
+            - name: NOVA_RUNTIME_UID
+              value: {{ .Values.pod.security_context.nova_incus.pod.runAsUser | quote }}
+            - name: NOVA_RUNTIME_GID
+              value: {{ .Values.pod.security_context.nova_incus.pod.runAsGroup | quote }}
             - name: INCUS_CEPH_ENABLED
               value: {{ $cephEnabled | quote }}
 {{- if $cephEnabled }}
@@ -341,6 +298,8 @@ spec:
               mountPath: {{ $hostPaths.lxcfs }}
               readOnly: true
               mountPropagation: HostToContainer
+            - name: nova-incus-runtime
+              mountPath: /run/nova-incus
 {{- if $migrationEnabled }}
             - name: incus-migration
               mountPath: /run/incus-migration

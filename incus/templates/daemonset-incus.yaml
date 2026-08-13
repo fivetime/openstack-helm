@@ -71,10 +71,28 @@ spec:
           env:
             - name: INCUS_RUNTIME_ROLE
               value: incusd
+            - name: INCUS_MIGRATION_ENABLED
+              value: {{ .Values.incus.migration.enabled | quote }}
+            - name: INCUS_MIGRATION_INTERFACE
+              value: {{ default "" .Values.incus.migration.interface | quote }}
+            - name: INCUS_MIGRATION_NETWORK_CIDR
+              value: {{ default "" .Values.incus.migration.network_cidr | quote }}
+            - name: INCUS_MIGRATION_PORT
+              value: {{ .Values.incus.migration.port | quote }}
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
             - name: INCUS_SOCKET_GID
               value: {{ .Values.incus.socket_gid | quote }}
             - name: INCUS_CONTROL_CGROUP
               value: {{ .Values.incus.control_cgroup | quote }}
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /tmp/incus-migration-listener.sh
+                  - configure
 {{ dict "envAll" $envAll "component" "incus" "container" "incus" "type" "startup" "probeTemplate" (include "incusReadyProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
 {{ dict "envAll" $envAll "component" "incus" "container" "incus" "type" "readiness" "probeTemplate" (include "incusReadyProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
 {{ dict "envAll" $envAll "component" "incus" "container" "incus" "type" "liveness" "probeTemplate" (include "incusLivenessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
@@ -83,6 +101,10 @@ spec:
             - name: incus-bin
               mountPath: /tmp/incus-ready.sh
               subPath: incus-ready.sh
+              readOnly: true
+            - name: incus-bin
+              mountPath: /tmp/incus-migration-listener.sh
+              subPath: incus-migration-listener.sh
               readOnly: true
             - name: state
               mountPath: {{ .Values.incus.state_path }}

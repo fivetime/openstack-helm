@@ -170,6 +170,14 @@ incus:
   socket_gid: 42425
   state_path: /var/lib/incus
   udev_path: /run/udev
+  migration:
+    enabled: false
+    # An explicit interface wins. Otherwise network_cidr selects the
+    # interface holding that route. When both are null, status.hostIP is used.
+    # These values must match nova.incus_migration.
+    interface: null
+    network_cidr: null
+    port: 8443
 
 manifests:
   configmap_bin: true

@@ -5,6 +5,7 @@ import os
 import pathlib
 import sys
 import time
+from urllib import parse
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
@@ -107,6 +108,85 @@ def connect_client():
             time.sleep(2)
 
     fail(f"Incus API did not become ready at {endpoint}: {last_error}")
+
+
+def get_migration_listener(client):
+    deadline = time.monotonic() + int(
+        os.environ.get("INCUS_STORAGE_INIT_TIMEOUT", "120"))
+    listener = None
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            metadata = client.api.get().json()["metadata"]
+            listener = (metadata.get("config") or {}).get(
+                "core.https_address")
+            if listener:
+                return listener
+            last_error = None
+        except Exception as exc:
+            last_error = exc
+        time.sleep(2)
+
+    detail = f"; last API error: {last_error}" if last_error else ""
+    fail(
+        "Incus core.https_address is not configured for migration"
+        f"{detail}")
+
+
+def configure_nova_migration(client):
+    config_path = pathlib.Path(os.environ.get(
+        "INCUS_MIGRATION_CONFIG",
+        "/run/nova-incus/nova-incus-node.conf",
+    ))
+    if os.environ.get("INCUS_MIGRATION_ENABLED", "false").lower() != "true":
+        config_path.unlink(missing_ok=True)
+        return
+
+    listener = get_migration_listener(client)
+    try:
+        parsed = parse.urlsplit(f"https://{listener}")
+        port = parsed.port
+    except ValueError as exc:
+        fail(f"invalid Incus core.https_address {listener!r}: {exc}")
+    if (
+            parsed.scheme != "https" or not parsed.hostname or port is None or
+            parsed.username is not None or parsed.password is not None or
+            parsed.path or parsed.query or parsed.fragment or
+            parsed.hostname in {"0.0.0.0", "::"} or ":" in parsed.hostname):
+        fail(f"invalid Incus core.https_address for Nova: {listener!r}")
+
+    try:
+        bfv_pools = json.loads(os.environ.get(
+            "INCUS_BFV_STORAGE_POOLS", "{}"))
+    except json.JSONDecodeError as exc:
+        fail(f"INCUS_BFV_STORAGE_POOLS is not valid JSON: {exc}")
+
+    lines = [
+        "[incus]",
+        f"migration_address = https://{listener}",
+        "migration_tls_cert = /etc/nova/incus-migration/migration.crt",
+        "migration_tls_key = /etc/nova/incus-migration/migration.key",
+        "migration_tls_ca = /etc/nova/incus-migration/ca.crt",
+    ]
+    if bfv_pools:
+        lines.extend([
+            "migration_preflight_tls_cert = "
+            "/etc/nova/incus-migration/preflight.crt",
+            "migration_preflight_tls_key = "
+            "/etc/nova/incus-migration/preflight.key",
+            "migration_preflight_tls_ca = /etc/nova/incus-migration/ca.crt",
+        ])
+    lines.append(f"migration_port = {port}")
+
+    uid = int(os.environ.get("NOVA_RUNTIME_UID", "42424"))
+    gid = int(os.environ.get("NOVA_RUNTIME_GID", "42424"))
+    config_path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+    temporary_path = config_path.with_name(
+        f".{config_path.name}.tmp-{os.getpid()}")
+    temporary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.chmod(temporary_path, 0o440)
+    os.chown(temporary_path, uid, gid)
+    os.replace(temporary_path, config_path)
 
 
 def validate_no_managed_networks(client):
@@ -412,6 +492,7 @@ def main():
     validate_nova_pool(client, os.environ.get("NOVA_INCUS_STORAGE_POOL"), "root")
     reconcile_preflight_project(client)
     reconcile_migration_trust(client)
+    configure_nova_migration(client)
 
 
 if __name__ == "__main__":

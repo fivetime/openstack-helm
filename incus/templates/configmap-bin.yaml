@@ -25,4 +25,6 @@ data:
 {{- end }}
   incus-ready.sh: |
 {{ tuple "bin/_incus-ready.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  incus-migration-listener.sh: |
+{{ tuple "bin/_incus-migration-listener.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- end }}

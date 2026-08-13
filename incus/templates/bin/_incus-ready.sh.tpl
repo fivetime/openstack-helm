@@ -26,3 +26,4 @@ test -d "$RUNTIME"
 test -r "$LXCFS/proc/meminfo"
 timeout 5 head -n 1 "$LXCFS/proc/meminfo" >/dev/null
 INCUS_DIR="$STATE" incus admin waitready --timeout=5 >/dev/null
+/tmp/incus-migration-listener.sh check

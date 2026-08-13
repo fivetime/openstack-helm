@@ -73,7 +73,7 @@ images:
     nova_cell_setup: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_cell_setup_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     nova_compute: quay.io/airshipit/nova:2026.1-ubuntu_noble
-    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus:2026.1-alpine_3.23
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:f2b7d45535d5eea390bc050a48e74957f262f36ed7ef7e64cf055ad729027cc6
     nova_compute_ironic: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_compute_ssh: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_conductor: quay.io/airshipit/nova:2026.1-ubuntu_noble
@@ -578,6 +578,16 @@ incus_migration:
   allow_cold: true
   port: 8443
   secret_name: null
+  # Interface carrying migration traffic, mirroring
+  # conf.libvirt.live_migration_interface. When null, network_cidr selects the
+  # interface holding that route; when both are null the kubelet node address
+  # is used, which is rarely the right network for CRIU state transfer.
+  #
+  # The Incus daemon must listen on the matching address. The Incus chart and
+  # node bootstrap own "incus config set core.https_address <addr>:<port>";
+  # the certificate that migration_tls_ca pins must cover that address.
+  interface: null
+  network_cidr: null
 
 conf:
   security: |
@@ -2153,6 +2163,8 @@ pod:
       nova_state: /var/lib/nova-incus
       state: /var/lib/incus
       state_mount_path: /var/lib/incus
+      runtime: /run/incus
+      lxcfs: /var/lib/lxcfs
       manila_shares: /var/lib/nova-incus/instances/incus-shares
   # -- Extra sidecar containers and volumes to inject into the nova API
   ## Deployments. Used e.g. by values_overrides/nova/api-tls.yaml to add an
@@ -2305,6 +2317,7 @@ pod:
         fsGroup: 42424
         fsGroupChangePolicy: OnRootMismatch
         supplementalGroups:
+          # Must match incus.values.incus.socket_gid and the nova-incus image.
           - 42425
       container:
         nova_compute_incus_init:

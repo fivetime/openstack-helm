@@ -69,6 +69,28 @@ def install_ceph_credentials():
         print(f"incus-storage-init: installed Ceph keyring for client.{user}")
 
 
+def validate_runtime_contract():
+    endpoint = pathlib.Path(os.environ.get(
+        "INCUS_ENDPOINT", "/var/lib/incus/unix.socket"))
+    runtime = pathlib.Path(os.environ.get(
+        "INCUS_RUNTIME_PATH", "/run/incus"))
+    lxcfs = pathlib.Path(os.environ.get(
+        "INCUS_LXCFS_PATH", "/var/lib/lxcfs"))
+
+    if not endpoint.is_socket():
+        fail(f"Incus Unix socket is missing: {endpoint}")
+    if not runtime.is_dir():
+        fail(f"Incus runtime directory is missing: {runtime}")
+
+    meminfo = lxcfs / "proc/meminfo"
+    try:
+        with meminfo.open("rb") as stream:
+            if not stream.read(1):
+                fail(f"LXCFS health file is empty: {meminfo}")
+    except OSError as exc:
+        fail(f"LXCFS data plane is unavailable at {meminfo}: {exc}")
+
+
 def connect_client():
     endpoint = os.environ.get("INCUS_ENDPOINT", "/var/lib/incus/unix.socket")
     deadline = time.monotonic() + int(
@@ -85,6 +107,53 @@ def connect_client():
             time.sleep(2)
 
     fail(f"Incus API did not become ready at {endpoint}: {last_error}")
+
+
+def validate_no_managed_networks(client):
+    try:
+        response = client.api.networks.get(params={
+            "recursion": "1",
+            "all-projects": "true",
+        })
+    except Exception as exc:
+        fail(f"cannot audit Incus-managed networks: {exc}")
+
+    managed = sorted(
+        f"{network.get('project') or 'default'}/{network.get('name')}"
+        for network in response.json().get("metadata", [])
+        if network.get("managed")
+    )
+    if managed:
+        fail(
+            "Incus-managed networks are unsupported on Neutron nodes: "
+            + ", ".join(managed))
+
+
+def validate_instance_runtime():
+    endpoint = os.environ.get(
+        "INCUS_ENDPOINT", "/var/lib/incus/unix.socket")
+    project = os.environ.get("NOVA_INCUS_PROJECT", "default")
+    runtime = pathlib.Path(os.environ.get(
+        "INCUS_RUNTIME_PATH", "/run/incus"))
+
+    try:
+        instances = Client(
+            endpoint=endpoint, project=project).instances.all()
+    except Exception as exc:
+        fail(f"cannot list Incus instances in project {project!r}: {exc}")
+
+    for instance in instances:
+        if instance.status.lower() != "running":
+            continue
+
+        runtime_name = instance.name
+        if project != "default":
+            runtime_name = f"{project}_{instance.name}"
+        config = runtime / runtime_name / "lxc.conf"
+        if not config.is_file():
+            fail(
+                f"runtime config for {project}/{instance.name} "
+                f"is missing: {config}")
 
 
 def desired_pools():
@@ -332,8 +401,11 @@ def reconcile_migration_trust(client):
 
 
 def main():
+    validate_runtime_contract()
     install_ceph_credentials()
     client = connect_client()
+    validate_no_managed_networks(client)
+    validate_instance_runtime()
     for name, spec in desired_pools().items():
         reconcile_pool(client, name, spec, ceph_users())
 

@@ -1,0 +1,154 @@
+{{/* Licensed under the Apache License, Version 2.0. */}}
+{{- if .Values.manifests.daemonset_incus }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: incusd
+  labels:
+    application: incus
+    component: incusd
+spec:
+  selector:
+    matchLabels:
+      application: incus
+      component: incusd
+{{ tuple . "incus" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
+  template:
+    metadata:
+      labels:
+        application: incus
+        component: incusd
+      annotations:
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        # Required by containerd versions that do not apply the stable
+        # securityContext AppArmor field to privileged hostPID containers.
+        container.apparmor.security.beta.kubernetes.io/incusd: unconfined
+    spec:
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: {{ .Values.pod.dns_policy }}
+      securityContext:
+{{ toYaml .Values.pod.security_context.incus.pod | indent 8 }}
+      nodeSelector:
+        {{ .Values.labels.agent.incus.node_selector_key }}: {{ .Values.labels.agent.incus.node_selector_value | quote }}
+{{- if .Values.pod.tolerations.incus.enabled }}
+      tolerations:
+{{ toYaml .Values.pod.tolerations.incus.tolerations | indent 8 }}
+{{- end }}
+{{- with .Values.images.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml . | indent 8 }}
+{{- end }}
+      terminationGracePeriodSeconds: 135
+      containers:
+        - name: incusd
+          image: {{ .Values.images.tags.incus | quote }}
+          imagePullPolicy: {{ .Values.images.pull_policy }}
+          securityContext:
+{{ toYaml .Values.pod.security_context.incus.container.incus | indent 12 }}
+          env:
+            - name: INCUS_RUNTIME_ROLE
+              value: incusd
+            - name: INCUS_SOCKET_GID
+              value: {{ .Values.incus.socket_gid | quote }}
+            - name: INCUS_CONTROL_CGROUP
+              value: {{ .Values.incus.control_cgroup | quote }}
+          startupProbe:
+            exec:
+              command: ["/tmp/incus-ready.sh"]
+{{ toYaml .Values.pod.probes.incus.incus.startup.params | indent 12 }}
+          readinessProbe:
+            exec:
+              command: ["/tmp/incus-ready.sh"]
+{{ toYaml .Values.pod.probes.incus.incus.readiness.params | indent 12 }}
+          livenessProbe:
+            exec:
+              command: ["/usr/local/sbin/healthcheck.sh"]
+{{ toYaml .Values.pod.probes.incus.incus.liveness.params | indent 12 }}
+{{- if .Values.pod.resources.enabled }}
+          resources:
+{{ toYaml .Values.pod.resources.incus | indent 12 }}
+{{- end }}
+          volumeMounts:
+            - name: incus-bin
+              mountPath: /tmp/incus-ready.sh
+              subPath: incus-ready.sh
+              readOnly: true
+            - name: state
+              mountPath: {{ .Values.incus.state_path }}
+              mountPropagation: Bidirectional
+            - name: runtime
+              mountPath: {{ .Values.incus.runtime_path }}
+              mountPropagation: Bidirectional
+            - name: logs
+              mountPath: {{ .Values.incus.log_path }}
+            - name: lxcfs
+              mountPath: {{ .Values.incus.lxcfs_path }}
+              readOnly: true
+              mountPropagation: HostToContainer
+            - name: devices
+              mountPath: {{ .Values.incus.devices_path }}
+            - name: cgroup
+              mountPath: {{ .Values.incus.cgroup_path }}
+            - name: securityfs
+              mountPath: {{ .Values.incus.securityfs_path }}
+            - name: udev
+              mountPath: {{ .Values.incus.udev_path }}
+              readOnly: true
+            - name: modules
+              mountPath: {{ .Values.incus.modules_path }}
+              readOnly: true
+{{- if .Values.incus.ceph.enabled }}
+            - name: ceph
+              mountPath: {{ .Values.incus.ceph.config_path }}
+              readOnly: true
+{{- end }}
+      volumes:
+        - name: incus-bin
+          configMap:
+            name: incus-bin
+            defaultMode: 0555
+        - name: state
+          hostPath:
+            path: {{ .Values.incus.state_path }}
+            type: Directory
+        - name: runtime
+          hostPath:
+            path: {{ .Values.incus.runtime_path }}
+            type: Directory
+        - name: logs
+          hostPath:
+            path: {{ .Values.incus.log_path }}
+            type: Directory
+        - name: lxcfs
+          hostPath:
+            path: {{ .Values.incus.lxcfs_path }}
+            type: Directory
+        - name: devices
+          hostPath:
+            path: {{ .Values.incus.devices_path }}
+            type: Directory
+        - name: cgroup
+          hostPath:
+            path: {{ .Values.incus.cgroup_path }}
+            type: Directory
+        - name: securityfs
+          hostPath:
+            path: {{ .Values.incus.securityfs_path }}
+            type: Directory
+        - name: udev
+          hostPath:
+            path: {{ .Values.incus.udev_path }}
+            type: Directory
+        - name: modules
+          hostPath:
+            path: {{ .Values.incus.modules_path }}
+            type: Directory
+{{- if .Values.incus.ceph.enabled }}
+        - name: ceph
+          hostPath:
+            path: {{ .Values.incus.ceph.config_path }}
+            type: Directory
+{{- end }}
+{{- end }}

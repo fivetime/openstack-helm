@@ -1,0 +1,12 @@
+---
+incus:
+  - |
+    Add the Incus chart as a privileged per-node ``incusd`` DaemonSet. Incus
+    state, runtime files, devices, cgroups, and Ceph configuration are mounted
+    from the host while LXCFS remains an independently maintained host Podman
+    service.
+  - |
+    Make the Nova Incus compute DaemonSet consume the independent ``incusd``
+    service through its host Unix socket. Init and health checks now verify the
+    Incus API, runtime state, LXCFS mount, storage pools, and the absence of
+    Incus-managed tenant networks before Nova compute is admitted.

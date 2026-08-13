@@ -1,0 +1,17 @@
+# Licensed under the Apache License, Version 2.0.
+---
+apiVersion: v2
+name: incus
+description: Privileged Incus control plane for OpenStack compute nodes
+type: application
+version: 2026.1.0
+appVersion: "7.3"
+home: https://linuxcontainers.org/incus/
+sources:
+  - https://github.com/lxc/incus
+  - https://opendev.org/openstack/openstack-helm
+dependencies:
+  - name: helm-toolkit
+    repository: file://../helm-toolkit
+    version: ">= 0.1.0"
+...

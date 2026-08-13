@@ -37,6 +37,7 @@ sections:
   - [helm-toolkit, helm-toolkit Chart]
   - [horizon, horizon Chart]
   - [ingress, ingress Chart]
+  - [incus, incus Chart]
   - [ironic, ironic Chart]
   - [keystone, keystone Chart]
   - [kibana, kibana Chart]

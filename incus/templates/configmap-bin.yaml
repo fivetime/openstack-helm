@@ -1,0 +1,11 @@
+{{/* Licensed under the Apache License, Version 2.0. */}}
+{{- if .Values.manifests.configmap_bin }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: incus-bin
+data:
+  incus-ready.sh: |
+{{ tuple "bin/_incus-ready.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- end }}

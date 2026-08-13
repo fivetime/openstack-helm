@@ -1,0 +1,102 @@
+# Licensed under the Apache License, Version 2.0.
+---
+release_group: null
+
+labels:
+  agent:
+    incus:
+      node_selector_key: openstack-incus-compute
+      node_selector_value: enabled
+
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:9252e0ffd3c46f90ee14dcde0ba1533a3e494ff973f515f0c1619b983384bae7
+  pull_policy: IfNotPresent
+  imagePullSecrets: []
+
+pod:
+  dns_policy: ClusterFirstWithHostNet
+  tolerations:
+    incus:
+      enabled: true
+      tolerations:
+        - key: openstack-incus-compute
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+  lifecycle:
+    upgrades:
+      daemonsets:
+        pod_replacement_strategy: RollingUpdate
+        incus:
+          enabled: true
+          min_ready_seconds: 10
+          max_unavailable: 1
+  probes:
+    incus:
+      incus:
+        startup:
+          enabled: true
+          params:
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24
+        readiness:
+          enabled: true
+          params:
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+  resources:
+    enabled: false
+    incus:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits: {}
+  security_context:
+    incus:
+      pod:
+        runAsUser: 0
+      container:
+        incus:
+          privileged: true
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+          appArmorProfile:
+            type: Unconfined
+          seccompProfile:
+            type: Unconfined
+
+incus:
+  # Must match the Nova Incus Pod supplemental group and the compute image's
+  # incus-admin GID so the non-root nova process can connect to this socket.
+  socket_gid: 42425
+  control_cgroup: /osh-incus
+  socket: /var/lib/incus/unix.socket
+  state_path: /var/lib/incus
+  runtime_path: /run/incus
+  log_path: /var/log/incus
+  lxcfs_path: /var/lib/lxcfs
+  cgroup_path: /sys/fs/cgroup
+  securityfs_path: /sys/kernel/security
+  udev_path: /run/udev
+  modules_path: /lib/modules
+  devices_path: /dev
+  ceph:
+    enabled: true
+    config_path: /etc/ceph
+
+manifests:
+  configmap_bin: true
+  daemonset_incus: true
+
+extraObjects: []
+...

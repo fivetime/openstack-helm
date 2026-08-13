@@ -15,44 +15,46 @@ limitations under the License.
 {{- define "novaComputeIncusLivenessProbeTemplate" }}
 exec:
   command:
-    - python
-    - /tmp/health-probe.py
-    - --config-file
-    - /etc/nova/nova.conf
-    - --config-file
-    - /etc/nova/nova-incus.conf
-    - --config-dir
-    - /etc/nova/nova.conf.d
+    - /bin/sh
+    - -ec
+    - |
+      python /tmp/incus-runtime-health.py \
+        --endpoint {{ .Values.conf.nova_incus.incus.endpoint | quote }} \
+        --runtime {{ .Values.pod.host_paths.nova_compute_incus.runtime | quote }} \
+        --lxcfs {{ .Values.pod.host_paths.nova_compute_incus.lxcfs | quote }} \
+        --project {{ default "default" .Values.conf.nova_incus.incus.project | quote }}
+      exec python /tmp/health-probe.py \
+        --config-file /etc/nova/nova.conf \
+        --config-file /etc/nova/nova-incus.conf \
+        --config-dir /etc/nova/nova.conf.d \
 {{- if .Values.incus_migration.enabled }}
-    - --config-file
-    - /run/nova-incus/nova-incus-node.conf
+        --config-file /run/nova-incus/nova-incus-node.conf \
 {{- end }}
-    - --service-queue-name
-    - compute
-    - --service-process-name
-    - nova-incus-compute
-    - --liveness-probe
+        --service-queue-name compute \
+        --service-process-name nova-incus-compute \
+        --liveness-probe
 {{- end }}
 
 {{- define "novaComputeIncusReadinessProbeTemplate" }}
 exec:
   command:
-    - python
-    - /tmp/health-probe.py
-    - --config-file
-    - /etc/nova/nova.conf
-    - --config-file
-    - /etc/nova/nova-incus.conf
-    - --config-dir
-    - /etc/nova/nova.conf.d
+    - /bin/sh
+    - -ec
+    - |
+      python /tmp/incus-runtime-health.py \
+        --endpoint {{ .Values.conf.nova_incus.incus.endpoint | quote }} \
+        --runtime {{ .Values.pod.host_paths.nova_compute_incus.runtime | quote }} \
+        --lxcfs {{ .Values.pod.host_paths.nova_compute_incus.lxcfs | quote }} \
+        --project {{ default "default" .Values.conf.nova_incus.incus.project | quote }}
+      exec python /tmp/health-probe.py \
+        --config-file /etc/nova/nova.conf \
+        --config-file /etc/nova/nova-incus.conf \
+        --config-dir /etc/nova/nova.conf.d \
 {{- if .Values.incus_migration.enabled }}
-    - --config-file
-    - /run/nova-incus/nova-incus-node.conf
+        --config-file /run/nova-incus/nova-incus-node.conf \
 {{- end }}
-    - --service-queue-name
-    - compute
-    - --service-process-name
-    - nova-incus-compute
+        --service-queue-name compute \
+        --service-process-name nova-incus-compute
 {{- end }}
 
 {{- if .Values.manifests.daemonset_compute_incus }}
@@ -229,9 +231,32 @@ spec:
               mkdir -p {{ $hostPaths.manila_shares | quote }}
               chown -R {{ .Values.pod.security_context.nova_incus.pod.runAsUser }}:{{ .Values.pod.security_context.nova_incus.pod.runAsGroup }} /var/lib/nova
 {{- if $migrationEnabled }}
+              # Same selection order as conf.libvirt.live_migration_interface:
+              # an explicit interface wins, otherwise the interface holding the
+              # route to network_cidr. Both unset keeps the historical
+              # behaviour of migrating over the kubelet node address.
+              migration_interface="{{- .Values.incus_migration.interface -}}"
+              migration_network_cidr="{{- .Values.incus_migration.network_cidr -}}"
+              if [ -z "${migration_interface}" ] && [ -n "${migration_network_cidr}" ]; then
+                  migration_interface=$(ip -4 route list ${migration_network_cidr} \
+                      | awk -F 'dev' '{ print $2; exit }' | awk '{ print $1 }') || exit 1
+              fi
+              if [ -z "${migration_interface}" ]; then
+                  migration_address="${HOST_IP}"
+              else
+                  migration_address=$(ip -4 -o addr show dev "${migration_interface}" scope global \
+                      | awk '{ print $4 }' | cut -d/ -f1 | head -1)
+              fi
+              # Refuse to publish a half-configured endpoint: an empty address
+              # would render "https://:8443" and every peer would fail its
+              # pre-check with a connection error that names no cause.
+              if [ -z "${migration_address}" ]; then
+                  echo "no IPv4 address for Incus migration interface '${migration_interface}'" >&2
+                  exit 1
+              fi
               cat > /run/nova-incus/nova-incus-node.conf <<EOF
               [incus]
-              migration_address = https://${HOST_IP}:{{ .Values.incus_migration.port }}
+              migration_address = https://${migration_address}:{{ .Values.incus_migration.port }}
               migration_tls_cert = /etc/nova/incus-migration/migration.crt
               migration_tls_key = /etc/nova/incus-migration/migration.key
               migration_tls_ca = /etc/nova/incus-migration/ca.crt
@@ -275,6 +300,10 @@ spec:
               value: {{ .Values.conf.nova_incus.incus.endpoint | quote }}
             - name: INCUS_STORAGE_INIT_TIMEOUT
               value: {{ .Values.incus_storage.init_timeout | quote }}
+            - name: INCUS_RUNTIME_PATH
+              value: {{ $hostPaths.runtime | quote }}
+            - name: INCUS_LXCFS_PATH
+              value: {{ $hostPaths.lxcfs | quote }}
             - name: INCUS_STORAGE_POOLS
               value: {{ toJson $allStoragePools | quote }}
             - name: NOVA_INCUS_STORAGE_POOL
@@ -304,6 +333,14 @@ spec:
               readOnly: true
             - name: incus-state
               mountPath: {{ $hostPaths.state_mount_path }}
+              readOnly: true
+              mountPropagation: HostToContainer
+            - name: incus-runtime
+              mountPath: {{ $hostPaths.runtime }}
+              readOnly: true
+              mountPropagation: HostToContainer
+            - name: incus-lxcfs
+              mountPath: {{ $hostPaths.lxcfs }}
               readOnly: true
               mountPropagation: HostToContainer
 {{- if $migrationEnabled }}
@@ -360,6 +397,10 @@ spec:
               mountPath: /tmp/health-probe.py
               subPath: health-probe.py
               readOnly: true
+            - name: nova-bin
+              mountPath: /tmp/incus-runtime-health.py
+              subPath: incus-runtime-health.py
+              readOnly: true
             - name: nova-etc
               mountPath: /etc/nova/nova.conf
               subPath: nova-compute.conf
@@ -408,6 +449,14 @@ spec:
               mountPropagation: Bidirectional
             - name: incus-state
               mountPath: {{ $hostPaths.state_mount_path }}
+              readOnly: true
+              mountPropagation: HostToContainer
+            - name: incus-runtime
+              mountPath: {{ $hostPaths.runtime }}
+              readOnly: true
+              mountPropagation: HostToContainer
+            - name: incus-lxcfs
+              mountPath: {{ $hostPaths.lxcfs }}
               readOnly: true
               mountPropagation: HostToContainer
             - name: host-dev
@@ -477,6 +526,14 @@ spec:
         - name: incus-state
           hostPath:
             path: {{ $hostPaths.state }}
+            type: Directory
+        - name: incus-runtime
+          hostPath:
+            path: {{ $hostPaths.runtime }}
+            type: Directory
+        - name: incus-lxcfs
+          hostPath:
+            path: {{ $hostPaths.lxcfs }}
             type: Directory
         - name: host-dev
           hostPath:

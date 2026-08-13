@@ -68,6 +68,8 @@ data:
 {{- if .Values.manifests.daemonset_compute_incus }}
   incus-storage-init.py: |
 {{ tuple "bin/_incus-storage-init.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  incus-runtime-health.py: |
+{{ tuple "bin/_incus-runtime-health.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- end }}
   nova-api-metadata-init.sh: |
 {{ tuple "bin/_nova-api-metadata-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}

@@ -50,8 +50,13 @@ Readiness requires all of the following:
 
 - the Incus Unix socket and API respond;
 - the host LXCFS mount responds;
-- every running instance still has its project-qualified runtime `lxc.conf`;
-- no Incus-managed network exists.
+- the shared Incus runtime directory is present.
+
+Readiness deliberately does not enumerate instances or networks. The Nova
+compute init container performs the fail-closed ownership and runtime audit
+once before admitting the compute service, and Nova periodic reconciliation
+owns per-instance health. A stale instance must not make Kubernetes restart or
+withdraw an otherwise healthy node-local Incus control plane.
 
 ## Upgrade boundary
 

@@ -21,8 +21,7 @@ exec:
       python /tmp/incus-runtime-health.py \
         --endpoint {{ .Values.conf.nova_incus.incus.endpoint | quote }} \
         --runtime {{ .Values.pod.host_paths.nova_compute_incus.runtime | quote }} \
-        --lxcfs {{ .Values.pod.host_paths.nova_compute_incus.lxcfs | quote }} \
-        --project {{ default "default" .Values.conf.nova_incus.incus.project | quote }}
+        --lxcfs {{ .Values.pod.host_paths.nova_compute_incus.lxcfs | quote }}
       exec python /tmp/health-probe.py \
         --config-file /etc/nova/nova.conf \
         --config-file /etc/nova/nova-incus.conf \
@@ -44,8 +43,7 @@ exec:
       python /tmp/incus-runtime-health.py \
         --endpoint {{ .Values.conf.nova_incus.incus.endpoint | quote }} \
         --runtime {{ .Values.pod.host_paths.nova_compute_incus.runtime | quote }} \
-        --lxcfs {{ .Values.pod.host_paths.nova_compute_incus.lxcfs | quote }} \
-        --project {{ default "default" .Values.conf.nova_incus.incus.project | quote }}
+        --lxcfs {{ .Values.pod.host_paths.nova_compute_incus.lxcfs | quote }}
       exec python /tmp/health-probe.py \
         --config-file /etc/nova/nova.conf \
         --config-file /etc/nova/nova-incus.conf \

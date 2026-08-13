@@ -162,6 +162,9 @@ def configure_nova_migration(client):
         fail(f"INCUS_BFV_STORAGE_POOLS is not valid JSON: {exc}")
 
     lines = [
+        "[DEFAULT]",
+        f"my_ip = {parsed.hostname}",
+        "",
         "[incus]",
         f"migration_address = https://{listener}",
         "migration_tls_cert = /etc/nova/incus-migration/migration.crt",

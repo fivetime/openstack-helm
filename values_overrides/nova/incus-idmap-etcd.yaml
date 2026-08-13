@@ -12,3 +12,12 @@ incus_idmap:
   size: 65536
   count: 10000
   allow_insecure: true
+
+# ceph-rootfs is shared by both Incus computes. Publish an operator-approved
+# slice per node instead of multiplying the full Ceph pool capacity in
+# Placement. The production pool currently has about 24.3 TB available, so
+# two 6000 GiB slices leave substantial recovery and non-Nova headroom.
+conf:
+  nova_incus:
+    incus:
+      shared_storage_pool_capacity_gb: 6000

@@ -162,6 +162,11 @@ incus:
   log_path: /var/log/incus
   lxcfs_path: /var/lib/lxcfs
   modules_path: /lib/modules
+  # Nova compute writes config drives and Manila staging mounts below this
+  # host path. Incusd must see the same tree at Nova's in-container path when
+  # it validates profile disk sources and attaches them to an instance.
+  nova_instances_host_path: /var/lib/nova-incus/instances
+  nova_instances_path: /var/lib/nova/instances
   runtime_path: /run/incus
   securityfs_path: /sys/kernel/security
   socket: /var/lib/incus/unix.socket

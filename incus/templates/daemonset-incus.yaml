@@ -132,6 +132,9 @@ spec:
             - name: modules
               mountPath: {{ .Values.incus.modules_path }}
               readOnly: true
+            - name: nova-instances
+              mountPath: {{ .Values.incus.nova_instances_path }}
+              mountPropagation: Bidirectional
 {{- if .Values.incus.ceph.enabled }}
             - name: ceph
               mountPath: {{ .Values.incus.ceph.config_path }}
@@ -178,6 +181,10 @@ spec:
           hostPath:
             path: {{ .Values.incus.modules_path }}
             type: Directory
+        - name: nova-instances
+          hostPath:
+            path: {{ .Values.incus.nova_instances_host_path }}
+            type: DirectoryOrCreate
 {{- if .Values.incus.ceph.enabled }}
         - name: ceph
           hostPath:

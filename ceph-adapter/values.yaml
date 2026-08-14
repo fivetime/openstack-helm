@@ -197,3 +197,11 @@ manifests:
   job_namespace_client_key: true
   job_namespace_client_ceph_config: true
 ...
+
+# -- Extra K8s manifests to deploy. Either a list or a map of manifests.
+## Note: Supports use of custom Helm templates
+## Note: Helm replaces (instead of merging) list values when several values
+## files are combined, so if you need to define extraObjects in more than one
+## overrides file, use the map form and make sure the keys are unique across
+## those files. With the list form only the last file takes effect.
+extraObjects: {}

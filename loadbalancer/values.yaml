@@ -78,13 +78,6 @@ bootstrap:
 
 network:
   api:
-    ingress:
-      public: true
-      classes:
-        namespace: "nginx"
-        cluster: "nginx-cluster"
-      annotations:
-        nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
       enabled: false
@@ -859,7 +852,6 @@ manifests:
   deployment_api: true
   deployment_worker: true
   deployment_housekeeping: true
-  ingress_api: true
   job_bootstrap: true
   job_db_init: true
   job_db_sync: true
@@ -876,11 +868,17 @@ manifests:
   secret_credential_keys: true
   secret_db: true
   secret_db_persistence: true
-  secret_ingress_tls: true
   secret_keystone: true
   secret_rabbitmq: true
   secret_registry: true
   secret_ssh_key: true
-  service_ingress_api: true
   service_api: true
 ...
+
+# -- Extra K8s manifests to deploy. Either a list or a map of manifests.
+## Note: Supports use of custom Helm templates
+## Note: Helm replaces (instead of merging) list values when several values
+## files are combined, so if you need to define extraObjects in more than one
+## overrides file, use the map form and make sure the keys are unique across
+## those files. With the list form only the last file takes effect.
+extraObjects: {}

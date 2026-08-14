@@ -1082,10 +1082,6 @@ endpoints:
       api:
         default: 9517
         # public: 443
-    ingress:
-      ingressClassName: nginx
-      annotations:
-        nginx.ingress.kubernetes.io/enable-cors: "true"
 
   # Zun WebSocket 代理
   websocket_proxy:
@@ -1105,10 +1101,6 @@ endpoints:
       wsproxy:
         default: 6784
         public: 443
-    ingress:
-      ingressClassName: nginx
-      annotations:
-        nginx.ingress.kubernetes.io/websocket-services: "zun-wsproxy"
 
   # ────────────────────────────────────────────────────────────────────
   # 8.3 OpenStack 服务端点
@@ -1331,12 +1323,6 @@ manifests:
   deployment_wsproxy: true                    # WebSocket 代理部署
 
   # ────────────────────────────────────────────────────────────────────
-  # 9.3 网络和入口
-  # ────────────────────────────────────────────────────────────────────
-  ingress_api: false                          # API 服务入口
-  ingress_wsproxy: true                       # WebSocket 代理入口
-
-  # ────────────────────────────────────────────────────────────────────
   # 9.4 任务
   # ────────────────────────────────────────────────────────────────────
   job_bootstrap: true                         # 引导任务
@@ -1362,12 +1348,17 @@ manifests:
   secret_db: true                             # 数据库连接密钥
   secret_keystone: true                       # Keystone 认证密钥
   secret_rabbitmq: true                       # RabbitMQ 连接密钥
-  secret_ingress_tls: true                    # 入口 TLS 证书密钥
 
-  service_ingress_api: true                   # API 入口服务
   service_api: true                           # API 服务
   service_wsproxy: true                       # WebSocket 代理服务
 
 # ════════════════════════════════════════════════════════════════════
 # 配置文件结束
 # ════════════════════════════════════════════════════════════════════
+# -- Extra K8s manifests to deploy. Either a list or a map of manifests.
+## Note: Supports use of custom Helm templates
+## Note: Helm replaces (instead of merging) list values when several values
+## files are combined, so if you need to define extraObjects in more than one
+## overrides file, use the map form and make sure the keys are unique across
+## those files. With the list form only the last file takes effect.
+extraObjects: {}

@@ -64,15 +64,6 @@ labels:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
 network:
-  api:
-    ingress:
-      public: true
-      classes:
-        namespace: "ingress-openstack"
-        cluster: "ingress-cluster"
-      annotations:
-        nginx.ingress.kubernetes.io/rewrite-target: /
-        haproxy.org/path-rewrite: /
   external_policy_local: false
   node_port:
     enabled: false
@@ -1018,15 +1009,6 @@ endpoints:
       dns:
         default: 53
         protocol: UDP
-  ingress:
-    namespace: null
-    name: ingress
-    hosts:
-      default: ingress
-    port:
-      ingress:
-        default: 80
-
 network_policy:
   monasca:
     ingress:
@@ -1119,7 +1101,6 @@ manifests:
   deployment_api: true
   deployment_notification: true
   deployment_persister: true
-  ingress_api: true
   job_db_init: true
   job_db_sync: true
   job_db_drop: false
@@ -1132,9 +1113,15 @@ manifests:
   job_ks_user: true
   network_policy: false
   secret_db: true
-  secret_ingress_tls: true
   secret_influxdb: true
   secret_keystone: true
-  service_ingress: true
   service: true
 ...
+
+# -- Extra K8s manifests to deploy. Either a list or a map of manifests.
+## Note: Supports use of custom Helm templates
+## Note: Helm replaces (instead of merging) list values when several values
+## files are combined, so if you need to define extraObjects in more than one
+## overrides file, use the map form and make sure the keys are unique across
+## those files. With the list form only the last file takes effect.
+extraObjects: {}

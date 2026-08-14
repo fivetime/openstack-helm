@@ -1431,6 +1431,11 @@ conf:
       # Keep tenant-controlled filesystem images out of the host kernel.
       # Every supported system-container image must provide fuse2fs.
       data_volume_mount_fuse: ext4=fuse2fs
+      # Required when CephFS Manila shares are enabled. Keep null for NFS-only
+      # deployments. Separate compute aggregates when share types use
+      # different CephFS filesystems.
+      manila_cephfs_cluster_fsid: null
+      manila_cephfs_filesystem_name: null
   libvirt:
     address_search_enabled: true
     # When "address_search_enabled", get the IP address to be used as the target for live migration

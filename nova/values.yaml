@@ -1509,6 +1509,10 @@ conf:
     cinder:
       auth_type: password
       catalog_info: volumev3::internalURL
+    manila:
+      auth_type: password
+      service_type: sharev2
+      valid_interfaces: internal
     database:
       max_retries: -1
       # -- Database connection URI. When empty the URI is auto-generated

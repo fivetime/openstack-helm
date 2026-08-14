@@ -164,6 +164,10 @@ limitations under the License.
 {{- end -}}
 {{- end -}}
 
+{{- if empty .Values.conf.nova.manila.auth_url -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.nova.manila "auth_url" -}}
+{{- end -}}
+
 {{- if empty .Values.conf.nova.DEFAULT.osapi_compute_listen_port -}}
 {{- $_ := tuple "compute" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | set .Values.conf.nova.DEFAULT "osapi_compute_listen_port" -}}
 {{- end -}}

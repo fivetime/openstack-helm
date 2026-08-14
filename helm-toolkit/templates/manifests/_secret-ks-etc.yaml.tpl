@@ -27,7 +27,7 @@ metadata:
 {{ tuple "ks_etc" $serviceName $envAll | include "helm-toolkit.snippets.custom_secret_annotations" | indent 4 }}
 type: Opaque
 data:
-{{- range $epName, $sectionName := $serviceUserSections }}
+{{- range $epName, $sectionNames := $serviceUserSections }}
 {{- $epAuth := index $envAll.Values.endpoints.identity.auth $epName -}}
 {{- $configSection := dict
   "region_name" $epAuth.region_name
@@ -37,7 +37,12 @@ data:
   "username" $epAuth.username
   "password" $epAuth.password
 -}}
+{{- if not (kindIs "slice" $sectionNames) -}}
+{{- $sectionNames = list $sectionNames -}}
+{{- end -}}
+{{- range $sectionName := $sectionNames }}
 {{- $configSnippet := dict $sectionName $configSection }}
 {{ printf "%s_%s.conf" $serviceName $sectionName | indent 2 }}: {{ include "helm-toolkit.utils.to_oslo_conf" $configSnippet | b64enc }}
+{{- end }}
 {{- end }}
 {{- end -}}

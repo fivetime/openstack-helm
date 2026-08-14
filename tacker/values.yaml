@@ -208,6 +208,16 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
   mounts:
+    tacker_server:
+      init_container: null
+      tacker_server:
+        volumeMounts: null
+        volumes: null
+    tacker_conductor:
+      init_container: null
+      tacker_conductor:
+        volumeMounts: null
+        volumes: null
     tacker_db_sync:
       tacker_db_sync:
         volumeMounts:

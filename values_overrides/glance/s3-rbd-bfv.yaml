@@ -1,0 +1,29 @@
+---
+# Keep S3 as the general-purpose Glance store while exposing an RBD store for
+# raw BFV images that Cinder can clone without downloading and flattening.
+# Setting storage=rbd makes the chart mount the Ceph configuration and keyring;
+# glance_store.default_backend still controls where ordinary uploads land.
+storage: rbd
+
+conf:
+  glance:
+    DEFAULT:
+      enabled_backends: s3:s3,rbd:rbd
+      show_image_direct_url: true
+    glance_store:
+      default_backend: s3
+    rbd:
+      rbd_store_pool: glance-images-rbd-pool
+      rbd_store_user: glance
+      rbd_store_ceph_conf: /etc/ceph/ceph.conf
+
+ceph_client:
+  configmap: ceph-etc
+
+secrets:
+  rbd: images-rbd-keyring
+
+# The external Rook cluster owns the pool and client. Synchronize client.glance
+# into secrets.rbd before upgrading instead of letting this chart change Ceph.
+manifests:
+  job_storage_init: false

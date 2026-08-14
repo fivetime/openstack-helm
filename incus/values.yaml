@@ -21,7 +21,7 @@ images:
   pull_policy: IfNotPresent
   tags:
     image_repo_sync: quay.io/airshipit/docker:27.5.0
-    incus: ghcr.io/fivetime/incus@sha256:fb23c582de6db85046ef3216df291e7f05629e8da5661a2593c0700e9bb07592
+    incus: ghcr.io/fivetime/incus@sha256:e2a60ca242fe1dd96b792d77178552f29bf6c3e3e45ff03da68868244680675a
 
 labels:
   agent:

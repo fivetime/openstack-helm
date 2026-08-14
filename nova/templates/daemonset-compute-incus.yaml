@@ -456,6 +456,9 @@ spec:
             - name: host-dev
               mountPath: /dev
               mountPropagation: HostToContainer
+            - name: libmodules
+              mountPath: /lib/modules
+              readOnly: true
 {{- if $cephEnabled }}
             - name: host-etc-ceph
               mountPath: /etc/ceph
@@ -538,6 +541,10 @@ spec:
         - name: host-dev
           hostPath:
             path: {{ $hostPaths.dev }}
+            type: Directory
+        - name: libmodules
+          hostPath:
+            path: /lib/modules
             type: Directory
         - name: manila-shares
           hostPath:

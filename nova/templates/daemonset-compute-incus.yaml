@@ -32,6 +32,9 @@ exec:
     - --service-process-name
     - nova-incus-compute
     - --liveness-probe
+{{- if .Values.pod.use_fqdn.compute }}
+    - --use-fqdn
+{{- end }}
 {{- end }}
 
 {{- define "novaComputeIncusReadinessProbeTemplate" }}
@@ -52,7 +55,12 @@ exec:
         --config-file /run/nova-incus/nova-incus-node.conf \
 {{- end }}
         --service-queue-name compute \
+{{- if .Values.pod.use_fqdn.compute }}
+        --service-process-name nova-incus-compute \
+        --use-fqdn
+{{- else }}
         --service-process-name nova-incus-compute
+{{- end }}
 {{- end }}
 
 {{- if .Values.manifests.daemonset_compute_incus }}
@@ -260,6 +268,14 @@ spec:
               mkdir -p /var/lib/nova/instances
               mkdir -p {{ $hostPaths.manila_shares | quote }}
               chown -R {{ .Values.pod.security_context.nova_incus.pod.runAsUser }}:{{ .Values.pod.security_context.nova_incus.pod.runAsGroup }} /var/lib/nova
+{{- if and (empty .Values.conf.nova.DEFAULT.host) (.Values.pod.use_fqdn.compute) }}
+              cat > /run/nova-incus/nova-compute-fqdn.conf <<EOF
+              [DEFAULT]
+              host = $(hostname --fqdn)
+              EOF
+{{- else }}
+              rm -f /run/nova-incus/nova-compute-fqdn.conf
+{{- end }}
           volumeMounts:
             - name: varlibnova-incus
               mountPath: /var/lib/nova
@@ -371,6 +387,10 @@ spec:
             - /etc/nova/nova-incus.conf
             - --config-dir
             - /etc/nova/nova.conf.d
+{{- if and (empty .Values.conf.nova.DEFAULT.host) (.Values.pod.use_fqdn.compute) }}
+            - --config-file
+            - /run/nova-incus/nova-compute-fqdn.conf
+{{- end }}
 {{- if $migrationEnabled }}
             - --config-file
             - /run/nova-incus/nova-incus-node.conf

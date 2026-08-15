@@ -193,6 +193,22 @@ echo ""
 echo "=== Volume Driver Configuration ==="
 echo "Volume drivers: {{ join ", " .Values.volume_driver.driver_list }}"
 
+{{- if .Values.ceph.enabled }}
+# Generate ceph keyring for cinder RBD attach: os-brick runs 'rbd map' with
+# --id <rbd_user>, and the rbd CLI looks up /etc/ceph/ceph.client.<user>.keyring
+CEPH_CINDER_USER="{{ .Values.ceph.cinder_user }}"
+if [ -f /tmp/client-keyring ]; then
+    cat > "/etc/ceph/ceph.client.${CEPH_CINDER_USER}.keyring" <<EOF_KEYRING
+[client.${CEPH_CINDER_USER}]
+    key = $(cat /tmp/client-keyring)
+EOF_KEYRING
+    chmod 600 "/etc/ceph/ceph.client.${CEPH_CINDER_USER}.keyring"
+    echo "✓ Generated ceph keyring for client.${CEPH_CINDER_USER}"
+else
+    echo "⚠ /tmp/client-keyring not found - cinder RBD attach will fail"
+fi
+{{- end }}
+
 {{- if has "local" .Values.volume_driver.driver_list }}
 # Check local volume directory
 VOLUME_DIR="{{ .Values.volume_driver.volume_dir }}"

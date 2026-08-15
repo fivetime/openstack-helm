@@ -206,6 +206,17 @@ volume_driver:
 
   # 卷配置
   volume_dir: /var/lib/zun/volumes            # 卷目录
+
+# cinder RBD 附卷支持:zun 对 RBD 强制 do_local_attach(cinder_workflow.py:61),
+# os-brick 在 compute 容器里执行 'rbd map',需要 rbd CLI(镜像内 ceph-common)+
+# ceph.conf + cinder 用户 keyring + /dev。keyring 由启动脚本从 secret 生成。
+ceph:
+  enabled: true
+  # 必须与 cinder backends.conf 的 rbd_user 一致(rbd map --id <user> 找
+  # /etc/ceph/ceph.client.<user>.keyring)
+  cinder_user: cinder
+  configmap: ceph-etc
+  keyring_secret: pvc-ceph-client-key
   fstype: ext4                               # 文件系统类型
   use_multipath: false                       # 是否使用多路径
   timeout_wait_volume_available: 60          # 卷可用等待超时

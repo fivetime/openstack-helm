@@ -115,6 +115,10 @@ spec:
             # ═══════════════════════════════════════════════════════════
             - name: host-var-lib-zun
               mountPath: /var/lib/zun
+              # cinder 卷路径:os-brick 在本容器 netns 里把 /dev/rbdX 挂到
+              # /var/lib/zun/mnt/<uuid>,宿主机 dockerd 必须看得见才能 bind
+              # 进业务容器 → 双向传播必不可少
+              mountPropagation: Bidirectional
             - name: host-var-log
               mountPath: /var/log
             - name: host-run
@@ -143,6 +147,24 @@ spec:
               readOnly: true
             - name: cni-conf
               mountPath: {{ .Values.network.drivers.cni.paths.conf_dir }}
+              readOnly: true
+            {{- end }}
+
+            # ═══════════════════════════════════════════════════════════
+            # cinder 卷支持（os-brick 'rbd map' 本地附卷）
+            # ═══════════════════════════════════════════════════════════
+            {{- if .Values.ceph.enabled }}
+            - name: host-dev
+              mountPath: /dev
+            - name: etcceph
+              mountPath: /etc/ceph
+            - name: ceph-etc
+              mountPath: /etc/ceph/ceph.conf
+              subPath: ceph.conf
+              readOnly: true
+            - name: ceph-keyring
+              mountPath: /tmp/client-keyring
+              subPath: key
               readOnly: true
             {{- end }}
 
@@ -212,6 +234,27 @@ spec:
           hostPath:
             path: {{ .Values.network.drivers.cni.paths.conf_dir }}
             type: DirectoryOrCreate
+        {{- end }}
+
+        # ═══════════════════════════════════════════════════════════
+        # cinder 卷支持:ceph.conf 来自 configmap,keyring 由启动脚本
+        # 从 secret 的 key 字段生成到 /etc/ceph(与 cinder-volume 同源)
+        # ═══════════════════════════════════════════════════════════
+        {{- if .Values.ceph.enabled }}
+        - name: host-dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: etcceph
+          emptyDir: {}
+        - name: ceph-etc
+          configMap:
+            name: {{ .Values.ceph.configmap }}
+            defaultMode: 0444
+        - name: ceph-keyring
+          secret:
+            secretName: {{ .Values.ceph.keyring_secret }}
+            defaultMode: 0400
         {{- end }}
 
         # ═══════════════════════════════════════════════════════════

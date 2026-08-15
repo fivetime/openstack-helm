@@ -3,6 +3,6 @@
 # compute is upgraded. Keep these as immutable multi-architecture digests.
 images:
   tags:
-    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:6c60ad50f3d1d7b329a242980db4f250c783f82bf3632e3887b7c27c85ba68a5
-    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:6c60ad50f3d1d7b329a242980db4f250c783f82bf3632e3887b7c27c85ba68a5
-    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:0ff859bdb5364c7984b26a7e9e3b16ac1204929356271de73776bacc029936f8
+    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:4f65942e9f4b742c1652c5281e553f89693f0977ec132678664cd43109ea1200
+    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:4f65942e9f4b742c1652c5281e553f89693f0977ec132678664cd43109ea1200
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:0716006ed42784b8433355abe85d3bdd22f741a6d3556b6ea29376851173a273

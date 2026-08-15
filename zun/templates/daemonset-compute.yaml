@@ -153,6 +153,10 @@ spec:
             # ═══════════════════════════════════════════════════════════
             # cinder 卷支持（os-brick 'rbd map' 本地附卷）
             # ═══════════════════════════════════════════════════════════
+            # 容器 io.max 写入点:zun-compute 自己在 kubepods.slice 下,
+            # 要限的是 system.slice/docker-*.scope,必须挂宿主 cgroup 根
+            - name: host-cgroup
+              mountPath: /sys/fs/cgroup
             {{- if .Values.ceph.enabled }}
             - name: host-dev
               mountPath: /dev
@@ -240,6 +244,10 @@ spec:
         # cinder 卷支持:ceph.conf 来自 configmap,keyring 由启动脚本
         # 从 secret 的 key 字段生成到 /etc/ceph(与 cinder-volume 同源)
         # ═══════════════════════════════════════════════════════════
+        - name: host-cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
         {{- if .Values.ceph.enabled }}
         - name: host-dev
           hostPath:

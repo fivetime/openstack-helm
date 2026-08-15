@@ -56,8 +56,13 @@ if ! command -v uwsgi >/dev/null 2>&1; then
 fi
 
 echo "Starting kuryr via uwsgi..."
+# http11-socket(keep-alive)而非 http-socket:docker 的 Go 插件客户端按
+# keep-alive 复用连接;http-socket 每答完一响应就关连接,复用请求撞死后
+# Go 换连接重试,但 moby 插件客户端的 body reader 已被首次发送耗尽,
+# 重试请求 Content-Length: 0 → kuryr 400(空 body)。压测 40 轮命中 37 次,
+# pcap 实锤,见 Deploy.md §9.1。
 exec uwsgi \
-    --http-socket ${BIND_HOST}:${BIND_PORT} \
+    --http11-socket ${BIND_HOST}:${BIND_PORT} \
     --wsgi kuryr_libnetwork.server:app \
     --pyargv "--config-file /etc/kuryr/kuryr.conf" \
     --master \

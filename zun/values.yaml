@@ -24,20 +24,21 @@
 images:
   tags:
     # OpenStack 基础服务镜像（用于初始化任务）
-    bootstrap: quay.io/airshipit/heat:2025.1-ubuntu_noble
-    db_init: quay.io/airshipit/heat:2025.1-ubuntu_noble
-    db_drop: quay.io/airshipit/heat:2025.1-ubuntu_noble
-    ks_user: quay.io/airshipit/heat:2025.1-ubuntu_noble
-    ks_service: quay.io/airshipit/heat:2025.1-ubuntu_noble
-    ks_endpoints: quay.io/airshipit/heat:2025.1-ubuntu_noble
-    scripted_test: quay.io/airshipit/heat:2025.1-ubuntu_noble
+    bootstrap: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    db_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    db_drop: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    ks_service: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    scripted_test: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
 
-    # Zun 服务镜像（主要业务组件）
-    zun_api: docker.io/kolla/zun-api:2025.1-ubuntu-noble                    # API 服务
-    zun_db_sync: docker.io/kolla/zun-api:2025.1-ubuntu-noble               # 数据库同步
-    zun_cni_daemon: docker.io/kolla/zun-cni-daemon:2025.1-ubuntu-noble     # CNI 网络守护进程
-    zun_compute: docker.io/kolla/zun-compute:2025.1-ubuntu-noble            # 计算节点服务
-    zun_wsproxy: docker.io/kolla/zun-wsproxy:2025.1-ubuntu-noble           # WebSocket 代理
+    # Zun 服务镜像:fivetime loci 版(confluent-kafka/psycopg2/pciutils 内置;
+    # 上游 openstack-helm-images 无 zun,构建见 build-local.d/zun.yaml)
+    zun_api: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
+    zun_db_sync: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
+    zun_cni_daemon: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
+    zun_compute: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
+    zun_wsproxy: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
 
     # 依赖服务镜像
     rabbit_init: docker.io/rabbitmq:3.13-management                        # RabbitMQ 初始化

@@ -26,9 +26,11 @@ helm3_hook: true
 images:
   pull_policy: IfNotPresent
   tags:
-    ks_user: quay.io/airshipit/heat:2025.1-ubuntu_jammy
+    ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
-    kuryr_libnetwork: docker.io/kolla/kuryr-libnetwork:2025.1-ubuntu-noble
+    # fivetime loci 镜像:kuryr-lib 来自 fivetime/openstack-kuryr fork(绑定脚本 set -e),
+    # 含 ovs-vsctl;上游 openstack-helm-images 无此项目,构建见 build-local.d/
+    kuryr_libnetwork: ghcr.io/fivetime/openstackhelm/kuryr-libnetwork:2026.1-ubuntu_noble
   local_registry:
     active: false
     exclude:

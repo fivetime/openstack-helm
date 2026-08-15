@@ -92,7 +92,7 @@ spec:
             - name: docker-plugins
               mountPath: {{ .Values.network.kuryr.plugins_dir }}
             - name: kuryr-log
-              mountPath: /var/log/kolla/kuryr
+              mountPath: /var/log/kuryr
             - name: run-openvswitch
               mountPath: /run/openvswitch
             - name: etc-openvswitch

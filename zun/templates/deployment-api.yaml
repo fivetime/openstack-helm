@@ -106,6 +106,10 @@ spec:
               mountPath: /etc/zun/zun.conf
               subPath: zun.conf
               readOnly: true
+            - name: zun-etc
+              mountPath: /etc/zun/api-paste.ini
+              subPath: api-paste.ini
+              readOnly: true
             {{- if .Values.conf.zun.DEFAULT.log_config_append }}
             - name: zun-etc
               mountPath: {{ .Values.conf.zun.DEFAULT.log_config_append }}

@@ -219,7 +219,6 @@ manifests:
   job_ks_user: true
   daemonset: true
   service: true
-...
 # -- Extra K8s manifests to deploy. Either a list or a map of manifests.
 ## Note: Supports use of custom Helm templates
 ## Note: Helm replaces (instead of merging) list values when several values

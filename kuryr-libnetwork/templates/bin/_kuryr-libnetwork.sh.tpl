@@ -17,7 +17,7 @@ limitations under the License.
 set -ex
 
 # Create log directory
-KURYR_LOG_DIR=/var/log/kolla/kuryr
+KURYR_LOG_DIR=/var/log/kuryr
 if [[ ! -d "${KURYR_LOG_DIR}" ]]; then
     mkdir -p ${KURYR_LOG_DIR}
 fi
@@ -46,8 +46,8 @@ echo "Threads: ${UWSGI_THREADS}"
 echo "http://127.0.0.1:${BIND_PORT}" > ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec
 echo "Created kuryr spec file at ${KURYR_DOCKER_PLUGINS_DIR}/kuryr.spec"
 
-# Add kolla venv to PATH
-export PATH="/var/lib/kolla/venv/bin:$PATH"
+# Support both loci (/var/lib/openstack) and kolla (/var/lib/kolla/venv) image layouts
+export PATH="/var/lib/openstack/bin:/var/lib/kolla/venv/bin:$PATH"
 
 if ! command -v uwsgi >/dev/null 2>&1; then
     echo "ERROR: uwsgi is required but not found in PATH"

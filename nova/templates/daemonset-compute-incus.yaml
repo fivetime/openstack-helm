@@ -267,7 +267,10 @@ spec:
             - |
               mkdir -p /var/lib/nova/instances
               mkdir -p {{ $hostPaths.manila_shares | quote }}
-              chown -R {{ .Values.pod.security_context.nova_incus.pod.runAsUser }}:{{ .Values.pod.security_context.nova_incus.pod.runAsGroup }} /var/lib/nova
+              chown {{ .Values.pod.security_context.nova_incus.pod.runAsUser }}:{{ .Values.pod.security_context.nova_incus.pod.runAsGroup }} \
+                /var/lib/nova \
+                /var/lib/nova/instances \
+                {{ $hostPaths.manila_shares | quote }}
 {{- if and (empty .Values.conf.nova.DEFAULT.host) (.Values.pod.use_fqdn.compute) }}
               cat > /run/nova-incus/nova-compute-fqdn.conf <<EOF
               [DEFAULT]

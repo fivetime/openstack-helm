@@ -576,6 +576,7 @@ incus_migration:
   enabled: false
   allow_live: true
   allow_cold: true
+  auto_recovery: true
   secret_name: null
   # The Incus chart owns core.https_address. Nova reads the actual listener
   # through the local Unix socket and derives migration_address and

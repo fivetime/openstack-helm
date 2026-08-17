@@ -135,6 +135,7 @@ exec:
 {{- if $migrationEnabled }}
 {{- $_ := set $incusConf "allow_live_migration" .Values.incus_migration.allow_live }}
 {{- $_ := set $incusConf "allow_cold_migration" .Values.incus_migration.allow_cold }}
+{{- $_ := set $incusConf "migration_auto_recovery" .Values.incus_migration.auto_recovery }}
 {{- end }}
 {{- if $idmapEnabled }}
 {{- $_ := set $incusConf "idmap_allocator_endpoint" .Values.incus_idmap.endpoint }}

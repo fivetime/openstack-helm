@@ -8,6 +8,7 @@ incus_migration:
   enabled: true
   allow_live: true
   allow_cold: true
+  auto_recovery: true
   secret_name: nova-incus-migration
 
 # Required Secret keys:

@@ -311,6 +311,13 @@ network:
     node_port:
       enabled: false
       port: 30486
+  share:
+    # Mount the host's /run/openvswitch (OVS db.sock) into manila-share. Only drivers
+    # that plug into OVS themselves need it (generic driver / OVSInterfaceDriver with
+    # driver_handles_share_servers=true). CephFS-native, NFS/CIFS-native and other
+    # DHSS=false backends do not; with the hostPath (type: Directory) enabled the pod is
+    # unschedulable on any node that does not run openvswitch.
+    openvswitch: true
 
 network_policy:
   manila:

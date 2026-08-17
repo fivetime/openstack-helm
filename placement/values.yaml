@@ -397,10 +397,33 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
   probes:
-    placement:
-      api:
+    api:
+      placement-api:
+        # startup: hit the API itself. If the WSGI app fails to load (e.g. the DB was
+        # unreachable while uWSGI imported placement) uWSGI keeps answering 500 forever
+        # and never exits; without a startup probe the pod sits at 0/1 indefinitely
+        # because the liveness probe below only checks the uWSGI master. Restart it
+        # until the app is up.
+        startup:
+          enabled: true
+          params:
+            periodSeconds: 10
+            failureThreshold: 60
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 5
+            periodSeconds: 10
+        # liveness: by default the uWSGI stats socket (only proves the master process is
+        # alive) so a long DB outage marks the pod NotReady instead of restart-looping it.
+        # Set `httpGet.port: null` (or the API port) to make liveness track the app.
         liveness:
-          port: 1717
+          enabled: true
+          params:
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            httpGet:
+              port: 1717
 
 secrets:
   identity:

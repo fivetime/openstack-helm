@@ -11,6 +11,15 @@ incus_migration:
   auto_recovery: true
   secret_name: nova-incus-migration
 
+# Cinder emits volume-reimaged only after the backend image copy completes.
+# The upstream 20-second-per-GiB default is too short for the production Ceph
+# path and can race a successful event, leaving an explicitly reimaged BFV
+# server in ERROR. Keep a bounded but realistic event wait on every compute.
+conf:
+  nova:
+    DEFAULT:
+      reimage_timeout_per_gb: 120
+
 # Required Secret keys:
 #   migration.crt  restricted client identity for the Nova Incus project
 #   migration.key

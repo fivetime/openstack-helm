@@ -60,9 +60,15 @@ conf:
     userName: clusterUse
     clientCertificateData: null
     clientKeyData: null
+  # Mirrors upstream etc/magnum/api-paste.ini: recent oslo.middleware forbids
+  # deploying healthcheck as a filter, it must be a composite-mounted app.
   paste:
-    pipeline:main:
-      pipeline: cors healthcheck request_id authtoken api_v1
+    composite:main:
+      paste.composite_factory: magnum.api:root_app_factory
+      /: api
+      /healthcheck: healthcheck
+    pipeline:api:
+      pipeline: cors http_proxy_to_wsgi request_id authtoken api_v1
     app:api_v1:
       paste.app_factory: magnum.api.app:app_factory
     filter:authtoken:
@@ -73,8 +79,11 @@ conf:
     filter:cors:
       paste.filter_factory: oslo_middleware.cors:filter_factory
       oslo_config_project: magnum
-    filter:healthcheck:
-      paste.filter_factory: oslo_middleware:Healthcheck.factory
+    filter:http_proxy_to_wsgi:
+      paste.filter_factory: oslo_middleware.http_proxy_to_wsgi:HTTPProxyToWSGI.factory
+      oslo_config_project: magnum
+    app:healthcheck:
+      paste.app_factory: oslo_middleware:Healthcheck.app_factory
       backends: disable_by_file
       disable_by_file_path: /etc/magnum/healthcheck_disable
   policy: {}

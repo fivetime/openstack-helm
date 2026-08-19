@@ -2221,7 +2221,12 @@ pod:
     compute_incus:
       default:
         liveness:
-          enabled: true
+          # Nova compute serializes long-running lifecycle work on its RPC
+          # consumer. A saturated Incus compute can therefore fail an RPC
+          # ping while it is still making forward progress. Kubernetes
+          # already restarts this container when its PID 1 exits; keep RPC
+          # health as readiness so load cannot trigger a destructive restart.
+          enabled: false
           params:
             initialDelaySeconds: 60
             failureThreshold: 3

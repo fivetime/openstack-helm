@@ -599,6 +599,11 @@ conf:
       connection: ""
     wsgi:
       api_paste_config: /etc/masakari/api-paste.ini
+  # -- Optional DNS domain appended to the node name the monitors report.
+  ## Set when nova-compute registers by FQDN (e.g. "cloud.local") so
+  ## monitor notifications name the same host nova and masakari know.
+  monitors:
+    hostname_domain: ""
   masakarimonitors:
     DEFAULT:
       debug: False

@@ -17,6 +17,12 @@ limitations under the License.
 set -ex
 
 nova_compute_hostname="$COMPUTE_NODE_NAME"
+{{- if .Values.conf.monitors.hostname_domain }}
+# Nova registers compute services by FQDN when its host setting derives from
+# a fully-qualified hostname; the monitors must report the same name or the
+# masakari API rejects their notifications (host not found in any segment).
+nova_compute_hostname="${nova_compute_hostname}.{{ .Values.conf.monitors.hostname_domain }}"
+{{- end }}
 cat <<EOF>/tmp/pod-shared/masakarimonitors.conf
 [DEFAULT]
 hostname=$nova_compute_hostname

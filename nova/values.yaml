@@ -1424,6 +1424,10 @@ conf:
   nova_incus:
     DEFAULT:
       compute_driver: incus.IncusDriver
+      # OVN port-binding events can exceed Nova's 300-second default while a
+      # compute is materializing hundreds of containers. Keep the wait fatal,
+      # but allow the control plane to deliver a valid late event.
+      vif_plugging_timeout: 900
     incus:
       endpoint: /var/lib/incus/unix.socket
       root_dir: /var/lib/incus

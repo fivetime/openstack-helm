@@ -251,6 +251,9 @@ spec:
 {{ dict "envAll" $envAll "application" "nova_incus" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       nodeSelector:
         {{ .Values.labels.agent.compute_incus.node_selector_key }}: {{ .Values.labels.agent.compute_incus.node_selector_value }}
+{{- if .Values.labels.agent.compute_incus.admission.enabled }}
+        {{ required "labels.agent.compute_incus.admission.node_selector_key is required when admission is enabled" .Values.labels.agent.compute_incus.admission.node_selector_key }}: {{ required "labels.agent.compute_incus.admission.node_selector_value is required when admission is enabled" .Values.labels.agent.compute_incus.admission.node_selector_value }}
+{{- end }}
 {{- if .Values.pod.tolerations.compute_incus.enabled }}
       tolerations:
 {{ toYaml .Values.pod.tolerations.compute_incus.tolerations | indent 8 }}

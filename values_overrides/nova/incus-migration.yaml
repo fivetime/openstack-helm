@@ -4,6 +4,14 @@
 # is created by the deployment PKI workflow and is mounted only by the Nova
 # Incus compute DaemonSet. Every Incus HTTPS server certificate must be signed
 # by ca.crt and cover the listener address selected by the Incus chart.
+labels:
+  agent:
+    compute_incus:
+      admission:
+        enabled: true
+        node_selector_key: openstack-incus-admitted
+        node_selector_value: enabled
+
 incus_migration:
   enabled: true
   allow_live: true

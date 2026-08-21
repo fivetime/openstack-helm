@@ -1,0 +1,7 @@
+---
+features:
+  - |
+    Add an optional second node selector to the Nova Incus compute
+    DaemonSet. Deployments can remove this admission label while a fenced
+    compute returns, allowing Incus ownership reconciliation to complete
+    before nova-compute is scheduled again.

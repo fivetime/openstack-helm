@@ -26,6 +26,10 @@ labels:
     compute_incus:
       node_selector_key: openstack-incus-compute
       node_selector_value: enabled
+      admission:
+        enabled: false
+        node_selector_key: openstack-incus-admitted
+        node_selector_value: enabled
     compute_ironic:
       node_selector_key: openstack-compute-node
       node_selector_value: enabled

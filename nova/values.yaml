@@ -1479,6 +1479,10 @@ conf:
       osapi_compute_workers: 1
       metadata_workers: 1
       compute_driver: libvirt.LibvirtDriver
+      # Keep resize and cold migration off the source host. Incus cannot
+      # materialize the source instance's exact isolated ID map twice on one
+      # host, and this scheduling decision is made by nova-api.
+      allow_resize_to_same_host: false
       my_ip: 0.0.0.0
       instance_usage_audit: True
       instance_usage_audit_period: hour

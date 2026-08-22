@@ -15,3 +15,13 @@ pod:
       enabled: true
       tolerations:
         - operator: Exists
+
+# Incus compute nodes in this topology provide br-int/Geneve only. They do
+# not carry the external provider bridge, so a distributed floating IP would
+# be placed on a chassis with no provider-network egress. Keep FIPs
+# centralized on the OVN gateway chassis.
+conf:
+  plugins:
+    ml2_conf:
+      ovn:
+        enable_distributed_floating_ip: false

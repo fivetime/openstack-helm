@@ -483,6 +483,9 @@ spec:
             - name: host-dev
               mountPath: /dev
               mountPropagation: HostToContainer
+            - name: host-udev
+              mountPath: /run/udev
+              readOnly: true
             - name: libmodules
               mountPath: /lib/modules
               readOnly: true
@@ -568,6 +571,10 @@ spec:
         - name: host-dev
           hostPath:
             path: {{ $hostPaths.dev }}
+            type: Directory
+        - name: host-udev
+          hostPath:
+            path: {{ $hostPaths.udev }}
             type: Directory
         - name: libmodules
           hostPath:

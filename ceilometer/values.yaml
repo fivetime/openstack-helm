@@ -689,6 +689,15 @@ conf:
         name: event_source
         sinks:
           - event_sink
+  # NOTE(osh): 这份必须跟随镜像里的 ceilometer/publisher/data/gnocchi_resources.yaml。
+  # 旧版是 Rocky 时代的拷贝:instance 少了 flavor_name / launched_at /
+  # created_at / deleted_at 的映射,而 gnocchi 里的 instance 资源类型是
+  # ceilometer-upgrade 按镜像内 gnocchi_client.py 的 schema 建的,
+  # flavor_name 在那里是 required=True。两边对不上的后果是每条虚机采样
+  # 落库都 400(required key not provided @ data['flavor_name']),
+  # 而 pollster 日志全绿 —— gnocchi 里就是没有 instance 资源。
+  # 这里同步到 2026.1 上游,并保留 chart 自有的
+  # host / host_disk / host_network_interface(snmp 采集用)。
   gnocchi_resources:
     archive_policy_default: ceilometer-low
     archive_policies:
@@ -700,187 +709,275 @@ conf:
           - granularity: 5 minutes
             timespan: 30 days
     resources:
-      - metrics:
-          - identity.authenticate.success
-          - identity.authenticate.pending
-          - identity.authenticate.failure
-          - identity.user.created
-          - identity.user.deleted
-          - identity.user.updated
-          - identity.group.created
-          - identity.group.deleted
-          - identity.group.updated
-          - identity.role.created
-          - identity.role.deleted
-          - identity.role.updated
-          - identity.project.created
-          - identity.project.deleted
-          - identity.project.updated
-          - identity.trust.created
-          - identity.trust.deleted
-          - identity.role_assignment.created
-          - identity.role_assignment.deleted
-        resource_type: identity
-      - metrics:
-          - radosgw.objects
-          - radosgw.objects.size
-          - radosgw.objects.containers
-          - radosgw.api.request
-          - radosgw.containers.objects
-          - radosgw.containers.objects.size
-        resource_type: ceph_account
-      - attributes:
-          display_name: resource_metadata.display_name
-          flavor_id: resource_metadata.(instance_flavor_id|(flavor.id))
+      - resource_type: identity
+        metrics:
+          identity.authenticate.success: null
+          identity.authenticate.pending: null
+          identity.authenticate.failure: null
+          identity.user.created: null
+          identity.user.deleted: null
+          identity.user.updated: null
+          identity.group.created: null
+          identity.group.deleted: null
+          identity.group.updated: null
+          identity.role.created: null
+          identity.role.deleted: null
+          identity.role.updated: null
+          identity.project.created: null
+          identity.project.deleted: null
+          identity.project.updated: null
+          identity.trust.created: null
+          identity.trust.deleted: null
+          identity.role_assignment.created: null
+          identity.role_assignment.deleted: null
+      - resource_type: ceph_account
+        metrics:
+          radosgw.objects: null
+          radosgw.objects.size: null
+          radosgw.objects.containers: null
+          radosgw.api.request: null
+          radosgw.containers.objects: null
+          radosgw.containers.objects.size: null
+      - resource_type: instance
+        metrics:
+          memory: null
+          memory.available: null
+          memory.usage: null
+          memory.resident: null
+          memory.swap.in: null
+          memory.swap.out: null
+          vcpus: null
+          power.state: null
+          cpu:
+            archive_policy_name: ceilometer-low-rate
+          disk.root.size: null
+          disk.ephemeral.size: null
+          disk.latency: null
+          disk.iops: null
+          disk.capacity: null
+          disk.allocation: null
+          disk.usage: null
+          compute.instance.booting.time: null
+          perf.cpu.cycles: null
+          perf.instructions: null
+          perf.cache.references: null
+          perf.cache.misses: null
+        attributes:
           host: resource_metadata.(instance_host|host)
           image_ref: resource_metadata.image_ref
+          launched_at: resource_metadata.launched_at
+          created_at: resource_metadata.created_at
+          deleted_at: resource_metadata.deleted_at
+          display_name: resource_metadata.display_name
+          flavor_id: resource_metadata.(instance_flavor_id|(flavor.id)|flavor_id)
+          flavor_name: resource_metadata.(instance_type|(flavor.name)|flavor_name)
           server_group: resource_metadata.user_metadata.server_group
-        event_associated_resources:
-          instance_disk: '{"=": {"instance_id": "%s"}}'
-          instance_network_interface: '{"=": {"instance_id": "%s"}}'
+        event_delete: compute.instance.delete.start
+        event_create: compute.instance.create.end
         event_attributes:
           id: instance_id
-        event_delete: compute.instance.delete.start
+          display_name: display_name
+          host: host
+          availability_zone: availability_zone
+          flavor_id: instance_type_id
+          flavor_name: instance_type
+          user_id: user_id
+          project_id: project_id
+        event_associated_resources:
+          instance_network_interface: '{"=": {"instance_id": "%s"}}'
+          instance_disk: '{"=": {"instance_id": "%s"}}'
+      - resource_type: instance_network_interface
         metrics:
-          - memory
-          - memory.usage
-          - memory.resident
-          - vcpus
-          - cpu
-          - cpu.delta
-          - cpu_util
-          - disk.root.size
-          - disk.ephemeral.size
-          - disk.read.requests
-          - disk.read.requests.rate
-          - disk.write.requests
-          - disk.write.requests.rate
-          - disk.read.bytes
-          - disk.read.bytes.rate
-          - disk.write.bytes
-          - disk.write.bytes.rate
-          - disk.latency
-          - disk.iops
-          - disk.capacity
-          - disk.allocation
-          - disk.usage
-          - compute.instance.booting.time
-          - perf.cpu.cycles
-          - perf.instructions
-          - perf.cache.references
-          - perf.cache.misses
-        resource_type: instance
-      - attributes:
-          instance_id: resource_metadata.instance_id
+          network.outgoing.packets:
+            archive_policy_name: ceilometer-low-rate
+          network.incoming.packets:
+            archive_policy_name: ceilometer-low-rate
+          network.outgoing.packets.drop:
+            archive_policy_name: ceilometer-low-rate
+          network.incoming.packets.drop:
+            archive_policy_name: ceilometer-low-rate
+          network.outgoing.packets.error:
+            archive_policy_name: ceilometer-low-rate
+          network.incoming.packets.error:
+            archive_policy_name: ceilometer-low-rate
+          network.outgoing.bytes:
+            archive_policy_name: ceilometer-low-rate
+          network.incoming.bytes:
+            archive_policy_name: ceilometer-low-rate
+        attributes:
           name: resource_metadata.vnic_name
-        metrics:
-          - network.outgoing.packets.rate
-          - network.incoming.packets.rate
-          - network.outgoing.packets
-          - network.outgoing.packets.drop
-          - network.incoming.packets.drop
-          - network.outgoing.packets.error
-          - network.incoming.packets.error
-          - network.outgoing.bytes.rate
-          - network.incoming.bytes.rate
-          - network.outgoing.bytes
-          - network.incoming.bytes
-        resource_type: instance_network_interface
-      - attributes:
           instance_id: resource_metadata.instance_id
-          name: resource_metadata.disk_name
+      - resource_type: instance_disk
         metrics:
-          - disk.device.read.requests
-          - disk.device.read.requests.rate
-          - disk.device.write.requests
-          - disk.device.write.requests.rate
-          - disk.device.read.bytes
-          - disk.device.read.bytes.rate
-          - disk.device.write.bytes
-          - disk.device.write.bytes.rate
-          - disk.device.latency
-          - disk.device.iops
-          - disk.device.capacity
-          - disk.device.allocation
-          - disk.device.usage
-        resource_type: instance_disk
-      - attributes:
+          disk.device.read.requests:
+            archive_policy_name: ceilometer-low-rate
+          disk.device.write.requests:
+            archive_policy_name: ceilometer-low-rate
+          disk.device.read.bytes:
+            archive_policy_name: ceilometer-low-rate
+          disk.device.write.bytes:
+            archive_policy_name: ceilometer-low-rate
+          disk.device.read.latency: null
+          disk.device.write.latency: null
+          disk.device.capacity: null
+          disk.device.allocation: null
+          disk.device.usage: null
+        attributes:
+          name: resource_metadata.disk_name
+          instance_id: resource_metadata.instance_id
+      - resource_type: image
+        metrics:
+          image.size: null
+          image.download: null
+          image.serve: null
+        attributes:
+          name: resource_metadata.name
           container_format: resource_metadata.container_format
           disk_format: resource_metadata.disk_format
-          name: resource_metadata.name
-        event_attributes:
-          id: resource_id
         event_delete: image.delete
-        metrics:
-          - image.size
-          - image.download
-          - image.serve
-        resource_type: image
-      - metrics:
-          - hardware.ipmi.node.power
-          - hardware.ipmi.node.temperature
-          - hardware.ipmi.node.inlet_temperature
-          - hardware.ipmi.node.outlet_temperature
-          - hardware.ipmi.node.fan
-          - hardware.ipmi.node.current
-          - hardware.ipmi.node.voltage
-          - hardware.ipmi.node.airflow
-          - hardware.ipmi.node.cups
-          - hardware.ipmi.node.cpu_util
-          - hardware.ipmi.node.mem_util
-          - hardware.ipmi.node.io_util
-        resource_type: ipmi
-      - event_delete: floatingip.delete.end
         event_attributes:
           id: resource_id
+      - resource_type: ipmi
         metrics:
-          - bandwidth
-          - network
-          - network.create
-          - network.update
-          - subnet
-          - subnet.create
-          - subnet.update
-          - port
-          - port.create
-          - port.update
-          - router
-          - router.create
-          - router.update
-          - ip.floating
-          - ip.floating.create
-          - ip.floating.update
-        resource_type: network
-      - metrics:
-          - stack.create
-          - stack.update
-          - stack.delete
-          - stack.resume
-          - stack.suspend
-        resource_type: stack
-      - metrics:
-          - storage.objects.incoming.bytes
-          - storage.objects.outgoing.bytes
-          - storage.api.request
-          - storage.objects.size
-          - storage.objects
-          - storage.objects.containers
-          - storage.containers.objects
-          - storage.containers.objects.size
-        resource_type: swift_account
-      - attributes:
-          display_name: resource_metadata.display_name
+          hardware.ipmi.node.power: null
+          hardware.ipmi.node.temperature: null
+          hardware.ipmi.node.inlet_temperature: null
+          hardware.ipmi.node.outlet_temperature: null
+          hardware.ipmi.node.fan: null
+          hardware.ipmi.node.current: null
+          hardware.ipmi.node.voltage: null
+          hardware.ipmi.node.airflow: null
+          hardware.ipmi.node.cups: null
+          hardware.ipmi.node.cpu_util: null
+          hardware.ipmi.node.mem_util: null
+          hardware.ipmi.node.io_util: null
+      - resource_type: ipmi_sensor
+        metrics:
+          - hardware.ipmi.power
+          - hardware.ipmi.temperature
+          - hardware.ipmi.current
+          - hardware.ipmi.voltage
+          - hardware.ipmi.fan
+        attributes:
+          node: resource_metadata.node
+      - resource_type: network
+        metrics:
+          bandwidth: null
+          ip.floating: null
+        event_delete: floatingip.delete.end
+        event_attributes:
+          id: resource_id
+      - resource_type: stack
+        metrics:
+          stack.create: null
+          stack.update: null
+          stack.delete: null
+          stack.resume: null
+          stack.suspend: null
+      - resource_type: swift_account
+        metrics:
+          storage.objects.incoming.bytes: null
+          storage.objects.outgoing.bytes: null
+          storage.objects.size: null
+          storage.objects: null
+          storage.objects.containers: null
+          storage.containers.objects: null
+          storage.containers.objects.size: null
+        attributes:
+          storage_policy: resource_metadata.storage_policy
+      - resource_type: volume
+        metrics:
+          volume: null
+          volume.size: null
+          snapshot.size: null
+          volume.snapshot.size: null
+          volume.backup.size: null
+          backup.size: null
+          volume.manage_existing.start: null
+          volume.manage_existing.end: null
+          volume.manage_existing_snapshot.start: null
+          volume.manage_existing_snapshot.end: null
+        attributes:
+          display_name: resource_metadata.(display_name|name)
           volume_type: resource_metadata.volume_type
-        event_delete: volume.delete.start
+          volume_type_id: resource_metadata.volume_type_id
+          image_id: resource_metadata.image_id
+          instance_id: resource_metadata.instance_id
+        event_delete:
+          - volume.delete.end
+          - snapshot.delete.end
+        event_update:
+          - volume.transfer.accept.end
+          - snapshot.transfer.accept.end
         event_attributes:
           id: resource_id
+          project_id: project_id
+      - resource_type: volume_provider
         metrics:
-          - volume
-          - volume.size
-          - snapshot.size
-          - volume.snapshot.size
-          - volume.backup.size
-        resource_type: volume
+          volume.provider.capacity.total: null
+          volume.provider.capacity.free: null
+          volume.provider.capacity.allocated: null
+          volume.provider.capacity.provisioned: null
+          volume.provider.capacity.virtual_free: null
+      - resource_type: volume_provider_pool
+        metrics:
+          volume.provider.pool.capacity.total: null
+          volume.provider.pool.capacity.free: null
+          volume.provider.pool.capacity.allocated: null
+          volume.provider.pool.capacity.provisioned: null
+          volume.provider.pool.capacity.virtual_free: null
+        attributes:
+          provider: resource_metadata.provider
+      - resource_type: nova_compute
+        metrics:
+          compute.node.cpu.frequency: null
+          compute.node.cpu.idle.percent: null
+          compute.node.cpu.idle.time: null
+          compute.node.cpu.iowait.percent: null
+          compute.node.cpu.iowait.time: null
+          compute.node.cpu.kernel.percent: null
+          compute.node.cpu.kernel.time: null
+          compute.node.cpu.percent: null
+          compute.node.cpu.user.percent: null
+          compute.node.cpu.user.time: null
+        attributes:
+          host_name: resource_metadata.host
+      - resource_type: manila_share
+        metrics:
+          manila.share.size: null
+          manila.share.status: null
+        attributes:
+          name: resource_metadata.name
+          host: resource_metadata.host
+          status: resource_metadata.status
+          availability_zone: resource_metadata.availability_zone
+          protocol: resource_metadata.protocol
+      - resource_type: loadbalancer
+        metrics:
+          loadbalancer.operating: null
+          loadbalancer.provisioning: null
+        attributes:
+          name: resource_metadata.name
+          availability_zone: resource_metadata.availability_zone
+          vip_address: resource_metadata.vip_address
+          provider: resource_metadata.provider
+        event_delete: octavia.loadbalancer.delete.end
+        event_attributes:
+          id: resource_id
+      - resource_type: dns_zone
+        metrics:
+          dns.zone.status: null
+          dns.zone.recordsets: null
+          dns.zone.ttl: null
+          dns.zone.serial: null
+        attributes:
+          zone_name: resource_metadata.name
+          email: resource_metadata.email
+          zone_type: resource_metadata.type
+          pool_id: resource_metadata.pool_id
+        event_delete: dns.zone.delete
+        event_attributes:
+          id: resource_id
       - attributes:
           host_name: resource_metadata.resource_url
         metrics:

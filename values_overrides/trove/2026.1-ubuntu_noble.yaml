@@ -9,7 +9,7 @@ images:
     db_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     trove_db_sync: quay.io/airshipit/trove:2026.1-ubuntu_noble
     db_drop: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    rabbit_init: docker.io/rabbitmq:3.13-management
+    rabbit_init: docker.io/rabbitmq:4.3.5-management
     ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     ks_service: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     ks_endpoints: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble

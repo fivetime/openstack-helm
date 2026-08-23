@@ -41,7 +41,7 @@ images:
     zun_wsproxy: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
 
     # 依赖服务镜像
-    rabbit_init: docker.io/rabbitmq:3.13-management                        # RabbitMQ 初始化
+    rabbit_init: docker.io/rabbitmq:4.3.5-management                        # RabbitMQ 初始化
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy # 依赖检查
     image_repo_sync: docker.io/docker:28.1.1                              # 镜像仓库同步
 
@@ -788,6 +788,18 @@ conf:
     oslo_messaging_notifications:
       driver: messagingv2                     # 通知驱动
       topics: notifications                   # 通知主题
+
+    oslo_messaging_rabbit:
+      # -- Durable queues are required by RabbitMQ 4.x, which denies
+      ## transient non-exclusive queues by default. Also valid on 3.x.
+      amqp_durable_queues: true
+      # -- Quorum queues, which RabbitMQ 4.x requires: it denies transient
+      ## non-exclusive queues, and oslo.messaging declares its reply and fanout
+      ## queues that way unless the transient ones are quorum too.
+      ## amqp_durable_queues alone only covers the RPC and notification queues.
+      rabbit_quorum_queues: true
+      rabbit_transient_quorum_queue: true
+      use_queue_manager: true
 
   # ────────────────────────────────────────────────────────────────────
   # 5.4 日志配置

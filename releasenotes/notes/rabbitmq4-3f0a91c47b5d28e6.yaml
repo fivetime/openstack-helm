@@ -13,7 +13,7 @@ upgrade:
     the default and have been removed.
   - |
     Every chart that talks to RabbitMQ now sets ``amqp_durable_queues``,
-    ``rabbit_quorum_queues``, ``rabbit_transient_quorum_queue`` and
+    ``rabbit_quorum_queue``, ``rabbit_transient_quorum_queue`` and
     ``use_queue_manager`` to ``true``, which 4.x requires. Twelve charts gain
     an ``oslo_messaging_rabbit`` section. Use quorum queues for high
     availability in place of mirroring.

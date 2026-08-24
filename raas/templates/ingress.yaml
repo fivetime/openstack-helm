@@ -38,8 +38,8 @@ spec:
     - host: {{ $ingress.host | quote }}
       http:
         paths:
-          - path: /
-            pathType: Prefix
+          - path: {{ $ingress.path }}
+            pathType: {{ $ingress.pathType }}
             backend:
               service:
                 name: {{ tuple "raas" "internal" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}

@@ -1432,6 +1432,10 @@ conf:
       # compute is materializing hundreds of containers. Keep the wait fatal,
       # but allow the control plane to deliver a valid late event.
       vif_plugging_timeout: 900
+    workarounds:
+      # Incus emits guest-initiated power changes over its lifecycle event
+      # stream. Keep Nova's periodic power-state reconciliation as fallback.
+      handle_virt_lifecycle_events: true
     incus:
       endpoint: /var/lib/incus/unix.socket
       root_dir: /var/lib/incus

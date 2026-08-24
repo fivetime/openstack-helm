@@ -1116,7 +1116,6 @@ manifests:
   secret_influxdb: true
   secret_keystone: true
   service: true
-...
 
 # -- Extra K8s manifests to deploy. Either a list or a map of manifests.
 ## Note: Supports use of custom Helm templates

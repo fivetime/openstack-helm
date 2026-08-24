@@ -1380,6 +1380,7 @@ manifests:
 
   service_api: true                           # API 服务
   service_wsproxy: true                       # WebSocket 代理服务
+  service_console: true                       # base_url 里那个名字的集群内解析
 
 # ════════════════════════════════════════════════════════════════════
 # 配置文件结束

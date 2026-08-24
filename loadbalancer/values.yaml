@@ -873,7 +873,6 @@ manifests:
   secret_registry: true
   secret_ssh_key: true
   service_api: true
-...
 
 # -- Extra K8s manifests to deploy. Either a list or a map of manifests.
 ## Note: Supports use of custom Helm templates

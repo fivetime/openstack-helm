@@ -196,7 +196,6 @@ manifests:
   configmap_bin: true
   job_namespace_client_key: true
   job_namespace_client_ceph_config: true
-...
 
 # -- Extra K8s manifests to deploy. Either a list or a map of manifests.
 ## Note: Supports use of custom Helm templates

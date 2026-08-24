@@ -1,0 +1,286 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# RaaS 编排器:把 GitHub 的 workflow_job webhook 变成一台一次性的 OpenStack
+# 虚拟机,作业跑完即销毁。
+#
+# 它与本仓库其余 chart 有两点不同:
+#   ① 不是 OpenStack 服务,不注册 keystone 端点、不建库、不连 RabbitMQ。
+#      数据库连接串由 Secret 以环境变量注入,不走 helm-toolkit 的 db-init。
+#   ② 需要【公网】入口 —— GitHub 得能投递 webhook。其余服务都只在集群内
+#      经 Gateway 路由,详见下面 network.ingress 的说明。
+
+---
+images:
+  tags:
+    raas: ghcr.io/fivetime/openstackhelm/raas:latest
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
+    image_repo_sync: quay.io/airshipit/docker:27.5.0
+  pull_policy: IfNotPresent
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+pod:
+  # 额外挂载的挂载点。计费要连 Redpanda(SASL_SSL),CA 从这里挂进来。
+  #
+  # ⚠️ volumeMounts / volumes 是列表,helm 对列表是覆盖不是合并 ——
+  #    要加挂载必须在同一份 override 文件里一次写全,拆开会互相顶掉。
+  mounts:
+    raas_orchestrator:
+      raas_orchestrator:
+        volumeMounts: []
+        volumes: []
+  security_context:
+    raas:
+      pod:
+        runAsUser: 42424
+      container:
+        raas:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+  affinity:
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
+      weight:
+        default: 10
+  replicas:
+    orchestrator: 2
+  lifecycle:
+    upgrades:
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 1
+          max_surge: 3
+    termination_grace_period:
+      orchestrator:
+        # 关闭时要等在途的开机/销毁跑完,否则会留下半途创建的资源。
+        # 开机最长 boot_timeout(默认 15m),这里给足余量。
+        timeout: 1200
+  probes:
+    orchestrator:
+      raas:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+  resources:
+    enabled: false
+    orchestrator:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "1000m"
+    jobs:
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+
+labels:
+  raas:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+network:
+  orchestrator:
+    port: 8080
+  ingress:
+    # GitHub 必须够得着 webhook,所以这是本仓库里唯一一个需要公网入口的
+    # chart。走 cilium Ingress 而不是 Gateway API,理由:
+    #   - 公网流量的落点是 cilium Ingress 的共享 VIP(100.64.1.1 /
+    #     2400:2410:ef28:2a00:c:2:0:1),通配符 DNS 与 Cloudflare 回源都已
+    #     指向它;openstack-gateway 是另一个 VIP(10.224.18.7)且只有 HTTP
+    #     监听器,改用它要重配 Cloudflare。
+    #   - 分工上也说得通:Gateway 管集群内路由,cilium Ingress 管公网边缘,
+    #     与 kube-infra 里 harbor / gitlab / netbox 的做法一致。
+    enabled: true
+    class: cilium
+    host: raas.tue.jp
+    annotations:
+      # shared:挂到已有的共享 VIP,不额外占一个 LB IP。
+      ingress.cilium.io/loadbalancer-mode: shared
+      ingress.kubernetes.io/ssl-redirect: "true"
+    tls:
+      enabled: true
+      # cert-manager 用 ClusterIssuer letsencrypt-cloudflare(DNS-01)签的
+      # *.tue.jp 通配符证书。它带 reflector 注解自动镜像到所有 namespace,
+      # 所以这里直接引用即可,不必为本服务单独申请证书。
+      secretName: tue-jp-tls
+
+conf:
+  # 渲染进 /etc/raas/config.yaml。整份配置放 Secret 而不是 ConfigMap:
+  # 里面有 webhook 密钥、GitHub token 与消息总线口令。
+  raas:
+    server:
+      addr: ":8080"
+    github:
+      webhook_secret: null
+      token: null
+    openstack:
+      cloud: openstack_helm
+      network_id: internal
+      floating_ip_network: public
+      security_groups:
+        - ci-runner
+      key_name: null
+    runner:
+      version: "2.336.0"
+      docker_mtu: 1442
+      boot_timeout: 20m
+    notifications:
+      brokers: []
+      topic: notifications
+      publisher_id: raas.orchestrator
+      sasl_mechanism: SCRAM-SHA-512
+      ca_file: /etc/redpanda-ca/ca.crt
+    labels: {}
+    tenants: {}
+
+  # clouds.yaml 供 gophercloud 读取(cloud: openstack_helm)。
+  clouds:
+    clouds:
+      openstack_helm:
+        region_name: RegionOne
+        identity_api_version: 3
+        auth: {}
+
+secrets:
+  identity:
+    raas: raas-keystone-user
+  oci_image_registry:
+    raas: raas-oci-image-registry-key
+  # 数据库连接串经环境变量 RAAS_DSN 注入,不进配置文件 ——
+  # 凭据不该跟配置放在一起(编排器在启动时就要求它非空)。
+  postgresql:
+    raas: raas-db-dsn
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - raas-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+    orchestrator:
+      services:
+        - endpoint: internal
+          service: identity
+
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  oci_image_registry:
+    name: oci-image-registry
+    namespace: oci-image-registry
+    auth:
+      enabled: false
+      raas:
+        username: raas
+        password: password
+    hosts:
+      default: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        default: null
+  identity:
+    name: keystone
+    auth:
+      raas:
+        role: admin
+        region_name: RegionOne
+        username: raas
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: keystone
+      internal: keystone-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+  raas:
+    name: raas
+    hosts:
+      default: raas-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /
+    scheme:
+      default: http
+    port:
+      api:
+        default: 8080
+
+manifests:
+  configmap_bin: true
+  deployment: true
+  ingress: true
+  job_image_repo_sync: true
+  secret_config: true
+  secret_registry: true
+  service: true
+...

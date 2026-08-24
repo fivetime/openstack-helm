@@ -1,0 +1,113 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.deployment }}
+{{- $envAll := . }}
+
+{{- $serviceAccountName := "raas-orchestrator" }}
+{{ tuple $envAll "orchestrator" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raas-orchestrator
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  replicas: {{ .Values.pod.replicas.orchestrator }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-etc-hash: {{ tuple "secret-config.yaml" . | include "helm-toolkit.utils.hash" }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+      affinity:
+{{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      nodeSelector:
+        {{ .Values.labels.raas.node_selector_key }}: {{ .Values.labels.raas.node_selector_value | quote }}
+      # 关闭时先停止接收 webhook,再等在途的开机/销毁跑完。进程收到 SIGTERM
+      # 后会 orch.Wait();杀早了会留下半途创建的虚拟机和浮动 IP。
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.orchestrator.timeout }}
+{{ dict "envAll" $envAll "application" "raas" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      initContainers:
+{{ tuple $envAll "orchestrator" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: raas
+{{ tuple $envAll "raas" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.orchestrator | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "raas" "container" "raas" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /usr/local/bin/raas
+            - -config
+            - /etc/raas/config.yaml
+          ports:
+            - name: http
+              containerPort: {{ .Values.network.orchestrator.port }}
+          env:
+            # 数据库连接串不进配置文件:凭据不该和配置放在一起,
+            # 编排器启动时会检查它非空。
+            - name: RAAS_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.postgresql.raas }}
+                  key: RAAS_DSN
+            # gophercloud 从 clouds.yaml 读凭据(conf.raas.openstack.cloud)。
+            - name: OS_CLIENT_CONFIG_FILE
+              value: /etc/raas/clouds.yaml
+{{- if .Values.pod.probes.orchestrator.raas.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              # readyz 会真的 ping 数据库;healthz 只表示进程活着。
+              # 两者分开:数据库短暂不可用时不该把 pod 杀掉重启。
+              path: /readyz
+              port: {{ .Values.network.orchestrator.port }}
+{{ toYaml .Values.pod.probes.orchestrator.raas.readiness.params | indent 12 }}
+{{- end }}
+{{- if .Values.pod.probes.orchestrator.raas.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.network.orchestrator.port }}
+{{ toYaml .Values.pod.probes.orchestrator.raas.liveness.params | indent 12 }}
+{{- end }}
+          volumeMounts:
+            - name: raas-etc
+              mountPath: /etc/raas
+              readOnly: true
+            - name: pod-tmp
+              mountPath: /tmp
+{{- if .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumeMounts }}
+{{ toYaml .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumeMounts | indent 12 }}
+{{- end }}
+      volumes:
+        # 根文件系统只读,但 Go 的临时文件与 gophercloud 的缓存要可写。
+        - name: pod-tmp
+          emptyDir: {}
+        - name: raas-etc
+          secret:
+            secretName: raas-etc
+            defaultMode: 0444
+{{- if .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumes }}
+{{ toYaml .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumes | indent 8 }}
+{{- end }}
+{{- end }}

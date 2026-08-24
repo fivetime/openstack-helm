@@ -1,0 +1,48 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if and .Values.manifests.ingress .Values.network.ingress.enabled }}
+{{- $envAll := . }}
+{{- $ingress := .Values.network.ingress }}
+---
+# 本仓库唯一一个公网入口。GitHub 必须能投递 webhook,而其余服务都只在
+# 集群内经 Gateway 路由(见 values.yaml 里 network.ingress 的说明)。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: raas
+  annotations:
+{{ toYaml $ingress.annotations | indent 4 }}
+spec:
+  ingressClassName: {{ $ingress.class }}
+{{- if $ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $ingress.host | quote }}
+      # 通配符证书 *.tue.jp,由 cert-manager 的 letsencrypt-cloudflare
+      # (DNS-01)签发,并经 reflector 自动镜像到本 namespace。
+      secretName: {{ $ingress.tls.secretName }}
+{{- end }}
+  rules:
+    - host: {{ $ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ tuple "raas" "internal" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
+                port:
+                  number: {{ tuple "raas" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- end }}

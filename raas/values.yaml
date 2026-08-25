@@ -136,7 +136,14 @@ network:
     # 用 "/" 会连带把 /metrics 与 /readyz 一起暴露出去 —— 前者泄露作业量、
     # 开机耗时这类运营数据,后者把数据库健康状况告诉全世界。Prometheus 在
     # 集群内经 Service 抓取,不走这条 Ingress,所以收窄不影响监控。
-    path: /webhook
+    # 两条,不是一条通配:
+    #   /webhook —— GitHub 投递事件
+    #   /setup   —— GitHub App 安装完成后把**租户的浏览器**送回来的落点。
+    #               它必须公网可达(浏览器在租户那边),但同样不是通配:
+    #               /metrics、/readyz、/v1 都不该出现在公网上。
+    paths:
+      - /webhook
+      - /setup
     pathType: Prefix
     annotations:
       # shared:挂到已有的共享 VIP,不额外占一个 LB IP。

@@ -38,11 +38,13 @@ spec:
     - host: {{ $ingress.host | quote }}
       http:
         paths:
-          - path: {{ $ingress.path }}
+{{- range $p := (default (list $ingress.path) $ingress.paths) }}
+          - path: {{ $p }}
             pathType: {{ $ingress.pathType }}
             backend:
               service:
-                name: {{ tuple "raas" "internal" . | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
+                name: {{ tuple "raas" "internal" $ | include "helm-toolkit.endpoints.hostname_short_endpoint_lookup" }}
                 port:
-                  number: {{ tuple "raas" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+                  number: {{ tuple "raas" "internal" "api" $ | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- end }}
 {{- end }}

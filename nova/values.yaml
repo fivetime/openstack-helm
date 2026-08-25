@@ -1420,10 +1420,17 @@ conf:
         fp-vdev: CommandFilter, fp-vdev, root
   nova_ironic:
     DEFAULT:
-      scheduler_host_manager: ironic_host_manager
+      # -- [DEFAULT]scheduler_host_manager used to be set to ironic_host_manager
+      ## here. nova removed that option (along with the whole baremetal
+      ## scheduler-filter family: scheduler_use_baremetal_filters,
+      ## baremetal_scheduler_default_filters) once ironic nodes became ordinary
+      ## placement resource providers; leaving it in only earns a "Unknown
+      ## option" warning at start-up.
       compute_driver: ironic.IronicDriver
+      # -- Baremetal is always 1:1 -- a node either is or is not allocated.
       ram_allocation_ratio: 1.0
       cpu_allocation_ratio: 1.0
+      disk_allocation_ratio: 1.0
       reserved_host_memory_mb: 0
   nova_incus:
     DEFAULT:
@@ -1521,8 +1528,11 @@ conf:
     glance:
       num_retries: 3
     ironic:
-      api_endpoint: null
       auth_url: null
+      # -- Resolve the ironic endpoint from the catalog rather than pinning an
+      ## address. public is a gateway hostname that pods cannot resolve, so keep
+      ## nova on the internal interface.
+      valid_interfaces: internal
     neutron:
       metadata_proxy_shared_secret: "password"
       service_metadata_proxy: True
@@ -2508,6 +2518,18 @@ pod:
       weight:
         default: 10
   tolerations:
+    # -- statefulset-compute-ironic reads pod.tolerations.compute_ironic.enabled
+    ## unconditionally, so without this key `helm template` dies with a nil
+    ## pointer the moment manifests.statefulset_compute_ironic is turned on.
+    compute_ironic:
+      enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
     compute_incus:
       enabled: true
       tolerations:

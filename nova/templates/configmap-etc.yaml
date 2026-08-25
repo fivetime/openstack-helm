@@ -139,10 +139,16 @@ limitations under the License.
 {{- end -}}
 {{- end -}}
 
-{{- if empty .Values.conf.nova.ironic.api_endpoint -}}
-{{- $_ := tuple "baremetal" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.nova.ironic "api_endpoint" -}}
-{{- end -}}
-
+{{/*
+  [ironic] used to get only api_endpoint + auth_url + auth_type + auth_version,
+  which cannot authenticate: with auth_type=password and no username the
+  keystoneauth password plugin raises MissingRequiredOptions the first time
+  nova-compute talks to ironic. api_endpoint is dead as well -- nova registers
+  the [ironic] group through keystoneauth (register_ksa_opts), which has no such
+  option; the address now comes from the catalog, narrowed with valid_interfaces
+  (the cluster-internal one, since the public endpoint is a gateway hostname
+  pods cannot resolve).
+*/}}
 {{- if empty .Values.conf.nova.ironic.auth_url -}}
 {{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.nova.ironic "auth_url" -}}
 {{- end -}}
@@ -152,6 +158,24 @@ limitations under the License.
 {{- end -}}
 {{- if empty .Values.conf.nova.ironic.auth_version -}}
 {{- $_ := set .Values.conf.nova.ironic "auth_version" .Values.endpoints.identity.auth.ironic.auth_version -}}
+{{- end -}}
+{{- if empty .Values.conf.nova.ironic.username -}}
+{{- $_ := set .Values.conf.nova.ironic "username" .Values.endpoints.identity.auth.ironic.username -}}
+{{- end -}}
+{{- if empty .Values.conf.nova.ironic.password -}}
+{{- $_ := set .Values.conf.nova.ironic "password" .Values.endpoints.identity.auth.ironic.password -}}
+{{- end -}}
+{{- if empty .Values.conf.nova.ironic.project_name -}}
+{{- $_ := set .Values.conf.nova.ironic "project_name" .Values.endpoints.identity.auth.ironic.project_name -}}
+{{- end -}}
+{{- if empty .Values.conf.nova.ironic.project_domain_name -}}
+{{- $_ := set .Values.conf.nova.ironic "project_domain_name" .Values.endpoints.identity.auth.ironic.project_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.nova.ironic.user_domain_name -}}
+{{- $_ := set .Values.conf.nova.ironic "user_domain_name" .Values.endpoints.identity.auth.ironic.user_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.nova.ironic.region_name -}}
+{{- $_ := set .Values.conf.nova.ironic "region_name" .Values.endpoints.identity.auth.ironic.region_name -}}
 {{- end -}}
 
 {{- if .Values.conf.nova.cinder.auth_type -}}

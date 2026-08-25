@@ -105,6 +105,11 @@ conf:
       # conductor may use hardlinks to images for certain boot modes so the default path needs
       # to be on the same filesystem
       tempdir: /var/lib/openstack-helm/tmp
+      # -- The conductor image ships the iPXE loaders (undionly.kpxe, ipxe.efi,
+      ## snponly.efi) but no pxelinux.0, so plain PXE has nothing to serve.
+      ## Default new nodes to ipxe; a node can still be created with
+      ## --boot-interface pxe once a loader is staged into tftp_root.
+      default_boot_interface: ipxe
     api:
       port: null
     conductor:
@@ -147,16 +152,22 @@ conf:
     neutron:
       auth_type: password
     pxe:
-      pxe_append_params: "nofb nomodeset vga=normal ipa-debug=1"
+      # -- Only paths are set here. [pxe]ipxe_enabled no longer exists in
+      ## ironic -- iPXE is selected per node through the boot interface (see
+      ## DEFAULT.default_boot_interface) -- and the idiom that went with it has
+      ## to go too: pointing pxe_config_template and pxe_bootfile_name at the
+      ## iPXE template and loader hands an iPXE config to any node booting with
+      ## boot_interface=pxe, which cannot parse it. ironic's own defaults are
+      ## already right (ipxe_config_template, ipxe_bootfile_name=undionly.kpxe,
+      ## uefi_ipxe_bootfile_name=snponly.efi), and the pxe-init script stages
+      ## exactly those loaders into tftp_root.
+      ## pxe_append_params was renamed kernel_append_params; ipa-debug is
+      ## dropped because ironic appends it itself whenever debug is on.
+      kernel_append_params: "nofb nomodeset vga=normal"
       images_path: /var/lib/openstack-helm/ironic/images
       instance_master_path: /var/lib/openstack-helm/ironic/master_images
-      pxe_config_template: $pybasedir/drivers/modules/ipxe_config.template
-      uefi_pxe_config_template: $pybasedir/drivers/modules/ipxe_config.template
       tftp_root: /var/lib/openstack-helm/tftpboot
       tftp_master_path: /var/lib/openstack-helm/tftpboot/master_images
-      pxe_bootfile_name: undionly.kpxe
-      uefi_pxe_bootfile_name: ipxe.efi
-      ipxe_enabled: true
     service_catalog:
       auth_type: password
     service_user:
@@ -246,6 +257,46 @@ conf:
       module: ironic.wsgi:application
 
 conductor:
+  # -- Shared shell helper, templated into every script that has to bind to the
+  ## provisioner interface: the conductor init (my_ip / [pxe]tftp_server /
+  ## [deploy]http_url), tftpd, and the nginx init. These used to derive the
+  ## address three different ways, so on an interface carrying more than one
+  ## subnet tftpd could end up listening on one address while the conductor
+  ## advertised another -- every service reports healthy and only the bare metal
+  ## node times out. Addresses inside network.pxe.neutron_subnet_cidr win;
+  ## otherwise the first IPv4 on the interface is used so the services start.
+  pxe_ip_helper: |
+    function net_pxe_addr {
+      if ! ip link show ${PROVISIONER_INTERFACE} &>/dev/null; then
+        echo "Interface ${PROVISIONER_INTERFACE} does not exist" >&2
+        return 1
+      fi
+
+      local all_ips=($(ip -4 -o addr show dev ${PROVISIONER_INTERFACE} | awk '{print $4}'))
+      if [ ${#all_ips[@]} -eq 0 ]; then
+        echo "No IPv4 address on ${PROVISIONER_INTERFACE}" >&2
+        return 1
+      fi
+
+      local pxe_cidr="{{ .Values.network.pxe.neutron_subnet_cidr }}"
+      if [ -n "${pxe_cidr}" ]; then
+        local matched
+        matched=$(python -c "import ipaddress,sys; net = ipaddress.ip_network(sys.argv[1], strict=False); print(next((c for c in sys.argv[2:] if ipaddress.ip_interface(c).ip in net), ''))" "${pxe_cidr}" "${all_ips[@]}" 2>/dev/null)
+        if [ -n "${matched}" ]; then
+          echo "${matched}"
+          return 0
+        fi
+        echo "No address of ${PROVISIONER_INTERFACE} is inside ${pxe_cidr}, falling back to ${all_ips[0]}" >&2
+      fi
+
+      echo "${all_ips[0]}"
+    }
+
+    function net_pxe_ip {
+      local addr
+      addr=$(net_pxe_addr) || return 1
+      echo "${addr}" | awk -F '/' '{ print $1; exit }'
+    }
   # -- Additional containers to add to the conductor pods
   ## Note: Supports use of custom Helm templates
   extraContainers: []
@@ -262,12 +313,7 @@ conductor:
         exit 1
       fi
 
-      function net_pxe_addr {
-       ip addr | awk "/inet / && /${PROVISIONER_INTERFACE}/{print \$2; exit }"
-      }
-      function net_pxe_ip {
-       echo $(net_pxe_addr) | awk -F '/' '{ print $1; exit }'
-      }
+      {{ tpl .Values.conductor.pxe_ip_helper . }}
       PXE_IP=$(net_pxe_ip)
 
       if [ "x" == "x${PXE_IP}" ]; then
@@ -303,12 +349,7 @@ conductor:
     script: |
       #!/bin/bash
       set -ex
-      function net_pxe_addr {
-       ip addr | awk "/inet / && /${PROVISIONER_INTERFACE}/{print \$2; exit }"
-      }
-      function net_pxe_ip {
-       echo $(net_pxe_addr) | awk -F '/' '{ print $1; exit }'
-      }
+      {{ tpl .Values.conductor.pxe_ip_helper . }}
       PXE_IP=$(net_pxe_ip)
 
       if [ "x" == "x${PXE_IP}" ]; then
@@ -351,14 +392,18 @@ bootstrap:
       enabled: true
       ks_user: ironic
     # NOTE: if source_base is null the source will be used as is
-    source_base: http://tarballs.openstack.org/ironic-python-agent/tinyipa/files
+    # -- tinyipa is retired: 2025.1 is the last build upstream ever published,
+    ## so a 2026.1 chart pinned to it ships a ramdisk a release behind the
+    ## conductor with no further updates. The diskimage-builder ramdisks are the
+    ## maintained line and are published per stable branch.
+    source_base: https://tarballs.opendev.org/openstack/ironic-python-agent/dib/files
     structured:
       ironic-agent.initramfs:
-        source: tinyipa-stable-2025.1.gz
+        source: ipa-centos9-stable-2026.1.initramfs
         disk_format: ari
         container_format: ari
       ironic-agent.kernel:
-        source: tinyipa-stable-2025.1.vmlinuz
+        source: ipa-centos9-stable-2026.1.kernel
         disk_format: aki
         container_format: aki
   object_store:

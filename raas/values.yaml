@@ -203,6 +203,9 @@ secrets:
   # 凭据不该跟配置放在一起(编排器在启动时就要求它非空)。
   postgresql:
     raas: raas-db-dsn
+  # 加密落库的 GitHub App 凭据。chart 首次安装随机生成,之后 lookup 保留。
+  security:
+    raas: raas-security-key
 
 dependencies:
   dynamic:
@@ -296,6 +299,7 @@ manifests:
   ingress: true
   job_image_repo_sync: true
   secret_config: true
+  secret_security_key: true
   secret_registry: true
   service: true
 ...

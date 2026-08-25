@@ -74,6 +74,12 @@ spec:
             # gophercloud 从 clouds.yaml 读凭据(conf.raas.openstack.cloud)。
             - name: OS_CLIENT_CONFIG_FILE
               value: /etc/raas/clouds.yaml
+            # 落库凭据的加密密钥,由 secret-security-key.yaml 生成并跨 upgrade 保留。
+            - name: RAAS_SECURITY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.security.raas }}
+                  key: RAAS_SECURITY_KEY
 {{- if .Values.pod.probes.orchestrator.raas.readiness.enabled }}
           readinessProbe:
             httpGet:

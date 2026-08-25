@@ -63,6 +63,13 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.network.orchestrator.port }}
+          # 其余密钥(OS_PASSWORD / RAAS_GITHUB_WEBHOOK_SECRET / RAAS_GITHUB_CLIENT_SECRET /
+          # RAAS_GITHUB_TOKEN / RAAS_NOTIFICATIONS_PASSWORD)从一个手工维护的 Secret 整体
+          # 注入,配置文件里只留结构。optional:没有这个 Secret 时照常启动,值退回配置文件。
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.credentials.raas }}
+                optional: true
           env:
             # 数据库连接串不进配置文件:凭据不该和配置放在一起,
             # 编排器启动时会检查它非空。

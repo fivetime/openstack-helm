@@ -209,6 +209,10 @@ secrets:
   # 加密落库的 GitHub App 凭据。chart 首次安装随机生成,之后 lookup 保留。
   security:
     raas: raas-security-key
+  # 运行时密钥(OpenStack 口令、webhook secret、App client secret、消息总线口令),
+  # 手工创建,整体 envFrom 注入。键名见 deployment.yaml 的注释。
+  credentials:
+    raas: raas-credentials
 
 dependencies:
   dynamic:

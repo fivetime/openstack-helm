@@ -182,7 +182,8 @@ conf:
       publisher_id: raas.orchestrator
       sasl_mechanism: SCRAM-SHA-512
       ca_file: /etc/redpanda-ca/ca.crt
-    labels: {}
+    # runs-on 标签目录来自云(flavor 的 raas:label / raas:os,镜像的 raas_os),
+    # 不在配置里。编排器的配置解析是严格模式,这里出现 labels: 会起不来。
     tenants: {}
 
   # clouds.yaml 供 gophercloud 读取(cloud: openstack_helm)。

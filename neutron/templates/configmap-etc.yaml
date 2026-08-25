@@ -203,9 +203,35 @@ limitations under the License.
 {{- end -}}
 {{- end }}
 
+{{/*
+  [ironic] is consumed by networking-baremetal's ironic-neutron-agent through
+  plain keystoneauth (register_auth/session/adapter_conf_options). Only auth_url
+  was filled in, which cannot authenticate: auth_type=password without a
+  username makes the password plugin raise MissingRequiredOptions on the agent's
+  first call to ironic. The ks-user job already creates this service user
+  (it is gated on the same "baremetal" backend), so wire its credentials in.
+*/}}
 {{- if (has "baremetal" .Values.network.backend) -}}
 {{- if empty $envAll.Values.conf.neutron.ironic.auth_url -}}
 {{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set $envAll.Values.conf.neutron.ironic "auth_url" -}}
+{{- end }}
+{{- if empty $envAll.Values.conf.neutron.ironic.username -}}
+{{- $_ := set $envAll.Values.conf.neutron.ironic "username" .Values.endpoints.identity.auth.ironic.username -}}
+{{- end }}
+{{- if empty $envAll.Values.conf.neutron.ironic.password -}}
+{{- $_ := set $envAll.Values.conf.neutron.ironic "password" .Values.endpoints.identity.auth.ironic.password -}}
+{{- end }}
+{{- if empty $envAll.Values.conf.neutron.ironic.project_name -}}
+{{- $_ := set $envAll.Values.conf.neutron.ironic "project_name" .Values.endpoints.identity.auth.ironic.project_name -}}
+{{- end }}
+{{- if empty $envAll.Values.conf.neutron.ironic.project_domain_name -}}
+{{- $_ := set $envAll.Values.conf.neutron.ironic "project_domain_name" .Values.endpoints.identity.auth.ironic.project_domain_name -}}
+{{- end }}
+{{- if empty $envAll.Values.conf.neutron.ironic.user_domain_name -}}
+{{- $_ := set $envAll.Values.conf.neutron.ironic "user_domain_name" .Values.endpoints.identity.auth.ironic.user_domain_name -}}
+{{- end }}
+{{- if empty $envAll.Values.conf.neutron.ironic.region_name -}}
+{{- $_ := set $envAll.Values.conf.neutron.ironic "region_name" .Values.endpoints.identity.auth.ironic.region_name -}}
 {{- end }}
 {{- end -}}
 

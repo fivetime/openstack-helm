@@ -144,6 +144,9 @@ network:
     paths:
       - /webhook
       - /setup
+      # 管理员在面板上创建 GitHub App 时,GitHub 把他的浏览器送回这里
+      # (manifest 流程的 redirect_url)。同样不是通配。
+      - /github-app
     pathType: Prefix
     annotations:
       # shared:挂到已有的共享 VIP,不额外占一个 LB IP。

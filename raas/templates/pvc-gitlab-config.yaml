@@ -1,0 +1,22 @@
+{{/*
+编排器与 runner 共享的配置目录。
+
+**RWX 是必须的**:编排器写 config-shard-N.toml,runner 读它;runner 写 JSON
+日志,编排器的计费采集读它。两个方向都要,而且分片多于一个时是多个 pod。
+
+不用 emptyDir + sidecar 的原因见 statefulset-gitlab-runner.yaml 的注释。
+*/}}
+{{- if and .Values.manifests.pvc_gitlab_config .Values.conf.raas.gitlab.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: raas-gitlab-config
+  labels:
+{{ tuple . "raas" "gitlab-config" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: {{ .Values.volume.gitlab_config.class_name }}
+  resources:
+    requests:
+      storage: {{ .Values.volume.gitlab_config.size }}
+{{- end }}

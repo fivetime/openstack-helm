@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 {{/*
 Copyright 2019 Samsung Electronics Co., Ltd.
@@ -19,7 +19,7 @@ limitations under the License.
 set -ex
 COMMAND="${@:-start}"
 
-function start () {
+start() {
   # 从共享目录读取网络配置信息
   HM_PORT_IP=$(cat /tmp/pod-shared/HM_PORT_IP)
   HM_SUBNET_MASK=$(cat /tmp/pod-shared/HM_SUBNET_MASK)
@@ -38,7 +38,7 @@ function start () {
         --config-dir /etc/octavia/octavia.conf.d
 }
 
-function stop () {
+stop() {
   # 停止 Octavia 健康管理器
   kill -TERM 1
 }

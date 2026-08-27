@@ -110,7 +110,7 @@ container_runtime:
     # Docker API 配置
     api_version: "1.26"                        # Docker API 版本
     default_timeout: 60                        # 默认超时时间
-    execute_timeout: 5                         # 执行超时时间
+    execute_timeout: 30                        # 一次 exec 的上限;与 CriDriver 的 cri_exec_timeout 对齐,且须低于 rpc_response_timeout(默认 60)
 
     # Registry 配置
     default_registry: ""                       # 默认镜像仓库
@@ -690,7 +690,7 @@ conf:
       api_url: unix:///var/run/docker.sock   # API URL
       docker_remote_api_port: 2375            # Docker API 端口
       api_insecure: false                     # API 不安全模式
-      execute_timeout: 5                      # 执行超时
+      execute_timeout: 30                     # 同上:5 秒太短,凡是等网络的命令都会撞上
 
     # === 计算服务配置 ===
     compute:
@@ -1380,7 +1380,6 @@ manifests:
 
   service_api: true                           # API 服务
   service_wsproxy: true                       # WebSocket 代理服务
-  service_console: true                       # base_url 里那个名字的集群内解析
 
 # ════════════════════════════════════════════════════════════════════
 # 配置文件结束

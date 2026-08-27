@@ -109,6 +109,13 @@ spec:
               readOnly: true
             - name: pod-tmp
               mountPath: /tmp
+{{- if .Values.conf.raas.gitlab.enabled }}
+            # 编排器持有配置真相,config.toml 是产物 —— 它写,runner 读。
+            # 反过来 runner 的 JSON 日志写在这里,编排器的计费采集读它
+            # (GitLab CE 提供不了计量,账本只能建在我们自己这边)。
+            - name: gitlab-config
+              mountPath: {{ .Values.conf.raas.gitlab.config_dir }}
+{{- end }}
 {{- if .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumeMounts }}
 {{ toYaml .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumeMounts | indent 12 }}
 {{- end }}
@@ -120,6 +127,11 @@ spec:
           secret:
             secretName: raas-etc
             defaultMode: 0444
+{{- if .Values.conf.raas.gitlab.enabled }}
+        - name: gitlab-config
+          persistentVolumeClaim:
+            claimName: raas-gitlab-config
+{{- end }}
 {{- if .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumes }}
 {{ toYaml .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumes | indent 8 }}
 {{- end }}

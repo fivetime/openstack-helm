@@ -32,12 +32,23 @@ if ! PORT_JSON=$(openstack port show ${PORTNAME} -f json 2>/dev/null); then
     exit 1
 fi
 
-# 从JSON中提取所有需要的信息
-PORT_ID=$(echo "$PORT_JSON" | grep '"id":' | cut -d'"' -f4)
-PORT_MAC=$(echo "$PORT_JSON" | grep '"mac_address":' | cut -d'"' -f4)
-PORT_IP=$(echo "$PORT_JSON" | grep '"ip_address":' | cut -d'"' -f4)
-SUBNET_ID=$(echo "$PORT_JSON" | grep '"subnet_id":' | cut -d'"' -f4)
-NETWORK_ID=$(echo "$PORT_JSON" | grep '"network_id":' | cut -d'"' -f4)
+# 用 JSON 解析器取字段,不用 grep/cut。
+# grep '"ip_address":' 会取到**每一个**匹配,而开了 DNS 扩展的端口带两个:
+# fixed_ips 里一个、dns_assignment 里一个。PORT_IP 于是变成
+# "172.30.0.5 172.30.0.5",启动脚本拼出
+# `ip addr add 172.30.0.5 172.30.0.5/24 dev o-hm0`,health manager 崩溃循环,
+# 报的还是 "either local is duplicate, or ... is a garbage" —— 既不点字段
+# 也不点成因。其余字段一并改掉:同样的写法,同样只是碰巧还没撞上。
+eval "$(echo "$PORT_JSON" | python3 -c '
+import json, sys
+p = json.load(sys.stdin)
+fixed = (p.get("fixed_ips") or [{}])[0]
+print("PORT_ID=%s" % p.get("id", ""))
+print("PORT_MAC=%s" % p.get("mac_address", ""))
+print("PORT_IP=%s" % fixed.get("ip_address", ""))
+print("SUBNET_ID=%s" % fixed.get("subnet_id", ""))
+print("NETWORK_ID=%s" % p.get("network_id", ""))
+')"
 
 echo "端口 ID: ${PORT_ID}"
 echo "端口 MAC: ${PORT_MAC}"
@@ -55,9 +66,15 @@ fi
 SUBNET_JSON=$(openstack subnet show ${SUBNET_ID} -f json)
 
 # 从子网JSON中提取有用信息
-SUBNET_CIDR=$(echo "$SUBNET_JSON" | grep '"cidr":' | cut -d'"' -f4)
-SUBNET_GATEWAY=$(echo "$SUBNET_JSON" | grep '"gateway_ip":' | cut -d'"' -f4)
-SUBNET_NAME=$(echo "$SUBNET_JSON" | grep '"name":' | cut -d'"' -f4)
+eval "$(echo "$SUBNET_JSON" | python3 -c '
+import json, sys
+n = json.load(sys.stdin)
+print("SUBNET_CIDR=%s" % n.get("cidr", ""))
+# 无网关的管理子网是刻意的 —— 管理网口不该成为 worker 的默认路由 ——
+# 所以 None 要落成空串而不是字面量 "None"。
+print("SUBNET_GATEWAY=%s" % (n.get("gateway_ip") or ""))
+print("SUBNET_NAME=%s" % n.get("name", ""))
+')"
 
 # 计算子网掩码
 SUBNET_MASK=$(echo $SUBNET_CIDR | cut -d'/' -f2)

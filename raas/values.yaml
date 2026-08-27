@@ -23,6 +23,10 @@
 images:
   tags:
     raas: ghcr.io/fivetime/openstackhelm/raas:latest
+    # GitLab 那条链路的 runner:gitlab-runner + 我们的 fleeting 插件。
+    # 两者的 fleeting 版本在构建期强制一致 —— 错配的表现是 go-plugin
+    # 握手直接失败,那要等部署上去才看得见。
+    raas_gitlab_runner: ghcr.io/fivetime/openstackhelm/raas-gitlab-runner:latest
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     image_repo_sync: quay.io/airshipit/docker:27.5.0
   pull_policy: IfNotPresent
@@ -43,6 +47,21 @@ pod:
         volumeMounts: []
         volumes: []
   security_context:
+    # GitLab 那条链路的 runner。**fsGroup 不能省**:state_storage 是一个 RBD
+    # 卷,挂进来是 root:root,而容器以 42424 跑 —— 少了它 fleeting 初始化时报
+    #   creating state storage: mkdir /var/lib/raas/fleeting/shard-0: permission denied
+    # 表现是 runner 反复 "Failed to process runner",作业永远不被领走,
+    # 而 GitLab 那边只显示"作业排队中"。与 GitHub 私钥那次(Secret 文件
+    # root 属主、容器跑 42424)是同一个形状。
+    gitlab_runner:
+      pod:
+        runAsUser: 42424
+        fsGroup: 42424
+      container:
+        gitlab_runner:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
     raas:
       pod:
         runAsUser: 42424
@@ -109,6 +128,9 @@ pod:
           cpu: "2000m"
 
 labels:
+  gitlab_runner:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
   raas:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
@@ -147,6 +169,11 @@ network:
       # 管理员在面板上创建 GitHub App 时,GitHub 把他的浏览器送回这里
       # (manifest 流程的 redirect_url)。同样不是通配。
       - /github-app
+      # 租户在自己的 GitLab 上点完授权,GitLab 把他的浏览器送回这里。
+      # **加 GitLab 链路时漏了这一条**:路由在编排器里挂好了,入口上却没开门,
+      # 表现是授权成功、回调页打不开 —— 而租户看到的是一个白页,
+      # 完全看不出是入口的问题。
+      - /gitlab/callback
     pathType: Prefix
     annotations:
       # shared:挂到已有的共享 VIP,不额外占一个 LB IP。
@@ -300,8 +327,25 @@ endpoints:
       api:
         default: 8080
 
+# GitLab 链路的两个卷。
+volume:
+  # 编排器与 runner 共享:前者写 config-shard-N.toml 与读 runner 日志,
+  # 后者读配置与写日志。**必须 RWX**,而且分片多于一个时是多个 pod。
+  gitlab_config:
+    class_name: hdd-ec42-fs-erasure
+    size: 1Gi
+  # fleeting 的 state_storage。丢了它,进程重启时 fleeting 会把所有
+  # "来历不明"的已存在实例删掉 —— 而改配置就得重启。
+  gitlab_state:
+    class_name: nvme-ec42-rbd-pool
+    size: 1Gi
+
 manifests:
   configmap_bin: true
+  # GitLab 链路的两个对象。它们还各自受 conf.raas.gitlab.enabled 约束 ——
+  # 只装了 GitHub 的部署不该被迫建出一个空跑的 runner。
+  pvc_gitlab_config: true
+  statefulset_gitlab_runner: true
   deployment: true
   ingress: true
   job_image_repo_sync: true

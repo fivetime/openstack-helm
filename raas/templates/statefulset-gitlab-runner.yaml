@@ -1,0 +1,96 @@
+{{/*
+GitLab CI 那条链路的 runner。
+
+为什么是独立工作负载而不是编排器的 sidecar:**分片**。
+concurrent 与 check_interval 都是进程级的 —— 同一分片里一个租户的慢作业会
+吃掉所有人的 slot,而 check_interval 被 [[runners]] 块数平分。分片数是部署期
+决定的(改它会重排全部租户的归属,那意味着一次全体重启),所以拓扑必须从一开始
+就支持多副本,不能等到需要时再改。
+
+为什么是 StatefulSet 而不是 Deployment:每个副本要稳定的序号 ——
+它决定读哪一份 config-shard-N.toml。
+
+共享卷:
+  gitlab-config  编排器写 config-shard-N.toml 与 runner 日志,runner 读配置、
+                 写日志。RWX,两边都挂。
+  gitlab-state   fleeting 的 state_storage。**必须持久** —— 丢了它,进程重启时
+                 fleeting 会把所有"来历不明"的已存在实例删掉
+                 (CausePreexisted && !Restored),而改配置就得重启。
+*/}}
+{{- if and .Values.manifests.statefulset_gitlab_runner .Values.conf.raas.gitlab.enabled }}
+{{- $envAll := . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: raas-gitlab-runner
+  labels:
+{{ tuple $envAll "raas" "gitlab-runner" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  serviceName: raas-gitlab-runner
+  replicas: {{ .Values.conf.raas.gitlab.shards | default 1 }}
+  # OrderedReady 会让高序号副本起不来时低序号永不更新,而 helm 仍报 deployed。
+  # 分片之间没有依赖,并行更新即可。
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+{{ tuple $envAll "raas" "gitlab-runner" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "raas" "gitlab-runner" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+        configmap-etc-hash: {{ tuple "secret-config.yaml" . | include "helm-toolkit.utils.hash" }}
+    spec:
+{{ dict "envAll" $envAll "application" "gitlab_runner" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.gitlab_runner.node_selector_key }}: {{ .Values.labels.gitlab_runner.node_selector_value }}
+      containers:
+        - name: gitlab-runner
+{{ tuple $envAll "raas_gitlab_runner" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "gitlab_runner" "container" "gitlab_runner" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              SHARD="${HOSTNAME##*-}"
+              CFG="{{ .Values.conf.raas.gitlab.config_dir }}/config-shard-${SHARD}.toml"
+              # 编排器生成配置。第一次部署时它可能还没写出来 —— 等,别退出:
+              # CrashLoopBackOff 会把"配置还没生成"渲染成一个看起来很严重的故障。
+              until [ -f "$CFG" ]; do
+                echo "waiting for ${CFG} (the orchestrator renders it)"
+                sleep 5
+              done
+              # 日志写进共享卷:编排器的计费采集从这里读。
+              # GitLab CE 提供不了计量,账本只能建在我们自己这边。
+              exec gitlab-runner run -c "$CFG" \
+                --working-directory {{ .Values.conf.raas.gitlab.state_dir }} \
+                2>&1 | tee -a "{{ .Values.conf.raas.gitlab.runner_log_path }}"
+          env:
+            # gitlab-runner 自己的日志格式。计费解析依赖它是 JSON:
+            # Build.Log() 让每行自带 job / project / namespace,时间戳 RFC3339Nano。
+            - name: LOG_FORMAT
+              value: json
+          volumeMounts:
+            - name: gitlab-config
+              mountPath: {{ .Values.conf.raas.gitlab.config_dir }}
+            - name: gitlab-state
+              mountPath: {{ .Values.conf.raas.gitlab.state_dir }}
+            - name: pod-tmp
+              mountPath: /tmp
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: gitlab-config
+          persistentVolumeClaim:
+            claimName: raas-gitlab-config
+  volumeClaimTemplates:
+    - metadata:
+        name: gitlab-state
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.volume.gitlab_state.class_name }}
+        resources:
+          requests:
+            storage: {{ .Values.volume.gitlab_state.size }}
+{{- end }}

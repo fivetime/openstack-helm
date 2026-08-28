@@ -138,6 +138,13 @@ spec:
             - octavia-driver-agent
             - --config-file
             - /etc/octavia/octavia.conf
+            # -------------- Add by Simon Start --------------
+            # The snippets directory is mounted just below but was never read,
+            # so per-component overrides silently did nothing. The standalone
+            # driver-agent deployment has always passed this.
+            - --config-dir
+            - /etc/octavia/octavia.conf.d
+            # -------------- Add by Simon End --------------
           volumeMounts:
             - name: oslo-lock-path
               mountPath: {{ .Values.conf.octavia.oslo_concurrency.lock_path }}
@@ -158,6 +165,12 @@ spec:
             {{- end }}
             - name: octavia-driver-agents
               mountPath: /var/run/octavia
+            # The sidecar runs the same binary against the same
+            # octavia.conf as the api container, so it needs the same
+            # extra mounts -- notably the Kafka CA. Without it this
+            # container cannot build a producer and drops whatever it
+            # tries to emit.
+{{ if $mounts_octavia_api.volumeMounts }}{{ toYaml $mounts_octavia_api.volumeMounts | indent 12 }}{{ end }}
         # -------------- Add by Simon End --------------
         {{- end }}
       volumes:

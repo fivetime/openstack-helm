@@ -1,46 +1,27 @@
-#!/bin/bash
-
-{{/*
-Copyright 2019 Samsung Electronics Co., Ltd.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/}}
+#!/bin/sh
 
 set -ex
 COMMAND="${@:-start}"
 
-function start () {
-  cat > /tmp/dhclient.conf <<EOF
-{{- if .Values.network.worker.interface_mtu }}
-request subnet-mask,broadcast-address;
-supersede interface-mtu {{ .Values.network.worker.interface_mtu }};
-{{- else }}
-request subnet-mask,broadcast-address,interface-mtu;
-{{- end }}
-do-forward-updates false;
-EOF
+start() {
+  # Static, not dhclient: the management network is IPv6-only and
+  # `dhclient -v o-w0` is a DHCPv4 client that never gets a lease. With set -e
+  # that is a crash loop whose events say only "BackOff".
+  # POSIX sh, not bash: the fork's alpine image has no bash.
+  HM_PORT_IP=$(cat /tmp/pod-shared/HM_PORT_IP)
+  HM_SUBNET_MASK=$(cat /tmp/pod-shared/HM_SUBNET_MASK)
 
-  dhclient -v o-w0 -cf /tmp/dhclient.conf
-{{- if .Values.network.worker.interface_mtu }}
-  ip link set dev o-w0 mtu {{ .Values.network.worker.interface_mtu }}
-{{- end }}
+  ip addr flush dev o-w0
+  ip addr add ${HM_PORT_IP}/${HM_SUBNET_MASK} dev o-w0
+  ip link set dev o-w0 up
+  ip link set dev o-w0 mtu {{ .Values.network.health_manager.interface_mtu }}
 
   exec octavia-worker \
         --config-file /etc/octavia/octavia.conf \
         --config-dir /etc/octavia/octavia.conf.d
 }
 
-function stop () {
+stop() {
   kill -TERM 1
 }
 

@@ -689,6 +689,8 @@ pod:
   tolerations:
     octavia_api:
       enabled: false
+    driver_agent:
+      enabled: false
     worker:
       enabled: false
     housekeeping:

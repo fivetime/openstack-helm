@@ -55,6 +55,14 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
     #   hostPID: true
+      # -------------- Add by Simon Start --------------
+      # The lb-mgmt nodes are tainted; without this the object renders with
+      # DESIRED=0 and no error anywhere.
+      {{- if and $envAll.Values.pod.tolerations.worker.enabled $envAll.Values.pod.tolerations.worker.tolerations }}
+      tolerations:
+      {{- toYaml $envAll.Values.pod.tolerations.worker.tolerations | nindent 8 }}
+      {{- end }}
+      # -------------- Add by Simon End --------------
       nodeSelector:
         {{ .Values.labels.worker.node_selector_key }}: {{ .Values.labels.worker.node_selector_value }}
       initContainers:
@@ -105,6 +113,10 @@ spec:
                   - /tmp/octavia-worker.sh
                   - stop
           volumeMounts:
+            # The init container writes the port's address here;
+            # without this mount the main container cannot read it.
+            - name: pod-shared
+              mountPath: /tmp/pod-shared
             - name: oslo-lock-path
               mountPath: {{ .Values.conf.octavia.oslo_concurrency.lock_path }}
             - name: pod-etc-octavia

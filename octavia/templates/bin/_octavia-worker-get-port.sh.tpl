@@ -19,8 +19,43 @@ set -ex
 HOSTNAME=$(hostname -s)
 PORTNAME=octavia-worker-port-$HOSTNAME
 
-HM_PORT_ID=$(openstack port show $PORTNAME -c id -f value)
-HM_PORT_MAC=$(openstack port show $PORTNAME -c mac_address -f value)
+if ! PORT_JSON=$(openstack port show ${PORTNAME} -f json 2>/dev/null); then
+    echo "ERROR: port ${PORTNAME} does not exist"
+    exit 1
+fi
 
-echo $HM_PORT_ID > /tmp/pod-shared/HM_PORT_ID
-echo $HM_PORT_MAC > /tmp/pod-shared/HM_PORT_MAC
+# JSON parsing, not grep: a port with the DNS extension carries two
+# "ip_address" matches (fixed_ips and dns_assignment) and grep takes both,
+# which produced `ip addr add A A/24` and a crash loop naming neither the
+# field nor the cause. Same defect the health-manager script had.
+eval "$(echo "$PORT_JSON" | python3 -c '
+import json, sys
+p = json.load(sys.stdin)
+fixed = (p.get("fixed_ips") or [{}])[0]
+print("PORT_ID=%s" % p.get("id", ""))
+print("PORT_MAC=%s" % p.get("mac_address", ""))
+print("PORT_IP=%s" % fixed.get("ip_address", ""))
+print("SUBNET_ID=%s" % fixed.get("subnet_id", ""))
+')"
+
+if [ -z "${PORT_IP}" ] || [ -z "${SUBNET_ID}" ]; then
+    echo "ERROR: could not read an address or subnet from ${PORTNAME}"
+    exit 1
+fi
+
+SUBNET_JSON=$(openstack subnet show ${SUBNET_ID} -f json)
+eval "$(echo "$SUBNET_JSON" | python3 -c '
+import json, sys
+n = json.load(sys.stdin)
+print("SUBNET_CIDR=%s" % n.get("cidr", ""))
+')"
+SUBNET_MASK=$(echo $SUBNET_CIDR | cut -d"/" -f2)
+
+echo "port ${PORT_IP}/${SUBNET_MASK} on ${PORTNAME}"
+
+echo $PORT_ID    > /tmp/pod-shared/HM_PORT_ID
+echo $PORT_MAC   > /tmp/pod-shared/HM_PORT_MAC
+echo $PORT_IP    > /tmp/pod-shared/HM_PORT_IP
+echo $SUBNET_ID  > /tmp/pod-shared/HM_SUBNET_ID
+echo $SUBNET_CIDR > /tmp/pod-shared/HM_SUBNET_CIDR
+echo $SUBNET_MASK > /tmp/pod-shared/HM_SUBNET_MASK

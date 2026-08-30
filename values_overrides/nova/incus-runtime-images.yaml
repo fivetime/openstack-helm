@@ -5,4 +5,4 @@ images:
   tags:
     nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:d49593c25a22b6fdc6b4776840e60b5c39fc3cecf20441f2fe96a8984962baed
     nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:d49593c25a22b6fdc6b4776840e60b5c39fc3cecf20441f2fe96a8984962baed
-    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:f327a129c50f3570f0190498d9d9dba224f29e723840025ab2cad9e5549ece19
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:ef830aa58e2bc0c82a8ab7b5faae0b15a898e7f173259cdecd4c5b3e1babe70c

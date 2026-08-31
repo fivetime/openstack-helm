@@ -44,6 +44,53 @@ spec:
 {{ dict "envAll" $envAll "application" "gitlab_runner" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       nodeSelector:
         {{ .Values.labels.gitlab_runner.node_selector_key }}: {{ .Values.labels.gitlab_runner.node_selector_value }}
+{{- if .Values.network.mgmt.enabled }}
+      # manager 只能从管理网 SSH 进池机器 —— 与编排器同样的 hostNetwork +
+      # 网络节点形态,共用节点上的 r-mgmt0(nic-init 幂等,谁先跑谁建)。
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      initContainers:
+        - name: raas-mgmt-get-port
+{{ tuple $envAll "raas_port_init" | include "helm-toolkit.snippets.image" | indent 10 }}
+          env:
+            - name: OS_CLOUD
+              value: {{ .Values.conf.raas.openstack.cloud }}
+            - name: OS_CLIENT_CONFIG_FILE
+              value: /etc/raas/clouds.yaml
+            # 端口由编排器 pod 创建,这里只等 —— 并发 create 会造出两个同名端口。
+            - name: RAAS_MGMT_CREATE_PORT
+              value: "false"
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.credentials.raas }}
+                optional: true
+          command:
+            - /tmp/raas-mgmt-get-port.sh
+          volumeMounts:
+            - name: pod-shared
+              mountPath: /tmp/pod-shared
+            - name: raas-bin
+              mountPath: /tmp/raas-mgmt-get-port.sh
+              subPath: raas-mgmt-get-port.sh
+              readOnly: true
+            - name: raas-etc
+              mountPath: /etc/raas
+              readOnly: true
+        - name: raas-mgmt-nic-init
+{{ tuple $envAll "raas_nic_init" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "gitlab_runner" "container" "raas_mgmt_nic_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/raas-mgmt-nic-init.sh
+          volumeMounts:
+            - name: pod-shared
+              mountPath: /tmp/pod-shared
+            - name: raas-bin
+              mountPath: /tmp/raas-mgmt-nic-init.sh
+              subPath: raas-mgmt-nic-init.sh
+              readOnly: true
+            - name: run
+              mountPath: /run
+{{- end }}
       containers:
         - name: gitlab-runner
 {{ tuple $envAll "raas_gitlab_runner" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -81,6 +128,21 @@ spec:
       volumes:
         - name: pod-tmp
           emptyDir: {}
+{{- if .Values.network.mgmt.enabled }}
+        - name: pod-shared
+          emptyDir: {}
+        - name: raas-bin
+          configMap:
+            name: raas-bin
+            defaultMode: 0555
+        - name: raas-etc
+          secret:
+            secretName: raas-etc
+            defaultMode: 0444
+        - name: run
+          hostPath:
+            path: /run
+{{- end }}
         - name: gitlab-config
           persistentVolumeClaim:
             claimName: raas-gitlab-config

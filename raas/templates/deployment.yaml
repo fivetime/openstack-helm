@@ -41,6 +41,14 @@ spec:
         configmap-etc-hash: {{ tuple "secret-config.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
       serviceAccountName: {{ $serviceAccountName }}
+{{- if .Values.network.mgmt.enabled }}
+      # 管理网形态(Octavia 式):池机器只挂 ci-mgmt-net,编排器要连它们的
+      # agent(9443)与 buildkitd(1234),唯一的路是节点上插进 br-int 的
+      # 管理网口(r-mgmt0)—— 所以 hostNetwork,并且只能落在有 ovn-controller
+      # 的网络节点上(labels.raas 由 override 指到 openstack-network-node)。
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+{{- end }}
       affinity:
 {{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
@@ -51,6 +59,47 @@ spec:
 {{ dict "envAll" $envAll "application" "raas" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       initContainers:
 {{ tuple $envAll "orchestrator" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{- if .Values.network.mgmt.enabled }}
+        # 管理网两件套(照 octavia health-manager):取端口 → 插 br-int。
+        # 端口是**节点级**资源:pod 没了它还在,nic-init 全程幂等。
+        - name: raas-mgmt-get-port
+{{ tuple $envAll "raas_port_init" | include "helm-toolkit.snippets.image" | indent 10 }}
+          env:
+            - name: OS_CLOUD
+              value: {{ .Values.conf.raas.openstack.cloud }}
+            - name: OS_CLIENT_CONFIG_FILE
+              value: /etc/raas/clouds.yaml
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.credentials.raas }}
+                optional: true
+          command:
+            - /tmp/raas-mgmt-get-port.sh
+          volumeMounts:
+            - name: pod-shared
+              mountPath: /tmp/pod-shared
+            - name: raas-bin
+              mountPath: /tmp/raas-mgmt-get-port.sh
+              subPath: raas-mgmt-get-port.sh
+              readOnly: true
+            - name: raas-etc
+              mountPath: /etc/raas
+              readOnly: true
+        - name: raas-mgmt-nic-init
+{{ tuple $envAll "raas_nic_init" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "raas" "container" "raas_mgmt_nic_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/raas-mgmt-nic-init.sh
+          volumeMounts:
+            - name: pod-shared
+              mountPath: /tmp/pod-shared
+            - name: raas-bin
+              mountPath: /tmp/raas-mgmt-nic-init.sh
+              subPath: raas-mgmt-nic-init.sh
+              readOnly: true
+            - name: run
+              mountPath: /run
+{{- end }}
       containers:
         - name: raas
 {{ tuple $envAll "raas" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -123,6 +172,17 @@ spec:
         # 根文件系统只读,但 Go 的临时文件与 gophercloud 的缓存要可写。
         - name: pod-tmp
           emptyDir: {}
+{{- if .Values.network.mgmt.enabled }}
+        - name: pod-shared
+          emptyDir: {}
+        - name: raas-bin
+          configMap:
+            name: raas-bin
+            defaultMode: 0555
+        - name: run
+          hostPath:
+            path: /run
+{{- end }}
         - name: raas-etc
           secret:
             secretName: raas-etc

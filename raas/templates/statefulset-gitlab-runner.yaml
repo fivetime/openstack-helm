@@ -104,7 +104,12 @@ spec:
             - -c
             - |
               set -eu
-              SHARD="${HOSTNAME##*-}"
+              # 分片号取自**pod 名**,不是 $HOSTNAME:hostNetwork 下容器的
+              # hostname 是**节点名**(network1.cloud.local),推出来的分片号会变成
+              # "config-shard-network1.cloud.local.toml",而编排器写的是
+              # config-shard-0.toml —— runner 于是永远等下去,日志只说"等配置",
+              # 看不出与 hostNetwork 有关(2026-08-31 实测)。
+              SHARD="${POD_NAME##*-}"
               CFG="{{ .Values.conf.raas.gitlab.config_dir }}/config-shard-${SHARD}.toml"
               # 编排器生成配置。第一次部署时它可能还没写出来 —— 等,别退出:
               # CrashLoopBackOff 会把"配置还没生成"渲染成一个看起来很严重的故障。
@@ -118,6 +123,10 @@ spec:
                 --working-directory {{ .Values.conf.raas.gitlab.state_dir }} \
                 2>&1 | tee -a "{{ .Values.conf.raas.gitlab.runner_log_path }}"
           env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             # gitlab-runner 自己的日志格式。计费解析依赖它是 JSON:
             # Build.Log() 让每行自带 job / project / namespace,时间戳 RFC3339Nano。
             - name: LOG_FORMAT

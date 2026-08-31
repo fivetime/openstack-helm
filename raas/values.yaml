@@ -229,7 +229,12 @@ conf:
       token: null
     openstack:
       cloud: openstack_helm
-      network_id: internal
+      # 机器的出网网络由**租户在 Horizon 里选**(tenant_network 表)。这里留
+      # null:配了值就成了"租户没选网络"时的静默回落,而那正是管理网重构要
+      # 废掉的老形态。
+      # ⚠️ 默认值必须是 null,不能是某个网络名 —— **从 override 里删掉这个键
+      #    覆盖不掉 chart 默认值**,浮动 IP 那次就是这么漏出去的。
+      network_id: null
       # 浮动 IP 默认不分配:所有产品线都经 NAT 出网,没有一条需要入站可达的
       # 公网地址,而每台机器一个 FIP 是按机器数长期漏钱。只有要给某个部署固定
       # 入站地址时才填。

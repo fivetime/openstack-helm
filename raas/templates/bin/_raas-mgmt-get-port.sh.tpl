@@ -21,22 +21,42 @@ CREATE="${RAAS_MGMT_CREATE_PORT:-true}"
 # openstack CLI 要写 ~/.cache;容器以非 root 跑,家目录未必可写。
 export HOME=/tmp
 
-show_port() { openstack port show "$PORTNAME" -f json 2>/dev/null; }
+# stderr 落到文件而不是丢掉:"同名端口多于一个"或 Neutron 故障与"不存在"
+# 长得完全一样,吞掉它们就只剩瞎猜。
+show_port() { openstack port show "$PORTNAME" -f json 2>/tmp/pod-shared/get-port.err; }
 
-PORT_JSON=$(show_port || true)
-if [ -z "$PORT_JSON" ] && [ "$CREATE" = "true" ]; then
+create_port() {
     # 端口不带安全组(disable-port-security):这是**我们自己**这一端的口,
     # 入向没有任何人会主动连;省掉一份要跟着管理网走的 SG 维护。
     openstack port create --network "$NETWORK" --disable-port-security "$PORTNAME" || true
+}
+
+PORT_JSON=$(show_port || true)
+if [ -z "$PORT_JSON" ] && [ "$CREATE" = "true" ]; then
+    create_port
 fi
 for i in $(seq 1 60); do
     PORT_JSON=$(show_port || true)
     [ -n "$PORT_JSON" ] && break
-    echo "等待端口 $PORTNAME(由编排器 pod 创建)..."
+    echo "等待端口 $PORTNAME ..."
     sleep 5
 done
+if [ -z "$PORT_JSON" ] && [ "$CREATE" != "true" ]; then
+    # 只等不建的一侧(gitlab-runner)等穿了 5 分钟:别假设同节点必有编排器
+    # pod —— 加第三个网络节点后 runner 可能落在没有编排器的节点上,不兜底
+    # 就是每 5 分钟失败一次、永不自愈。等这么久再建,同名并发建的窗口已经
+    # 可以忽略。
+    echo "编排器迟迟没建端口,自己建"
+    create_port
+    for i in $(seq 1 12); do
+        PORT_JSON=$(show_port || true)
+        [ -n "$PORT_JSON" ] && break
+        sleep 5
+    done
+fi
 if [ -z "$PORT_JSON" ]; then
-    echo "ERROR: 端口 $PORTNAME 始终不存在"
+    echo "ERROR: 端口 $PORTNAME 始终拿不到;最后一次 show 的 stderr:"
+    cat /tmp/pod-shared/get-port.err 2>/dev/null || true
     exit 1
 fi
 

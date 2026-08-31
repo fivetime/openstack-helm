@@ -252,6 +252,12 @@ conf:
       publisher_id: raas.orchestrator
       sasl_mechanism: SCRAM-SHA-512
       ca_file: /etc/redpanda-ca/ca.crt
+    # GitLab 链路默认关。**这个键不能缺**:statefulset/pvc/deployment 三个模板
+    # 无保护地解引用 .Values.conf.raas.gitlab.enabled,缺了它 chart 用默认值
+    # 渲染直接 nil pointer —— helm lint/新环境裸装全炸,而线上带 override
+    # 一直正常,谁都看不见。
+    gitlab:
+      enabled: false
     # runs-on 标签目录来自云(flavor 的 raas:label / raas:os,镜像的 raas_os),
     # 不在配置里。编排器的配置解析是严格模式,这里出现 labels: 会起不来。
     tenants: {}
@@ -265,8 +271,6 @@ conf:
         auth: {}
 
 secrets:
-  identity:
-    raas: raas-keystone-user
   oci_image_registry:
     raas: raas-oci-image-registry-key
   # 数据库连接串经环境变量 RAAS_DSN 注入,不进配置文件 ——
@@ -331,15 +335,10 @@ endpoints:
         default: null
   identity:
     name: keystone
-    auth:
-      raas:
-        role: admin
-        region_name: RegionOne
-        username: raas
-        password: password
-        project_name: service
-        user_domain_name: service
-        project_domain_name: service
+    # 只留 dep-check 要的 hosts/port。曾经有一段 auth.raas(role/username/
+    # password/project_name: service/user_domain_name: service)—— 全 chart
+    # 没有任何消费方,而且**内容是错的**:线上 raas 用户在 default 域,不在
+    # service 域。死值最危险的形态就是"看起来像配置真相"。
     hosts:
       default: keystone
       internal: keystone-api

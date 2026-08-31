@@ -44,6 +44,10 @@ spec:
 {{ dict "envAll" $envAll "application" "gitlab_runner" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       nodeSelector:
         {{ .Values.labels.gitlab_runner.node_selector_key }}: {{ .Values.labels.gitlab_runner.node_selector_value }}
+{{- if and .Values.pod.tolerations.gitlab_runner.enabled .Values.pod.tolerations.gitlab_runner.tolerations }}
+      tolerations:
+{{ toYaml .Values.pod.tolerations.gitlab_runner.tolerations | indent 8 }}
+{{- end }}
 {{- if .Values.network.mgmt.enabled }}
       # manager 只能从管理网 SSH 进池机器 —— 与编排器同样的 hostNetwork +
       # 网络节点形态,共用节点上的 r-mgmt0(nic-init 幂等,谁先跑谁建)。

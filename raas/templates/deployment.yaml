@@ -49,6 +49,10 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
 {{- end }}
+{{- if and .Values.pod.tolerations.orchestrator.enabled .Values.pod.tolerations.orchestrator.tolerations }}
+      tolerations:
+{{ toYaml .Values.pod.tolerations.orchestrator.tolerations | indent 8 }}
+{{- end }}
       affinity:
 {{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:

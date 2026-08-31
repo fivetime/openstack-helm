@@ -84,6 +84,16 @@ pod:
           allowPrivilegeEscalation: false
           capabilities:
             drop: [ALL]
+  # 网络节点带 NoSchedule 污点(node-role.kubernetes.io/network)。管理网形态下
+  # 编排器与 gitlab-runner 必须落在那里(只有它们跑 ovn-controller),所以要容忍。
+  # ⚠️ 少了它 pod 直接 Pending,事件里只说"untolerated taint" —— 与管理网毫无关联。
+  tolerations:
+    orchestrator:
+      enabled: false
+      tolerations: []
+    gitlab_runner:
+      enabled: false
+      tolerations: []
   affinity:
     anti:
       type:

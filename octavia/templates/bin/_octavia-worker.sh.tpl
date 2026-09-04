@@ -11,10 +11,15 @@ start() {
   HM_PORT_IP=$(cat /tmp/pod-shared/HM_PORT_IP)
   HM_SUBNET_MASK=$(cat /tmp/pod-shared/HM_SUBNET_MASK)
 
-  ip addr flush dev o-w0
-  ip addr add ${HM_PORT_IP}/${HM_SUBNET_MASK} dev o-w0
-  ip link set dev o-w0 up
-  ip link set dev o-w0 mtu {{ .Values.network.health_manager.interface_mtu }}
+  # In the attached shape (network.lb_mgmt) there are no init containers
+  # and no o-w0: the management interface arrives from the CNI already
+  # configured, so the block below is skipped.
+  if [ -f /tmp/pod-shared/HM_PORT_IP ]; then
+    ip addr flush dev o-w0
+    ip addr add ${HM_PORT_IP}/${HM_SUBNET_MASK} dev o-w0
+    ip link set dev o-w0 up
+    ip link set dev o-w0 mtu {{ .Values.network.health_manager.interface_mtu }}
+  fi
 
   exec octavia-worker \
         --config-file /etc/octavia/octavia.conf \

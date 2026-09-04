@@ -108,6 +108,8 @@ network:
       #   mac: <neutron port mac>
       #   ip: <neutron port fixed ip>
       driver_agent: []
+      health_manager: []
+      worker: []
 
 dependencies:
   dynamic:

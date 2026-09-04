@@ -1,6 +1,4 @@
 {{/*
-Copyright 2019 Samsung Electronics Co., Ltd.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,6 +12,86 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
+{{/*
+The main container, shared by the two shapes below. The start script
+configures o-hm0 only when the init containers left an address in
+pod-shared; in the attached shape there are no init containers and the
+interface arrives configured.
+*/}}
+{{- define "octavia.health_manager.container" }}
+{{- $envAll := . }}
+{{- $mounts_octavia_health_manager := $envAll.Values.pod.mounts.octavia_health_manager.octavia_health_manager }}
+- name: octavia-health-manager
+{{ tuple $envAll "octavia_health_manager" | include "helm-toolkit.snippets.image" | indent 2 }}
+{{ tuple $envAll $envAll.Values.pod.resources.health_manager | include "helm-toolkit.snippets.kubernetes_resources" | indent 2 }}
+{{ dict "envAll" $envAll "application" "octavia_health_manager" "container" "octavia_health_manager" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 2 }}
+  command:
+    - /tmp/octavia-health-manager.sh
+    - start
+  lifecycle:
+    preStop:
+      exec:
+        command:
+          - /tmp/octavia-health-manager.sh
+          - stop
+  volumeMounts:
+    - name: oslo-lock-path
+      mountPath: {{ $envAll.Values.conf.octavia.oslo_concurrency.lock_path }}
+    - name: pod-etc-octavia
+      mountPath: /etc/octavia
+    - name: pod-shared
+      mountPath: /tmp/pod-shared
+      readOnly: true
+    - name: octavia-bin
+      mountPath: /tmp/octavia-health-manager.sh
+      subPath: octavia-health-manager.sh
+      readOnly: true
+    - name: octavia-etc
+      mountPath: /etc/octavia/octavia.conf
+      subPath: octavia.conf
+      readOnly: true
+    - name: octavia-etc-snippets
+      mountPath: /etc/octavia/octavia.conf.d/
+      readOnly: true
+    {{- if $envAll.Values.conf.octavia.DEFAULT.log_config_append }}
+    - name: octavia-etc
+      mountPath: {{ $envAll.Values.conf.octavia.DEFAULT.log_config_append }}
+      subPath: {{ base $envAll.Values.conf.octavia.DEFAULT.log_config_append }}
+      readOnly: true
+    {{- end }}
+{{ if $mounts_octavia_health_manager.volumeMounts }}{{ toYaml $mounts_octavia_health_manager.volumeMounts | indent 4 }}{{ end }}
+{{- end }}
+
+{{- define "octavia.health_manager.volumes" }}
+{{- $envAll := index . 0 }}
+{{- $configMapName := index . 1 }}
+{{- $mounts_octavia_health_manager := $envAll.Values.pod.mounts.octavia_health_manager.octavia_health_manager }}
+{{- $etcSources := $envAll.Values.pod.etcSources.octavia_health_manager }}
+- name: oslo-lock-path
+  emptyDir: {}
+- name: pod-etc-octavia
+  emptyDir: {}
+- name: octavia-bin
+  configMap:
+    name: octavia-bin
+    defaultMode: 0555
+- name: octavia-etc
+  secret:
+    secretName: {{ $configMapName }}
+    defaultMode: 0444
+- name: octavia-etc-snippets
+{{- if $etcSources }}
+  projected:
+    sources:
+{{ toYaml $etcSources | indent 6 }}
+{{- else }}
+  emptyDir: {}
+{{- end }}
+- name: pod-shared
+  emptyDir: {}
+{{ if $mounts_octavia_health_manager.volumes }}{{ toYaml $mounts_octavia_health_manager.volumes }}{{ end }}
+{{- end }}
+
 {{- define "octavia.health_manager.daemonset" }}
 {{- $daemonset := index . 0 }}
 {{- $configMapName := index . 1 }}
@@ -21,10 +99,7 @@ limitations under the License.
 {{- $envAll := index . 3 }}
 {{- with $envAll }}
 
-{{- $mounts_octavia_health_manager := .Values.pod.mounts.octavia_health_manager.octavia_health_manager }}
 {{- $mounts_octavia_health_manager_init := .Values.pod.mounts.octavia_health_manager.init_container }}
-
-{{- $etcSources := .Values.pod.etcSources.octavia_health_manager }}
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -55,12 +130,10 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       hostPID: true
-      # -------------- Add by Simon Start --------------
       {{- if and $envAll.Values.pod.tolerations.health_manager.enabled $envAll.Values.pod.tolerations.health_manager.tolerations }}
       tolerations:
       {{- toYaml $envAll.Values.pod.tolerations.health_manager.tolerations | nindent 8 }}
       {{- end }}
-      # -------------- Add by Simon End --------------
       nodeSelector:
         {{ .Values.labels.health_manager.node_selector_key }}: {{ .Values.labels.health_manager.node_selector_value }}
       initContainers:
@@ -97,73 +170,80 @@ spec:
             - name: run
               mountPath: /run
       containers:
-        - name: octavia-health-manager
-{{ tuple $envAll "octavia_health_manager" | include "helm-toolkit.snippets.image" | indent 10 }}
-{{ tuple $envAll $envAll.Values.pod.resources.health_manager | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
-{{ dict "envAll" $envAll "application" "octavia_health_manager" "container" "octavia_health_manager" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
-          command:
-            - /tmp/octavia-health-manager.sh
-            - start
-          lifecycle:
-            preStop:
-              exec:
-                command:
-                  - /tmp/octavia-health-manager.sh
-                  - stop
-          volumeMounts:
-            - name: oslo-lock-path
-              mountPath: {{ .Values.conf.octavia.oslo_concurrency.lock_path }}
-            - name: pod-etc-octavia
-              mountPath: /etc/octavia
-            - name: pod-shared
-              mountPath: /tmp/pod-shared
-              readOnly: true
-            - name: octavia-bin
-              mountPath: /tmp/octavia-health-manager.sh
-              subPath: octavia-health-manager.sh
-              readOnly: true
-            - name: octavia-etc
-              mountPath: /etc/octavia/octavia.conf
-              subPath: octavia.conf
-              readOnly: true
-            - name: octavia-etc-snippets
-              mountPath: /etc/octavia/octavia.conf.d/
-              readOnly: true
-            {{- if .Values.conf.octavia.DEFAULT.log_config_append }}
-            - name: octavia-etc
-              mountPath: {{ .Values.conf.octavia.DEFAULT.log_config_append }}
-              subPath: {{ base .Values.conf.octavia.DEFAULT.log_config_append }}
-              readOnly: true
-            {{- end }}
-{{ if $mounts_octavia_health_manager.volumeMounts }}{{ toYaml $mounts_octavia_health_manager.volumeMounts | indent 12 }}{{ end }}
+{{ include "octavia.health_manager.container" $envAll | indent 8 }}
       volumes:
-        - name: oslo-lock-path
-          emptyDir: {}
-        - name: pod-etc-octavia
-          emptyDir: {}
-        - name: octavia-bin
-          configMap:
-            name: octavia-bin
-            defaultMode: 0555
-        - name: octavia-etc
-          secret:
-            secretName: {{ $configMapName }}
-            defaultMode: 0444
-        - name: octavia-etc-snippets
-{{- if $etcSources }}
-          projected:
-            sources:
-{{ toYaml $etcSources | indent 14 }}
-{{- else }}
-          emptyDir: {}
-{{ end }}
-        - name: pod-shared
-          emptyDir: {}
+{{ list $envAll $configMapName | include "octavia.health_manager.volumes" | indent 8 }}
         - name: run
           hostPath:
             path: /run
-{{ if $mounts_octavia_health_manager.volumes }}{{ toYaml $mounts_octavia_health_manager.volumes | indent 8 }}{{ end }}
 {{- end }}
+{{- end }}
+
+{{/*
+The attached shape: one single-replica Deployment per pre-created Neutron
+port on the management network, reached through Multus and ovs-cni (see
+network.lb_mgmt). No hostNetwork, no node pinning, no init containers
+plugging a host interface; strategy Recreate because a slot owns one
+logical switch port and a RollingUpdate would have two pods bind it.
+*/}}
+{{- define "octavia.health_manager.attached" }}
+{{- $envAll := index . 0 }}
+{{- $configMapName := index . 1 }}
+{{- $serviceAccountName := index . 2 }}
+{{- $slot := index . 3 }}
+{{- $lbMgmt := $envAll.Values.network.lb_mgmt }}
+{{- $mounts_octavia_health_manager_init := $envAll.Values.pod.mounts.octavia_health_manager.init_container }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: octavia-health-manager-{{ $slot.name }}
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "octavia" "health_manager" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+    octavia-health-manager-slot: {{ $slot.name | quote }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ tuple $envAll "octavia" "health_manager" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+      octavia-health-manager-slot: {{ $slot.name | quote }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "octavia" "health_manager" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+        octavia-health-manager-slot: {{ $slot.name | quote }}
+      annotations:
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" $envAll | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" $envAll | include "helm-toolkit.utils.hash" }}
+        {{- $network := dict "name" $lbMgmt.nad_name "namespace" ($lbMgmt.nad_namespace | default $envAll.Release.Namespace) "mac" $slot.mac "ips" (list (printf "%s/%d" $slot.ip (int $lbMgmt.prefix_length))) "cni-args" (dict "OvnPort" $slot.port_id) }}
+        k8s.v1.cni.cncf.io/networks: {{ list $network | toJson | quote }}
+{{ tuple "octavia_health_manager" $envAll | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+    spec:
+{{ tuple "octavia_health_manager" $envAll | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "octavia_health_manager" $envAll | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "octavia_health_manager" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      {{- if and $envAll.Values.pod.tolerations.health_manager.enabled $envAll.Values.pod.tolerations.health_manager.tolerations }}
+      tolerations:
+      {{- toYaml $envAll.Values.pod.tolerations.health_manager.tolerations | nindent 8 }}
+      {{- end }}
+      affinity:
+{{ tuple $envAll "octavia" "health_manager" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      initContainers:
+{{ tuple $envAll "health_manager" $mounts_octavia_health_manager_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+{{ include "octavia.health_manager.container" $envAll | indent 8 }}
+          resources:
+            requests:
+              {{ $lbMgmt.resource_name }}: "1"
+            limits:
+              {{ $lbMgmt.resource_name }}: "1"
+      volumes:
+{{ list $envAll $configMapName | include "octavia.health_manager.volumes" | indent 8 }}
 {{- end }}
 
 {{- if .Values.manifests.daemonset_health_manager }}
@@ -176,7 +256,14 @@ spec:
 {{- $_ := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
 
 {{ tuple $envAll "health_manager" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- $slots := .Values.network.lb_mgmt.attachments.health_manager | default list }}
+{{- if $slots }}
+{{- range $slot := $slots }}
+{{ list $envAll $configMapName $serviceAccountName $slot | include "octavia.health_manager.attached" }}
+{{- end }}
+{{- else }}
 {{- $daemonset_yaml := list $daemonset $configMapName $serviceAccountName . | include "octavia.health_manager.daemonset" | toString | fromYaml }}
 {{- $configmap_yaml := "octavia.configmap.etc" }}
 {{- list $daemonset $daemonset_yaml $configmap_yaml $configMapName . | include "helm-toolkit.utils.daemonset_overrides" }}
+{{- end }}
 {{- end }}

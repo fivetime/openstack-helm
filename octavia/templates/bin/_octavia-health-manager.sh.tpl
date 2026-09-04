@@ -20,17 +20,21 @@ set -ex
 COMMAND="${@:-start}"
 
 start() {
-  # 从共享目录读取网络配置信息
-  HM_PORT_IP=$(cat /tmp/pod-shared/HM_PORT_IP)
-  HM_SUBNET_MASK=$(cat /tmp/pod-shared/HM_SUBNET_MASK)
-
-  # 静态配置网络接口
-  ip addr flush dev o-hm0
-  ip addr add ${HM_PORT_IP}/${HM_SUBNET_MASK} dev o-hm0
-  ip link set dev o-hm0 up
+  # The init containers of the hostNetwork shape leave the port's address
+  # in pod-shared and this configures o-hm0 from it. In the attached
+  # shape (network.lb_mgmt) there are no init containers: the management
+  # interface arrives from the CNI already configured, and there is
+  # nothing here to do.
+  if [ -f /tmp/pod-shared/HM_PORT_IP ]; then
+    HM_PORT_IP=$(cat /tmp/pod-shared/HM_PORT_IP)
+    HM_SUBNET_MASK=$(cat /tmp/pod-shared/HM_SUBNET_MASK)
+    ip addr flush dev o-hm0
+    ip addr add ${HM_PORT_IP}/${HM_SUBNET_MASK} dev o-hm0
+    ip link set dev o-hm0 up
 {{- if .Values.network.health_manager.interface_mtu }}
-  ip link set dev o-hm0 mtu {{ .Values.network.health_manager.interface_mtu }}
+    ip link set dev o-hm0 mtu {{ .Values.network.health_manager.interface_mtu }}
 {{- end }}
+  fi
 
   # 启动 Octavia 健康管理器
   exec octavia-health-manager \

@@ -52,8 +52,9 @@ spec:
 {{ tuple "octavia_housekeeping" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
 {{ dict "envAll" $envAll "application" "octavia_housekeeping" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
-      dnsPolicy: ClusterFirstWithHostNet
-      hostNetwork: true
+      # No hostNetwork: housekeeping talks to the database and the APIs,
+      # never to the management network, so it never needed the node's
+      # netns -- it only inherited it from the components that did.
       affinity:
 {{ tuple $envAll "octavia" "housekeeping" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       # -------------- Add by Simon Start --------------

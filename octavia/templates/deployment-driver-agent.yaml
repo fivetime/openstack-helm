@@ -19,45 +19,75 @@ limitations under the License.
 {{- define "octaviaDriverAgentReadinessProbeTemplate" }}
 {{- end }}
 
-{{- if .Values.manifests.deployment_driver_agent }}
-{{- $envAll := . }}
+{{/*
+One driver-agent Deployment. Called once with no slot for the legacy
+shape (hostNetwork on a node that owns o-hm0), or once per entry of
+network.lb_mgmt.attachments.driver_agent for the attachment shape, where
+the pod gets its own interface on the management network through Multus
+and ovs-cni and can run on any OVN chassis node.
 
-{{- $mounts_octavia_driver_agent := .Values.pod.mounts.octavia_driver_agent.octavia_driver_agent }}
-{{- $mounts_octavia_driver_agent_init := .Values.pod.mounts.octavia_driver_agent.init_container }}
-
+The two shapes differ in exactly the places the management-network
+reachability used to force: hostNetwork, dnsPolicy, nodeSelector, the
+/run/openvswitch hostPath, and the update strategy -- a slot owns one
+Neutron port, and a RollingUpdate would have the old and the new pod bind
+the same logical switch port at once, so a slot recreates.
+*/}}
+{{- define "octavia.driver_agent.deployment" }}
+{{- $envAll := .envAll }}
+{{- $slot := .slot }}
+{{- $lbMgmt := $envAll.Values.network.lb_mgmt }}
+{{- $mounts_octavia_driver_agent := $envAll.Values.pod.mounts.octavia_driver_agent.octavia_driver_agent }}
+{{- $mounts_octavia_driver_agent_init := $envAll.Values.pod.mounts.octavia_driver_agent.init_container }}
 {{- $serviceAccountName := "octavia-driver-agent" }}
-{{ tuple $envAll "driver_agent" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
-
-{{- $etcSources := .Values.pod.etcSources.octavia_driver_agent }}
+{{- $etcSources := $envAll.Values.pod.etcSources.octavia_driver_agent }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: octavia-driver-agent
+  name: octavia-driver-agent{{ if $slot }}-{{ $slot.name }}{{ end }}
   annotations:
     {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
   labels:
 {{ tuple $envAll "octavia" "driver_agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{- if $slot }}
+    octavia-driver-agent-slot: {{ $slot.name | quote }}
+{{- end }}
 spec:
-  replicas: {{ .Values.pod.replicas.driver_agent }}
+{{- if $slot }}
+  replicas: 1
+  strategy:
+    type: Recreate
+{{- else }}
+  replicas: {{ $envAll.Values.pod.replicas.driver_agent }}
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+{{- end }}
   selector:
     matchLabels:
 {{ tuple $envAll "octavia" "driver_agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
-{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+{{- if $slot }}
+      octavia-driver-agent-slot: {{ $slot.name | quote }}
+{{- end }}
   template:
     metadata:
       labels:
 {{ tuple $envAll "octavia" "driver_agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+{{- if $slot }}
+        octavia-driver-agent-slot: {{ $slot.name | quote }}
+{{- end }}
       annotations:
-        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
-{{ tuple "octavia_driver_agent" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" $envAll | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" $envAll | include "helm-toolkit.utils.hash" }}
+{{- if $slot }}
+        {{- $network := dict "name" $lbMgmt.nad_name "namespace" ($lbMgmt.nad_namespace | default $envAll.Release.Namespace) "mac" $slot.mac "ips" (list (printf "%s/%d" $slot.ip (int $lbMgmt.prefix_length))) "cni-args" (dict "OvnPort" $slot.port_id) }}
+        k8s.v1.cni.cncf.io/networks: {{ list $network | toJson | quote }}
+{{- end }}
+{{ tuple "octavia_driver_agent" $envAll | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
-{{ tuple "octavia_driver_agent" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
-{{ tuple "octavia_driver_agent" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
+{{ tuple "octavia_driver_agent" $envAll | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "octavia_driver_agent" $envAll | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
 {{ dict "envAll" $envAll "application" "octavia_driver_agent" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
-      # -------------- Add by Simon Start --------------
+{{- if not $slot }}
       # The provider agents run in this process and must be reachable from the
       # Neutron management network: workers get no default route (the
       # management subnet deliberately has no gateway), so they can only talk
@@ -65,21 +95,41 @@ spec:
       # in the node's netns, where o-hm0 lives.
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+{{- end }}
       {{- if and $envAll.Values.pod.tolerations.driver_agent.enabled $envAll.Values.pod.tolerations.driver_agent.tolerations }}
       tolerations:
       {{- toYaml $envAll.Values.pod.tolerations.driver_agent.tolerations | nindent 8 }}
       {{- end }}
-      # -------------- Add by Simon End --------------
       affinity:
 {{ tuple $envAll "octavia" "driver_agent" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+{{- if not $slot }}
       nodeSelector:
-        {{ .Values.labels.driver_agent.node_selector_key }}: {{ .Values.labels.driver_agent.node_selector_value }}
+        {{ $envAll.Values.labels.driver_agent.node_selector_key }}: {{ $envAll.Values.labels.driver_agent.node_selector_value }}
+{{- end }}
       initContainers:
 {{ tuple $envAll "driver_agent" $mounts_octavia_driver_agent_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: octavia-driver-agent
 {{ tuple $envAll "octavia_driver_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{- if $slot }}
+          {{- /* The bridge resource is what places the pod on a node that has
+                 br-int and Multus; it is asked for whether or not the chart's
+                 own resource accounting is on. */}}
+          {{- $bridge := dict $lbMgmt.resource_name "1" }}
+          {{- $requests := $bridge }}
+          {{- $limits := $bridge }}
+          {{- if $envAll.Values.pod.resources.enabled }}
+          {{- $requests = merge (dict) $bridge ($envAll.Values.pod.resources.driver_agent.requests | default dict) }}
+          {{- $limits = merge (dict) $bridge ($envAll.Values.pod.resources.driver_agent.limits | default dict) }}
+          {{- end }}
+          resources:
+            requests:
+{{ toYaml $requests | indent 14 }}
+            limits:
+{{ toYaml $limits | indent 14 }}
+{{- else }}
 {{ tuple $envAll $envAll.Values.pod.resources.driver_agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{- end }}
 {{ dict "envAll" $envAll "application" "octavia_driver_agent" "container" "octavia_driver_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
           command:
             - octavia-driver-agent
@@ -91,7 +141,7 @@ spec:
             - name: pod-tmp
               mountPath: /tmp
             - name: oslo-lock-path
-              mountPath: {{ .Values.conf.octavia.oslo_concurrency.lock_path }}
+              mountPath: {{ $envAll.Values.conf.octavia.oslo_concurrency.lock_path }}
             - name: pod-etc-octavia
               mountPath: /etc/octavia
             - name: octavia-etc
@@ -101,16 +151,18 @@ spec:
             - name: octavia-etc-snippets
               mountPath: /etc/octavia/octavia.conf.d/
               readOnly: true
-            {{- if .Values.conf.octavia.DEFAULT.log_config_append }}
+            {{- if $envAll.Values.conf.octavia.DEFAULT.log_config_append }}
             - name: octavia-etc
-              mountPath: {{ .Values.conf.octavia.DEFAULT.log_config_append }}
-              subPath: {{ base .Values.conf.octavia.DEFAULT.log_config_append }}
+              mountPath: {{ $envAll.Values.conf.octavia.DEFAULT.log_config_append }}
+              subPath: {{ base $envAll.Values.conf.octavia.DEFAULT.log_config_append }}
               readOnly: true
             {{- end }}
             - name: octavia-driver-agents
               mountPath: /var/run/octavia
+{{- if not $slot }}
             - name: run-openvswitch
               mountPath: /var/run/ovn
+{{- end }}
 {{ if $mounts_octavia_driver_agent.volumeMounts }}{{ toYaml $mounts_octavia_driver_agent.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: pod-tmp
@@ -119,10 +171,12 @@ spec:
           emptyDir: {}
         - name: pod-etc-octavia
           emptyDir: {}
+{{- if not $slot }}
         - name: run-openvswitch
           hostPath:
             path: /run/openvswitch
             type: DirectoryOrCreate
+{{- end }}
         - name: octavia-driver-agents
           emptyDir: {}
         - name: octavia-bin
@@ -142,4 +196,18 @@ spec:
           emptyDir: {}
 {{ end }}
 {{ if $mounts_octavia_driver_agent.volumes }}{{ toYaml $mounts_octavia_driver_agent.volumes | indent 8 }}{{ end }}
+{{- end }}
+
+{{- if .Values.manifests.deployment_driver_agent }}
+{{- $envAll := . }}
+{{- $serviceAccountName := "octavia-driver-agent" }}
+{{ tuple $envAll "driver_agent" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- $slots := .Values.network.lb_mgmt.attachments.driver_agent | default list }}
+{{- if $slots }}
+{{- range $slot := $slots }}
+{{ include "octavia.driver_agent.deployment" (dict "envAll" $envAll "slot" $slot) }}
+{{- end }}
+{{- else }}
+{{ include "octavia.driver_agent.deployment" (dict "envAll" $envAll "slot" nil) }}
+{{- end }}
 {{- end }}

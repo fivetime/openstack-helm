@@ -88,6 +88,26 @@ network:
     interface_mtu: null
   worker:
     interface_mtu: null
+  # The management network as a secondary pod interface, through Multus and
+  # ovs-cni, instead of a host interface the pod has to share a netns with.
+  # A pod attached this way can run on any OVN chassis node: the ovs-cni
+  # marker publishes the bridge as a node resource, and asking for it is
+  # what places the pod. Each entry of attachments.<component> is one
+  # pre-created Neutron port on the management network and becomes one
+  # single-replica Deployment named after it; nothing here is used while
+  # the lists are empty, and the legacy hostNetwork shape renders instead.
+  lb_mgmt:
+    nad_name: lb-mgmt
+    nad_namespace: null
+    bridge: br-int
+    resource_name: ovs-cni.network.kubevirt.io/br-int
+    prefix_length: 108
+    attachments:
+      # - name: a
+      #   port_id: <neutron port uuid>
+      #   mac: <neutron port mac>
+      #   ip: <neutron port fixed ip>
+      driver_agent: []
 
 dependencies:
   dynamic:
@@ -897,6 +917,7 @@ manifests:
   deployment_api: true
   deployment_driver_agent: true
   deployment_housekeeping: true
+  network_attachment_definition: false
   job_bootstrap: true
   job_db_init: true
   job_db_sync: true

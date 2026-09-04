@@ -2275,6 +2275,16 @@ pod:
             failureThreshold: 3
             periodSeconds: 90
             timeoutSeconds: 70
+        startup:
+          # Startup RPC failure is safe to restart: nova-compute has not yet
+          # registered or begun consuming instance lifecycle work. Unlike a
+          # runtime liveness probe, this cannot interrupt a long migration.
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            failureThreshold: 6
+            periodSeconds: 90
+            timeoutSeconds: 70
     api-metadata:
       default:
         liveness:

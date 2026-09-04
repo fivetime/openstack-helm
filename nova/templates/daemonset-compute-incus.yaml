@@ -63,6 +63,10 @@ exec:
 {{- end }}
 {{- end }}
 
+{{- define "novaComputeIncusStartupProbeTemplate" }}
+{{ include "novaComputeIncusReadinessProbeTemplate" . }}
+{{- end }}
+
 {{- if .Values.manifests.daemonset_compute_incus }}
 {{- $envAll := . }}
 {{- $_ := required "images.tags.nova_compute_incus is required when manifests.daemonset_compute_incus=true" .Values.images.tags.nova_compute_incus }}
@@ -283,6 +287,12 @@ spec:
 {{- else }}
               rm -f /run/nova-incus/nova-compute-fqdn.conf
 {{- end }}
+              cat > /run/nova-incus/nova-compute-messaging.conf <<EOF
+              [oslo_messaging_rabbit]
+              # Work around oslo.messaging bug 2110957. The stable QManager
+              # reply queue can lose its consumer during process transitions.
+              use_queue_manager = false
+              EOF
           volumeMounts:
             - name: varlibnova-incus
               mountPath: /var/lib/nova
@@ -394,6 +404,8 @@ spec:
             - /etc/nova/nova-incus.conf
             - --config-dir
             - /etc/nova/nova.conf.d
+            - --config-file
+            - /run/nova-incus/nova-compute-messaging.conf
 {{- if and (empty .Values.conf.nova.DEFAULT.host) (.Values.pod.use_fqdn.compute) }}
             - --config-file
             - /run/nova-incus/nova-compute-fqdn.conf
@@ -404,6 +416,7 @@ spec:
 {{- end }}
 {{ dict "envAll" $envAll "component" "compute_incus" "container" "default" "type" "liveness" "probeTemplate" (include "novaComputeIncusLivenessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
 {{ dict "envAll" $envAll "component" "compute_incus" "container" "default" "type" "readiness" "probeTemplate" (include "novaComputeIncusReadinessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+{{ dict "envAll" $envAll "component" "compute_incus" "container" "default" "type" "startup" "probeTemplate" (include "novaComputeIncusStartupProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp

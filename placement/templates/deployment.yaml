@@ -14,7 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- define "placementApiProbeTemplate" }}
+{{- define "placementLivenessProbeTemplate" }}
+httpGet:
+  scheme: {{ tuple "placement" "service" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_scheme_lookup" | upper }}
+  path: /
+  {{- if .Values.pod.probes.placement.api.liveness.port }}
+  port: {{ .Values.pod.probes.placement.api.liveness.port }}
+  {{- else }}
+  port: {{ tuple "placement" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+  {{- end }}
+{{- end }}
+
+{{- define "placementReadinessProbeTemplate" }}
 httpGet:
   scheme: {{ tuple "placement" "service" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_scheme_lookup" | upper }}
   path: /
@@ -103,9 +114,8 @@ spec:
           ports:
             - name: p-api
               containerPort: {{ tuple "placement" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-{{ dict "envAll" $envAll "component" "api" "container" "placement-api" "type" "startup" "probeTemplate" (include "placementApiProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
-{{ dict "envAll" $envAll "component" "api" "container" "placement-api" "type" "readiness" "probeTemplate" (include "placementApiProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
-{{ dict "envAll" $envAll "component" "api" "container" "placement-api" "type" "liveness" "probeTemplate" (include "placementApiProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+{{ dict "envAll" $envAll "component" "placement" "container" "api" "type" "readiness" "probeTemplate" (include "placementReadinessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+{{ dict "envAll" $envAll "component" "placement" "container" "api" "type" "liveness" "probeTemplate" (include "placementLivenessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp

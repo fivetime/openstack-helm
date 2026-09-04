@@ -405,6 +405,7 @@ conf:
       exit-on-reload: false
       hook-master-start: unix_signal:15 gracefully_kill_them_all
       lazy-apps: true
+      need-app: true
       log-x-forwarded-for: true
       master: true
       procname-prefix-spaced: "octavia-api:"

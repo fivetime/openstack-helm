@@ -244,6 +244,7 @@ spec:
               {{ $lbMgmt.resource_name }}: "1"
             limits:
               {{ $lbMgmt.resource_name }}: "1"
+{{ list $envAll $slot.ip | include "octavia.lb_mgmt.readiness" | indent 10 }}
       volumes:
 {{ list $envAll $configMapName | include "octavia.worker.volumes" | indent 8 }}
 {{- end }}

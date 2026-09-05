@@ -127,6 +127,7 @@ spec:
 {{ toYaml $requests | indent 14 }}
             limits:
 {{ toYaml $limits | indent 14 }}
+{{ list $envAll $slot.ip | include "octavia.lb_mgmt.readiness" | indent 10 }}
 {{- else }}
 {{ tuple $envAll $envAll.Values.pod.resources.driver_agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
 {{- end }}

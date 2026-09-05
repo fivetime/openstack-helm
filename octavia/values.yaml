@@ -110,6 +110,22 @@ network:
       driver_agent: []
       health_manager: []
       worker: []
+    # Readiness for the attached pods, which otherwise show nothing at all
+    # when their ovs-cni port does not survive the node's openvswitch
+    # restarting. See templates/_lb-mgmt-probe.tpl for what it can and
+    # cannot tell you. Turned off on its own if no driver agent attachment
+    # is configured, since the probe has nothing to aim at.
+    probe:
+      enabled: true
+      # The heartbeat receiver's port: a connect is all that is wanted, and
+      # the receiver charges nothing for one that goes no further.
+      port: 9444
+      initial_delay: 30
+      period: 30
+      timeout: 5
+      # Three periods of silence, so a peer being replaced during a rollout
+      # does not read as a partition.
+      failure_threshold: 3
 
 dependencies:
   dynamic:

@@ -132,6 +132,16 @@ pod:
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 5
+        # startup 探针挡在 liveness 前面:编排器启动要向 Nova 逐个拉 flavor extra specs,
+        # 平台慢的时候(2026-09-05 放量,nova-api 热插一半超时)启动超过 2 分钟,
+        # liveness 30s+3×30s 就把还在初始化的容器杀了,进入重启循环。
+        # 这里给 10 分钟:启动没完成前 liveness 不介入。
+        startup:
+          enabled: true
+          params:
+            periodSeconds: 10
+            failureThreshold: 60
+            timeoutSeconds: 5
   resources:
     enabled: false
     orchestrator:

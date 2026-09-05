@@ -183,6 +183,13 @@ spec:
               port: {{ $envAll.Values.network.orchestrator.port }}
 {{ toYaml $envAll.Values.pod.probes.orchestrator.raas.liveness.params | indent 12 }}
 {{- end }}
+{{- if $envAll.Values.pod.probes.orchestrator.raas.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: {{ $envAll.Values.network.orchestrator.port }}
+{{ toYaml $envAll.Values.pod.probes.orchestrator.raas.startup.params | indent 12 }}
+{{- end }}
           volumeMounts:
             - name: raas-etc
               mountPath: /etc/raas

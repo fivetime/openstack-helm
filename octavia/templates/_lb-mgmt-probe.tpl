@@ -15,18 +15,32 @@ same dead interface, and only replacing the pod gets a new port. A liveness
 probe here would crash-loop forever instead of recovering, which is why this
 is readiness.
 
-The test is a TCP connect to the other attached agents on the management
-network, ready if any one of them answers. Reading it: one pod not ready
-points at that pod, and replacing it is the fix. Every pod not ready points
-at the management network itself, and the pods are the messenger.
+Two tests, and a pod is ready if either passes.
 
-The port is the heartbeat receiver's. A bare connect that never completes the
-TLS handshake is what it is meant to be -- the receiver hands the handshake
-to a worker thread and logs a failure at debug, so probing costs the peer
-nothing and cannot wedge its accept loop.
+The first is local and is what tells one broken pod apart from a broken
+network: has this interface received anything since the last look. Workers
+push heartbeats to every driver agent every couple of seconds, so on a live
+interface the counter always moves, and on an orphaned port it stops dead.
+Nothing about it depends on any other pod being well.
 
-Call as: list $envAll $ownAddress -- the pod leaves itself out, because a
-pod always reaches its own address whether or not the bridge port exists.
+The second is a TCP connect to the other attached agents, for the pods that
+legitimately receive nothing -- a health manager with no amphorae has a
+silent interface all day. The port is the heartbeat receiver's, which hands
+the handshake to a worker thread and logs a failure at debug, so a connect
+that goes no further costs the peer nothing and cannot wedge its accept
+loop. A pod leaves its own address out, because it reaches that whether or
+not the bridge port exists.
+
+The local test came second and had to. With it, the peer test alone marked
+both driver agents not ready when one of them lost its port -- each has only
+the other to aim at -- which pointed at the network rather than at the pod
+that was actually broken. Measured in a fault injection on production, and
+the reason the counter is read at all.
+
+Reading it: one pod not ready points at that pod, and replacing it is the
+fix. Every pod not ready points at the management network itself.
+
+Call as: list $envAll $ownAddress
 */}}
 {{- define "octavia.lb_mgmt.readiness" -}}
 {{- $envAll := index . 0 -}}
@@ -40,14 +54,33 @@ pod always reaches its own address whether or not the bridge port exists.
 {{- $targets = append $targets $slot.ip -}}
 {{- end -}}
 {{- end -}}
-{{- if $targets }}
 readinessProbe:
   exec:
     command:
       - python3
       - -c
       - |
-        import socket, sys
+        import json, socket, sys, time
+        seen = '/tmp/.lb-mgmt-probe'
+        counter = '/sys/class/net/{{ $probe.interface }}/statistics/rx_packets'
+        try:
+            received = int(open(counter).read())
+        except (OSError, ValueError):
+            received = None
+        if received is not None:
+            try:
+                before = json.load(open(seen))['received']
+            except Exception:
+                # Nothing to compare against yet: say so by passing, and
+                # leave the peer test to speak for the first interval.
+                before = -1
+            try:
+                json.dump({'received': received, 'at': time.time()},
+                          open(seen, 'w'))
+            except OSError:
+                pass
+            if received > before:
+                sys.exit(0)
         for target in sys.argv[1:]:
             try:
                 socket.create_connection(
@@ -63,6 +96,5 @@ readinessProbe:
   periodSeconds: {{ $probe.period }}
   timeoutSeconds: {{ add $probe.timeout 5 }}
   failureThreshold: {{ $probe.failure_threshold }}
-{{- end }}
 {{- end -}}
 {{- end -}}

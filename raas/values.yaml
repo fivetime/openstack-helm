@@ -171,8 +171,20 @@ network:
   mgmt:
     enabled: false
     network: ci-mgmt-net
-    interface: r-mgmt0
     mtu: 1442
+    # ---- attachment 形态(Octavia 式,推荐):Pod 经 Multus + ovs-cni 挂 net1 ----
+    # 一槽一 Pod:每个槽位是一个预建的 Neutron 端口(ci-mgmt-net)。attachments 非空时
+    # 编排器按槽位渲染成 raas-orchestrator-<name>(replicas 1、Recreate),不再 hostNetwork。
+    nad_name: raas-mgmt
+    nad_namespace: null
+    bridge: br-int
+    resource_name: ovs-cni.network.kubevirt.io/br-int
+    prefix_length: 108
+    attachments:
+      orchestrator: []      # - {name: a, port_id: <uuid>, mac: fa:16:3e:.., ip: fc00:f:2:1:2::..}
+      gitlab_runner: []     # 目前只支持 1 个槽位(shards: 1)
+    # ---- 旧形态(attachments 为空时):hostNetwork + 节点上的 OVS internal 口 ----
+    interface: r-mgmt0
   ingress:
     # GitHub 必须够得着 webhook,所以这是本仓库里唯一一个需要公网入口的
     # chart。走 cilium Ingress 而不是 Gateway API,理由:
@@ -381,6 +393,7 @@ volume:
 
 manifests:
   configmap_bin: true
+  network_attachment_definition: true
   # GitLab 链路的两个对象。它们还各自受 conf.raas.gitlab.enabled 约束 ——
   # 只装了 GitHub 的部署不该被迫建出一个空跑的 runner。
   pvc_gitlab_config: true

@@ -12,36 +12,63 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.deployment }}
-{{- $envAll := . }}
-
+{{/*
+编排器 Deployment。两种形态(架构文档 §4.6):
+  - attachment(推荐):network.mgmt.attachments.orchestrator 每个槽位渲染一个
+    raas-orchestrator-<name>,replicas 1、Recreate,Pod 经 Multus + ovs-cni 挂管理网卡 net1,
+    绑该槽位预建的 Neutron 端口。不 hostNetwork,可落在任一 OVN chassis 节点。
+  - 旧形态(attachments 为空):hostNetwork 跑在网络节点上,init 容器建 r-mgmt0。
+*/}}
+{{- define "raas.orchestrator.deployment" }}
+{{- $envAll := .envAll }}
+{{- $slot := .slot }}
+{{- $mgmt := $envAll.Values.network.mgmt }}
 {{- $serviceAccountName := "raas-orchestrator" }}
-{{ tuple $envAll "orchestrator" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: raas-orchestrator
+  name: raas-orchestrator{{ if $slot }}-{{ $slot.name }}{{ end }}
   annotations:
     {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
   labels:
 {{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{- if $slot }}
+    raas-orchestrator-slot: {{ $slot.name | quote }}
+{{- end }}
 spec:
-  replicas: {{ .Values.pod.replicas.orchestrator }}
+{{- if $slot }}
+  # 一个槽位独占一个逻辑口:新旧 Pod 同时绑同一个 lport 会互抢,所以 Recreate。
+  replicas: 1
+  strategy:
+    type: Recreate
+{{- else }}
+  replicas: {{ $envAll.Values.pod.replicas.orchestrator }}
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+{{- end }}
   selector:
     matchLabels:
 {{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
-{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+{{- if $slot }}
+      raas-orchestrator-slot: {{ $slot.name | quote }}
+{{- end }}
   template:
     metadata:
       labels:
 {{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+{{- if $slot }}
+        raas-orchestrator-slot: {{ $slot.name | quote }}
+{{- end }}
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
-        configmap-etc-hash: {{ tuple "secret-config.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "secret-config.yaml" $envAll | include "helm-toolkit.utils.hash" }}
+{{- if $slot }}
+        {{- $network := dict "name" $mgmt.nad_name "namespace" ($mgmt.nad_namespace | default $envAll.Release.Namespace) "mac" $slot.mac "ips" (list (printf "%s/%d" $slot.ip (int $mgmt.prefix_length))) "cni-args" (dict "OvnPort" $slot.port_id) }}
+        k8s.v1.cni.cncf.io/networks: {{ list $network | toJson | quote }}
+{{- end }}
     spec:
       serviceAccountName: {{ $serviceAccountName }}
-{{- if .Values.network.mgmt.enabled }}
+{{- if and $envAll.Values.network.mgmt.enabled (not $slot) }}
       # 管理网形态(Octavia 式):池机器只挂 ci-mgmt-net,编排器要连它们的
       # agent(9443)与 buildkitd(1234),唯一的路是节点上插进 br-int 的
       # 管理网口(r-mgmt0)—— 所以 hostNetwork,并且只能落在有 ovn-controller
@@ -49,33 +76,33 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
 {{- end }}
-{{- if and .Values.pod.tolerations.orchestrator.enabled .Values.pod.tolerations.orchestrator.tolerations }}
+{{- if and $envAll.Values.pod.tolerations.orchestrator.enabled $envAll.Values.pod.tolerations.orchestrator.tolerations }}
       tolerations:
-{{ toYaml .Values.pod.tolerations.orchestrator.tolerations | indent 8 }}
+{{ toYaml $envAll.Values.pod.tolerations.orchestrator.tolerations | indent 8 }}
 {{- end }}
       affinity:
 {{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
-        {{ .Values.labels.raas.node_selector_key }}: {{ .Values.labels.raas.node_selector_value | quote }}
+        {{ $envAll.Values.labels.raas.node_selector_key }}: {{ $envAll.Values.labels.raas.node_selector_value | quote }}
       # 关闭时先停止接收 webhook,再等在途的开机/销毁跑完。进程收到 SIGTERM
       # 后会 orch.Wait();杀早了会留下半途创建的虚拟机和浮动 IP。
-      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.orchestrator.timeout }}
+      terminationGracePeriodSeconds: {{ $envAll.Values.pod.lifecycle.termination_grace_period.orchestrator.timeout }}
 {{ dict "envAll" $envAll "application" "raas" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       initContainers:
 {{ tuple $envAll "orchestrator" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
-{{- if .Values.network.mgmt.enabled }}
+{{- if and $envAll.Values.network.mgmt.enabled (not $slot) }}
         # 管理网两件套(照 octavia health-manager):取端口 → 插 br-int。
         # 端口是**节点级**资源:pod 没了它还在,nic-init 全程幂等。
         - name: raas-mgmt-get-port
 {{ tuple $envAll "raas_port_init" | include "helm-toolkit.snippets.image" | indent 10 }}
           env:
             - name: OS_CLOUD
-              value: {{ .Values.conf.raas.openstack.cloud }}
+              value: {{ $envAll.Values.conf.raas.openstack.cloud }}
             - name: OS_CLIENT_CONFIG_FILE
               value: /etc/raas/clouds.yaml
           envFrom:
             - secretRef:
-                name: {{ .Values.secrets.credentials.raas }}
+                name: {{ $envAll.Values.secrets.credentials.raas }}
                 optional: true
           command:
             - /tmp/raas-mgmt-get-port.sh
@@ -115,13 +142,13 @@ spec:
             - /etc/raas/config.yaml
           ports:
             - name: http
-              containerPort: {{ .Values.network.orchestrator.port }}
+              containerPort: {{ $envAll.Values.network.orchestrator.port }}
           # 其余密钥(OS_PASSWORD / RAAS_GITHUB_WEBHOOK_SECRET / RAAS_GITHUB_CLIENT_SECRET /
           # RAAS_GITHUB_TOKEN / RAAS_NOTIFICATIONS_PASSWORD)从一个手工维护的 Secret 整体
           # 注入,配置文件里只留结构。optional:没有这个 Secret 时照常启动,值退回配置文件。
           envFrom:
             - secretRef:
-                name: {{ .Values.secrets.credentials.raas }}
+                name: {{ $envAll.Values.secrets.credentials.raas }}
                 optional: true
           env:
             # 数据库连接串不进配置文件:凭据不该和配置放在一起,
@@ -129,7 +156,7 @@ spec:
             - name: RAAS_DSN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.postgresql.raas }}
+                  name: {{ $envAll.Values.secrets.postgresql.raas }}
                   key: RAAS_DSN
             # gophercloud 从 clouds.yaml 读凭据(conf.raas.openstack.cloud)。
             - name: OS_CLIENT_CONFIG_FILE
@@ -138,23 +165,23 @@ spec:
             - name: RAAS_SECURITY_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.security.raas }}
+                  name: {{ $envAll.Values.secrets.security.raas }}
                   key: RAAS_SECURITY_KEY
-{{- if .Values.pod.probes.orchestrator.raas.readiness.enabled }}
+{{- if $envAll.Values.pod.probes.orchestrator.raas.readiness.enabled }}
           readinessProbe:
             httpGet:
               # readyz 会真的 ping 数据库;healthz 只表示进程活着。
               # 两者分开:数据库短暂不可用时不该把 pod 杀掉重启。
               path: /readyz
-              port: {{ .Values.network.orchestrator.port }}
-{{ toYaml .Values.pod.probes.orchestrator.raas.readiness.params | indent 12 }}
+              port: {{ $envAll.Values.network.orchestrator.port }}
+{{ toYaml $envAll.Values.pod.probes.orchestrator.raas.readiness.params | indent 12 }}
 {{- end }}
-{{- if .Values.pod.probes.orchestrator.raas.liveness.enabled }}
+{{- if $envAll.Values.pod.probes.orchestrator.raas.liveness.enabled }}
           livenessProbe:
             httpGet:
               path: /healthz
-              port: {{ .Values.network.orchestrator.port }}
-{{ toYaml .Values.pod.probes.orchestrator.raas.liveness.params | indent 12 }}
+              port: {{ $envAll.Values.network.orchestrator.port }}
+{{ toYaml $envAll.Values.pod.probes.orchestrator.raas.liveness.params | indent 12 }}
 {{- end }}
           volumeMounts:
             - name: raas-etc
@@ -162,21 +189,21 @@ spec:
               readOnly: true
             - name: pod-tmp
               mountPath: /tmp
-{{- if .Values.conf.raas.gitlab.enabled }}
+{{- if $envAll.Values.conf.raas.gitlab.enabled }}
             # 编排器持有配置真相,config.toml 是产物 —— 它写,runner 读。
             # 反过来 runner 的 JSON 日志写在这里,编排器的计费采集读它
             # (GitLab CE 提供不了计量,账本只能建在我们自己这边)。
             - name: gitlab-config
-              mountPath: {{ .Values.conf.raas.gitlab.config_dir }}
+              mountPath: {{ $envAll.Values.conf.raas.gitlab.config_dir }}
 {{- end }}
-{{- if .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumeMounts }}
-{{ toYaml .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumeMounts | indent 12 }}
+{{- if $envAll.Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumeMounts }}
+{{ toYaml $envAll.Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumeMounts | indent 12 }}
 {{- end }}
       volumes:
         # 根文件系统只读,但 Go 的临时文件与 gophercloud 的缓存要可写。
         - name: pod-tmp
           emptyDir: {}
-{{- if .Values.network.mgmt.enabled }}
+{{- if and $envAll.Values.network.mgmt.enabled (not $slot) }}
         - name: pod-shared
           emptyDir: {}
         - name: raas-bin
@@ -191,12 +218,27 @@ spec:
           secret:
             secretName: raas-etc
             defaultMode: 0444
-{{- if .Values.conf.raas.gitlab.enabled }}
+{{- if $envAll.Values.conf.raas.gitlab.enabled }}
         - name: gitlab-config
           persistentVolumeClaim:
             claimName: raas-gitlab-config
 {{- end }}
-{{- if .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumes }}
-{{ toYaml .Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumes | indent 8 }}
+{{- if $envAll.Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumes }}
+{{ toYaml $envAll.Values.pod.mounts.raas_orchestrator.raas_orchestrator.volumes | indent 8 }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.manifests.deployment }}
+{{- $envAll := . }}
+{{- $serviceAccountName := "raas-orchestrator" }}
+{{ tuple $envAll "orchestrator" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- $slots := list }}
+{{- if .Values.network.mgmt.enabled }}{{- $slots = .Values.network.mgmt.attachments.orchestrator }}{{- end }}
+{{- if $slots }}
+{{- range $slots }}
+{{ include "raas.orchestrator.deployment" (dict "envAll" $envAll "slot" .) }}
+{{- end }}
+{{- else }}
+{{ include "raas.orchestrator.deployment" (dict "envAll" $envAll "slot" nil) }}
 {{- end }}
 {{- end }}

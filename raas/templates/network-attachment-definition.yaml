@@ -1,0 +1,37 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+控制面 Pod 挂的第二张网:RaaS 管理网 ci-mgmt-net,经 Multus + ovs-cni 在 br-int 上
+建口、由 OVN 绑到一个预建的 Neutron 端口(照 octavia 的 lb-mgmt)。端口、MAC、地址由
+Pod 注解逐槽位给(cni-args.OvnPort / mac / ips),这里只说桥和"IPAM 是静态的"。
+只在 attachment 形态(任一 attachments 非空)下渲染。
+*/}}
+{{- if and .Values.manifests.network_attachment_definition .Values.network.mgmt.enabled }}
+{{- $mgmt := .Values.network.mgmt }}
+{{- if or $mgmt.attachments.orchestrator $mgmt.attachments.gitlab_runner }}
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: {{ $mgmt.nad_name }}
+  namespace: {{ $mgmt.nad_namespace | default .Release.Namespace }}
+  annotations:
+    k8s.v1.cni.cncf.io/resourceName: {{ $mgmt.resource_name }}
+  labels:
+{{ tuple . "raas" "mgmt" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  config: {{ dict "cniVersion" "0.3.1" "type" "ovs" "bridge" $mgmt.bridge "mtu" (int $mgmt.mtu) "capabilities" (dict "ips" true "mac" true) "ipam" (dict "type" "static") | toJson | quote }}
+{{- end }}
+{{- end }}

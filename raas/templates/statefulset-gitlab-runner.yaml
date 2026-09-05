@@ -19,6 +19,14 @@ concurrent 与 check_interval 都是进程级的 —— 同一分片里一个租
 */}}
 {{- if and .Values.manifests.statefulset_gitlab_runner .Values.conf.raas.gitlab.enabled }}
 {{- $envAll := . }}
+{{- $mgmt := .Values.network.mgmt }}
+{{- $slot := dict }}
+{{- if and $mgmt.enabled $mgmt.attachments.gitlab_runner }}
+{{-   if gt (int (.Values.conf.raas.gitlab.shards | default 1)) 1 }}
+{{-     fail "network.mgmt.attachments.gitlab_runner: attachment 形态目前只支持 shards: 1(注解在 Pod 模板上,多分片需一槽一 StatefulSet)" }}
+{{-   end }}
+{{-   $slot = first $mgmt.attachments.gitlab_runner }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -40,6 +48,10 @@ spec:
 {{ tuple $envAll "raas" "gitlab-runner" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
       annotations:
         configmap-etc-hash: {{ tuple "secret-config.yaml" . | include "helm-toolkit.utils.hash" }}
+{{- if $slot }}
+        {{- $network := dict "name" $mgmt.nad_name "namespace" ($mgmt.nad_namespace | default .Release.Namespace) "mac" $slot.mac "ips" (list (printf "%s/%d" $slot.ip (int $mgmt.prefix_length))) "cni-args" (dict "OvnPort" $slot.port_id) }}
+        k8s.v1.cni.cncf.io/networks: {{ list $network | toJson | quote }}
+{{- end }}
     spec:
 {{ dict "envAll" $envAll "application" "gitlab_runner" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       nodeSelector:
@@ -48,7 +60,7 @@ spec:
       tolerations:
 {{ toYaml .Values.pod.tolerations.gitlab_runner.tolerations | indent 8 }}
 {{- end }}
-{{- if .Values.network.mgmt.enabled }}
+{{- if and .Values.network.mgmt.enabled (not $slot) }}
       # manager 只能从管理网 SSH 进池机器 —— 与编排器同样的 hostNetwork +
       # 网络节点形态,共用节点上的 r-mgmt0(nic-init 幂等,谁先跑谁建)。
       hostNetwork: true
@@ -141,7 +153,7 @@ spec:
       volumes:
         - name: pod-tmp
           emptyDir: {}
-{{- if .Values.network.mgmt.enabled }}
+{{- if and .Values.network.mgmt.enabled (not $slot) }}
         - name: pod-shared
           emptyDir: {}
         - name: raas-bin

@@ -174,6 +174,18 @@ labels:
 network:
   orchestrator:
     port: 8080
+  # BuildKit 数据面的 LoadBalancer(mTLS TCP,租户的 buildx 直连;不是 HTTP)。
+  # 域名与端口在 endpoints.buildkit_proxy 里声明,这里只放 Service 的形态:
+  # IP 池标签与固定地址是部署环境的事,由 override 给(与 nova 的 network.novncproxy 同一分工)。
+  buildkit_proxy:
+    service_type: LoadBalancer
+    external_traffic_policy: Cluster
+    ip_family_policy: PreferDualStack
+    ip_families:
+      - IPv4
+      - IPv6
+    labels: {}
+    annotations: {}
   # 管理网(Octavia 式,ci-mgmt-net):打开后编排器与 gitlab-runner 走
   # hostNetwork + 网络节点,init 容器把每节点一个的 Neutron 端口插进 br-int。
   # ⚠️ 打开前 labels.raas / labels.gitlab_runner 必须指到有 ovn-controller 的
@@ -249,6 +261,14 @@ conf:
     github:
       webhook_secret: null
       token: null
+    # BuildKit 线(doc/buildkit-service.md)。enabled: false 时整条不起。
+    # endpoint_domain / port / proxy_addr 留空 = 从 endpoints.buildkit_proxy 推(secret-config.yaml);
+    # 显式给值则以这里为准 —— 与 nova 的 novncproxy_base_url 同一规则。
+    buildkit:
+      enabled: false
+      endpoint_domain: null
+      port: null
+      proxy_addr: null
     openstack:
       cloud: openstack_helm
       # 机器的出网网络由**租户在 Horizon 里选**(tenant_network 表)。这里留
@@ -387,6 +407,28 @@ endpoints:
     port:
       api:
         default: 8080
+  # BuildKit 统一接入端点(doc/buildkit-service.md §4.4)。与 nova 的 compute_novnc_proxy 同一模式:
+  # 这里是唯一真相 —— Service 的名字与端口、config.yaml 里的 endpoint_domain / port / proxy_addr
+  # 都从它推(conf.raas.buildkit 显式给了值才不推)。
+  # ⚠️ 语义上是借用:public.host 放的是**域后缀**(如 buildkit.raas.example.com),租户连的主机名
+  # builder-<project>.<后缀> 由代码拼;泛解析 *.<后缀> 要指到这个 Service 的 LB 地址。
+  # 它是裸 TCP + mTLS,scheme / path 没有意义,只是 helm-toolkit 的查找要求存在。
+  buildkit_proxy:
+    name: raas
+    hosts:
+      default: raas-buildkit-proxy
+      public: buildkit
+    host_fqdn_override:
+      default: null
+      public:
+        host: null
+    path:
+      default: /
+    scheme:
+      default: tcp
+    port:
+      proxy:
+        default: 1234
 
 # GitLab 链路的两个卷。
 volume:
@@ -415,4 +457,5 @@ manifests:
   secret_security_key: true
   secret_registry: true
   service: true
+  service_buildkit_proxy: true
 ...

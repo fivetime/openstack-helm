@@ -64,12 +64,7 @@ spec:
               containerPort: {{ tuple "gateway" . | include "daas.gateway.port" }}
             - name: docker-ssh
               containerPort: 2222
-            # The account's own API: a keystone token, and no client
-            # certificate, because whoever is opening an account has
-            # none yet. Plain HTTP -- what is in front holds the
-            # certificate for the name a browser types.
-            - name: selfservice
-              containerPort: {{ .Values.conf.daas.selfservice.bind_port }}
+
 {{- if .Values.pod.probes.gateway.daas.readiness.enabled }}
           readinessProbe:
             tcpSocket:

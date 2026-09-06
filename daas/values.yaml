@@ -24,6 +24,9 @@ labels:
   gateway:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
+  api:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
   job:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
@@ -46,6 +49,7 @@ images:
 pod:
   replicas:
     gateway: 2
+    api: 2
   lifecycle:
     upgrades:
       deployments:
@@ -70,6 +74,13 @@ pod:
       limits:
         memory: "2048Mi"
         cpu: "2000m"
+    api:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "1000m"
     jobs:
       db_sync:
         requests:
@@ -90,6 +101,11 @@ pod:
   # an image problem. 42430 is the uid the image's `daas` user has.
   security_context:
     gateway:
+      pod:
+        runAsUser: 42430
+        runAsGroup: 42430
+        fsGroup: 42430
+    api:
       pod:
         runAsUser: 42430
         runAsGroup: 42430
@@ -157,6 +173,11 @@ secrets:
     gateway: daas-etc
   tls:
     gateway: daas-tls
+    # ⚠️ The tenant CA's private key, and the only pod that mounts it is
+    # daas-api. Made outside this chart, as the signing Job's is -- a
+    # deployment that keeps the CA off the cluster entirely does not
+    # create it, and runs the API with `manifests.deployment_api: false`.
+    ca: daas-ca
 
 dependencies:
   dynamic:
@@ -186,6 +207,10 @@ dependencies:
           service: identity
         - endpoint: internal
           service: container
+    api:
+      services:
+        - endpoint: internal
+          service: identity
 
 endpoints:
   cluster_domain_suffix: cluster.local
@@ -242,7 +267,9 @@ endpoints:
   daas:
     name: daas
     hosts:
-      default: daas-gateway
+      # The management-plane service, not the docker gateway: this is
+      # the one in the catalog, and the one a dashboard calls.
+      default: daas-api
       public: daas
     host_fqdn_override:
       default: null
@@ -278,7 +305,9 @@ extraObjects: []
 manifests:
   configmap_bin: true
   deployment_gateway: true
+  deployment_api: true
   service_gateway: true
+  service_api: true
   secret_config: false
   job_db_sync: false
   job_ks_service: true

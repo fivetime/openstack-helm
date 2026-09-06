@@ -1,0 +1,115 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+The management-plane API: opening an account, issuing a certificate,
+registering a public key.
+
+⚠️ **This is the only pod that mounts the tenant CA's private key**, and
+that is the whole reason it is a separate deployment. The gateway speaks
+Docker to tenants, is reachable from outside and lives as long as the
+deployment does; signing belongs somewhere else. The key arrives the
+same way the signing Job takes it -- its own config file, second, so the
+key's path never appears in the config the gateway reads.
+*/}}
+
+{{- if .Values.manifests.deployment_api }}
+{{- $envAll := . }}
+{{- $serviceAccountName := "daas-api" }}
+{{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daas-api
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "daas" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  replicas: {{ .Values.pod.replicas.api }}
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "daas" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "daas" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ dict "envAll" $envAll "podName" "daas-api" "containerNames" (list "daas-api") | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "api" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
+      initContainers:
+{{ tuple $envAll "api" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: daas-api
+{{ tuple $envAll "daas" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.api | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "api" "container" "daas" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - daas-api
+          args:
+            - --config-file
+            - /etc/daas/daas.conf
+            # Second, and last: it carries [selfservice] enabled = true
+            # and the CA key's path, neither of which belongs in the
+            # file the gateway reads.
+            - --config-file
+            - /etc/daas/ca/signing.conf
+          ports:
+            - name: api
+              containerPort: {{ .Values.conf.daas.selfservice.bind_port }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.conf.daas.selfservice.bind_port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.conf.daas.selfservice.bind_port }}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: etc
+              mountPath: /etc/daas/daas.conf
+              subPath: daas.conf
+              readOnly: true
+            - name: ca
+              mountPath: /etc/daas/ca
+              readOnly: true
+            - name: tls
+              mountPath: /etc/daas/tls
+              readOnly: true
+      volumes:
+        - name: etc
+          secret:
+            secretName: {{ .Values.secrets.config.gateway }}
+            defaultMode: 0444
+        - name: ca
+          secret:
+            secretName: {{ .Values.secrets.tls.ca }}
+            defaultMode: 0400
+        - name: tls
+          # For ca.pem, which this hands to tenants: it is the one file
+          # they cannot produce themselves. The server key sits in the
+          # same secret and is not read here.
+          secret:
+            secretName: {{ .Values.secrets.tls.gateway }}
+            defaultMode: 0400
+{{- end }}

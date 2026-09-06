@@ -54,10 +54,9 @@ spec:
       protocol: TCP
       port: 2222
       targetPort: 2222
-{{- if .Values.conf.daas.selfservice.enabled }}
-    - name: selfservice
-      protocol: TCP
-      port: {{ .Values.conf.daas.selfservice.bind_port }}
-      targetPort: {{ .Values.conf.daas.selfservice.bind_port }}
-{{- end }}
+{{/*
+  No self-service port here. That API is management-plane HTTP served by
+  daas-api on a ClusterIP -- this Service is the one tenants dial with a
+  docker client, and it publishes only what speaks Docker.
+*/}}
 {{- end }}

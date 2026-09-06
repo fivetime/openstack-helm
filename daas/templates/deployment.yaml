@@ -1,0 +1,104 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.deployment_gateway }}
+{{- $envAll := . }}
+{{- $serviceAccountName := "daas-gateway" }}
+{{ tuple $envAll "gateway" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daas-gateway
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "daas" "gateway" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  replicas: {{ .Values.pod.replicas.gateway }}
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "daas" "gateway" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "daas" "gateway" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ dict "envAll" $envAll "podName" "daas-gateway" "containerNames" (list "daas-gateway") | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "gateway" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.gateway.node_selector_key }}: {{ .Values.labels.gateway.node_selector_value }}
+      # A tenant's `logs -f`, `attach` and buildx session are held open on
+      # this process. Cut at the default 30s, a build that was nearly
+      # finished ends as a transport error nobody can read.
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.gateway.timeout | default 300 }}
+      initContainers:
+{{ tuple $envAll "gateway" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: daas-gateway
+{{ tuple $envAll "daas" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.gateway | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "gateway" "container" "daas" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - daas-gateway
+          args:
+            - --config-file
+            - /etc/daas/daas.conf
+          ports:
+            - name: docker-api
+              containerPort: {{ tuple "gateway" . | include "daas.gateway.port" }}
+            - name: docker-ssh
+              containerPort: 2222
+            # The account's own API: a keystone token, and no client
+            # certificate, because whoever is opening an account has
+            # none yet. Plain HTTP -- what is in front holds the
+            # certificate for the name a browser types.
+            - name: selfservice
+              containerPort: {{ .Values.conf.daas.selfservice.bind_port }}
+{{- if .Values.pod.probes.gateway.daas.readiness.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ tuple "gateway" . | include "daas.gateway.port" }}
+{{ toYaml .Values.pod.probes.gateway.daas.readiness.params | indent 12 }}
+{{- end }}
+{{- if .Values.pod.probes.gateway.daas.liveness.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ tuple "gateway" . | include "daas.gateway.port" }}
+{{ toYaml .Values.pod.probes.gateway.daas.liveness.params | indent 12 }}
+{{- end }}
+          volumeMounts:
+            - name: etc
+              mountPath: /etc/daas/daas.conf
+              subPath: daas.conf
+              readOnly: true
+            - name: tls
+              mountPath: /etc/daas/tls
+              readOnly: true
+      volumes:
+        - name: etc
+          secret:
+            secretName: {{ .Values.secrets.config.gateway }}
+            defaultMode: 0444
+        - name: tls
+          secret:
+            # The tenant CA's key is in here. Readable by the process and
+            # by nothing else, which is what 0400 says.
+            secretName: {{ .Values.secrets.tls.gateway }}
+            defaultMode: 0400
+{{- end }}

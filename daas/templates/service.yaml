@@ -1,0 +1,63 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.service_gateway }}
+{{- $envAll := . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: daas-gateway
+  labels:
+{{ tuple $envAll "daas" "gateway" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+{{- range $key, $value := .Values.network.gateway.service.labels }}
+    {{ $key }}: {{ $value | quote }}
+{{- end }}
+{{- if .Values.network.gateway.service.annotations }}
+  annotations:
+{{ toYaml .Values.network.gateway.service.annotations | indent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.network.gateway.service.type }}
+{{- if eq .Values.network.gateway.service.type "LoadBalancer" }}
+  # ⚠️ The Engine API checks the client certificate in this process, so
+  # nothing in front may terminate that handshake -- and `Local` is what
+  # keeps the client's own address visible to the audit log rather than
+  # a node's.
+  externalTrafficPolicy: {{ .Values.network.gateway.service.externalTrafficPolicy }}
+{{- end }}
+  # ⚠️ The two labels that identify this workload, not the full set.
+  # `kubernetes_metadata_labels` also carries `release_group`, and a
+  # selector holding it drops every endpoint the moment a release is
+  # renamed or a Deployment is replaced -- which is exactly when the
+  # connections it is carrying (a `logs -f`, a build) must not be cut.
+  selector:
+    application: daas
+    component: gateway
+  ports:
+    - name: docker-api
+      protocol: TCP
+      port: {{ tuple "gateway" . | include "daas.gateway.port" }}
+      targetPort: {{ tuple "gateway" . | include "daas.gateway.port" }}
+    - name: docker-ssh
+      protocol: TCP
+      port: 2222
+      targetPort: 2222
+{{- if .Values.conf.daas.selfservice.enabled }}
+    - name: selfservice
+      protocol: TCP
+      port: {{ .Values.conf.daas.selfservice.bind_port }}
+      targetPort: {{ .Values.conf.daas.selfservice.bind_port }}
+{{- end }}
+{{- end }}

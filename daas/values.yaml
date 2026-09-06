@@ -1,0 +1,287 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+# The Docker Engine API gateway.
+#
+# Two ways in and one process. The Engine API (2376) authenticates with a
+# client certificate and the ssh:// entrance (2222) with a public key --
+# both belong to the tenant's docker client. The self-service API (9518)
+# authenticates with a keystone token, because a tenant who has no
+# account yet has neither of the other two, and that is the one a
+# browser (and the Horizon plugin) reaches.
+
+labels:
+  gateway:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+images:
+  tags:
+    daas: ghcr.io/fivetime/openstackhelm/daas:2026.1-ubuntu_noble
+    daas_db_sync: ghcr.io/fivetime/openstackhelm/daas:2026.1-ubuntu_noble
+    ks_service: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    ks_endpoints: docker.io/openstackhelm/heat:2024.1-ubuntu_jammy
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_jammy
+    image_repo_sync: docker.io/library/docker:17.07.0
+  pull_policy: Always
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+pod:
+  replicas:
+    gateway: 2
+  lifecycle:
+    upgrades:
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 1
+          max_surge: 1
+    # A tenant's `docker logs -f`, `attach` and buildx session live on a
+    # connection this process holds. Given time to finish rather than cut
+    # at the default 30s, which is how a build that was nearly done ends
+    # in a transport error the tenant cannot read.
+    termination_grace_period:
+      gateway:
+        timeout: 300
+  resources:
+    enabled: false
+    gateway:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "2048Mi"
+        cpu: "2000m"
+    jobs:
+      db_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+      ks_service:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+      ks_endpoints:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+  # ⚠️ The tenant CA's key is mounted 0400 and owned by root. Without an
+  # fsGroup the kubelet leaves it that way and the process -- which is
+  # not root -- cannot read it: every pod crashes at start with
+  # `PermissionError` on load_cert_chain, and the deployment looks like
+  # an image problem. 42430 is the uid the image's `daas` user has.
+  security_context:
+    gateway:
+      pod:
+        runAsUser: 42430
+        runAsGroup: 42430
+        fsGroup: 42430
+  probes:
+    gateway:
+      daas:
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 5
+            periodSeconds: 10
+        liveness:
+          enabled: true
+          params:
+            initialDelaySeconds: 20
+            periodSeconds: 20
+
+network:
+  gateway:
+    # LoadBalancer rather than an ingress: the Engine API's client
+    # certificate is checked by this process, so nothing in front of it
+    # may terminate that TLS handshake. Layer 4 all the way in.
+    service:
+      type: LoadBalancer
+      externalTrafficPolicy: Local
+      labels:
+        io.cilium/ip-pool-public: "true"
+      annotations: {}
+
+conf:
+  # Whether this chart writes /etc/daas/daas.conf. A deployment that
+  # keeps its configuration in a secret of its own (with a database
+  # password and service credentials in it) sets this false and names
+  # that secret in `secrets.config.gateway`.
+  rendered: false
+  daas:
+    DEFAULT:
+      debug: false
+    gateway:
+      bind_host: 0.0.0.0
+      bind_port: 2376
+      docker_api_version: "1.44"
+    selfservice:
+      enabled: true
+      bind_host: 0.0.0.0
+      bind_port: 9518
+      # ⚠️ Both are the addresses a *tenant* types, not what this binds.
+      # A certificate handed over without the address to use it against
+      # is half an answer, and this process cannot work it out: it is
+      # behind a load balancer under a name it never sees.
+      engine_endpoint: null
+      ssh_endpoint: null
+
+secrets:
+  identity:
+    # The catalog jobs run as the cloud's own admin, out of the secret
+    # keystone's chart already publishes -- OS_* keys, which is exactly
+    # what those jobs read. No password passes through this chart's
+    # values, and there is no second copy to drift.
+    admin: keystone-keystone-admin
+  # Secrets this chart does not make, because they outlive it: the
+  # tenant CA and the config that names a database password.
+  config:
+    gateway: daas-etc
+  tls:
+    gateway: daas-tls
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - daas-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    db_sync:
+      jobs: null
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_endpoints:
+      jobs:
+        - daas-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+    gateway:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: container
+
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  identity:
+    name: keystone
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      daas:
+        role: admin,service
+        region_name: RegionOne
+        username: daas
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: keystone
+      internal: keystone-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+  # The self-service API, as the catalog will carry it. The Engine API is
+  # deliberately *not* in the catalog: it speaks Docker's protocol, not
+  # OpenStack's, and a client that found it there would try to.
+  #
+  # The public entry goes through whatever fronts this cloud's public
+  # names; the internal one is what Horizon uses (it is configured with
+  # OPENSTACK_ENDPOINT_TYPE = internalURL) and what has to work first.
+  daas:
+    name: daas
+    hosts:
+      default: daas-gateway
+      public: daas
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme:
+      default: http
+    port:
+      api:
+        default: 9518
+        public: 80
+  container:
+    name: zun
+    hosts:
+      default: zun-api
+      public: zun
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v1
+    scheme:
+      default: http
+    port:
+      api:
+        default: 9517
+        public: 80
+
+# Objects handed in by a deployment: the shared gateway route table, a
+# companion Service for a public FQDN, anything else that belongs beside
+# this release rather than in the chart.
+extraObjects: []
+
+manifests:
+  configmap_bin: true
+  deployment_gateway: true
+  service_gateway: true
+  secret_config: false
+  job_db_sync: false
+  job_ks_service: true
+  job_ks_endpoints: true
+  job_image_repo_sync: false
+...

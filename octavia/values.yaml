@@ -85,6 +85,9 @@ network:
       enabled: false
       port: 30826
   health_manager:
+    # Only the legacy o-hm0 / o-w0 init scripts read these. An attached pod
+    # has no init container and no host interface to size, so setting them
+    # in attachment mode does nothing.
     interface_mtu: null
   worker:
     interface_mtu: null
@@ -96,6 +99,20 @@ network:
   # pre-created Neutron port on the management network and becomes one
   # single-replica Deployment named after it; nothing here is used while
   # the lists are empty, and the legacy hostNetwork shape renders instead.
+  #
+  # A non-empty list is not on its own enough. Each attached shape lives
+  # inside its component's manifests toggle, so the list is only read when
+  # that toggle is on -- and for the worker the default is off:
+  #
+  #   attachments.driver_agent   needs manifests.deployment_driver_agent
+  #   attachments.health_manager needs manifests.daemonset_health_manager
+  #   attachments.worker         needs manifests.daemonset_worker (default
+  #                              false) and manifests.deployment_worker off
+  #
+  # Fill attachments.worker against the stock defaults and nothing renders
+  # from it at all: daemonset_worker is false, so the plain non-attached
+  # deployment-worker renders instead and the ports sit unused. Whoever set
+  # the list gets the legacy shape and no error.
   lb_mgmt:
     nad_name: lb-mgmt
     nad_namespace: null

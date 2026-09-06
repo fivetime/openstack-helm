@@ -48,8 +48,17 @@ images:
 
 pod:
   replicas:
-    gateway: 2
+    # One per control node. See the spread constraint: with
+    # externalTrafficPolicy Local, a node without a pod refuses the
+    # load balancer address outright.
+    gateway: 4
     api: 2
+  spread:
+    gateway:
+      enabled: true
+      # Scheduling is not allowed to put two on one node and leave
+      # another bare -- that is the state that made IPv6 unreachable.
+      when_unsatisfiable: DoNotSchedule
   lifecycle:
     upgrades:
       deployments:
@@ -133,7 +142,20 @@ network:
       type: LoadBalancer
       externalTrafficPolicy: Local
       labels:
+        # Which pool the address comes from …
         io.cilium/ip-pool-public: "true"
+        # … and ⚠️ that it is advertised at all. The BGP advertisement
+        # selects on this key existing (`bgp-advertisement-external-ip`,
+        # matchExpressions: Exists). Without it the address is allocated
+        # and looks perfectly healthy in `kubectl get svc` while nothing
+        # outside the cluster is told where to send it.
+        io.cilium/bgp-advertise-external-ip: "true"
+      # Both families where the pool offers both; a deployment with an
+      # IPv4-only pool sets ip_families to null.
+      ip_family_policy: PreferDualStack
+      ip_families:
+        - IPv4
+        - IPv6
       annotations: {}
 
 conf:
@@ -146,12 +168,18 @@ conf:
     DEFAULT:
       debug: false
     gateway:
-      bind_host: 0.0.0.0
+      # `::` and not `0.0.0.0`: with IPV6_V6ONLY cleared this one socket
+      # serves both families, and a dual-stack Service in front needs it
+      # to. Bound to 0.0.0.0 the v6 half of that Service reaches a pod
+      # where nothing is listening, and the tenant gets a connection
+      # reset from a service every dashboard says is healthy.
+      bind_host: '::'
       bind_port: 2376
       docker_api_version: "1.44"
     selfservice:
       enabled: true
-      bind_host: 0.0.0.0
+      # See gateway.bind_host.
+      bind_host: '::'
       bind_port: 9518
       # How long a validated keystone token is remembered.
       token_cache_seconds: 300

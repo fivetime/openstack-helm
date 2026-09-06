@@ -30,6 +30,16 @@ metadata:
 {{- end }}
 spec:
   type: {{ .Values.network.gateway.service.type }}
+{{- if .Values.network.gateway.service.ip_families }}
+  # Dual-stack where the pool has both. ⚠️ Not cosmetic: the name tenants
+  # type has an AAAA somewhere (a public DNS zone, most likely), and a
+  # client that prefers IPv6 will follow it. If that address is not this
+  # gateway, the tenant's docker hangs on something else entirely and the
+  # error names neither.
+  ipFamilyPolicy: {{ .Values.network.gateway.service.ip_family_policy }}
+  ipFamilies:
+{{ toYaml .Values.network.gateway.service.ip_families | indent 4 }}
+{{- end }}
 {{- if eq .Values.network.gateway.service.type "LoadBalancer" }}
   # ⚠️ The Engine API checks the client certificate in this process, so
   # nothing in front may terminate that handshake -- and `Local` is what

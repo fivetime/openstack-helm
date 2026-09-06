@@ -43,6 +43,22 @@ spec:
 {{ dict "envAll" $envAll "application" "gateway" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       nodeSelector:
         {{ .Values.labels.gateway.node_selector_key }}: {{ .Values.labels.gateway.node_selector_value }}
+{{- if .Values.pod.spread.gateway.enabled }}
+      # ⚠️ One per node, because externalTrafficPolicy is Local: a node
+      # with no pod answers the load balancer address with a reset, and
+      # which node the fabric picks is not ours to choose. It picked a
+      # node with a pod for IPv4 and one without for IPv6, so the
+      # service was reachable over one family and refused over the
+      # other -- with nothing in the service to suggest why.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: {{ .Values.pod.spread.gateway.when_unsatisfiable }}
+          labelSelector:
+            matchLabels:
+              application: daas
+              component: gateway
+{{- end }}
       # A tenant's `logs -f`, `attach` and buildx session are held open on
       # this process. Cut at the default 30s, a build that was nearly
       # finished ends as a transport error nobody can read.

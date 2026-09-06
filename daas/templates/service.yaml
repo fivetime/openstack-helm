@@ -41,10 +41,9 @@ spec:
 {{ toYaml .Values.network.gateway.service.ip_families | indent 4 }}
 {{- end }}
 {{- if eq .Values.network.gateway.service.type "LoadBalancer" }}
-  # ⚠️ The Engine API checks the client certificate in this process, so
-  # nothing in front may terminate that handshake -- and `Local` is what
-  # keeps the client's own address visible to the audit log rather than
-  # a node's.
+  # The Engine API checks the client certificate in this process, so
+  # nothing in front may terminate that handshake. See values for why
+  # the policy is Cluster: BGP here speaks only from the network nodes.
   externalTrafficPolicy: {{ .Values.network.gateway.service.externalTrafficPolicy }}
 {{- end }}
   # ⚠️ The two labels that identify this workload, not the full set.

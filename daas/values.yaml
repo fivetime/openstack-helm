@@ -48,17 +48,15 @@ images:
 
 pod:
   replicas:
-    # One per control node. See the spread constraint: with
-    # externalTrafficPolicy Local, a node without a pod refuses the
-    # load balancer address outright.
-    gateway: 4
+    gateway: 2
     api: 2
   spread:
     gateway:
+      # Spread across nodes for availability; nothing depends on it now
+      # that traffic policy is Cluster, so a skewed placement during a
+      # rolling update is allowed rather than left Pending.
       enabled: true
-      # Scheduling is not allowed to put two on one node and leave
-      # another bare -- that is the state that made IPv6 unreachable.
-      when_unsatisfiable: DoNotSchedule
+      when_unsatisfiable: ScheduleAnyway
   lifecycle:
     upgrades:
       deployments:
@@ -138,9 +136,18 @@ network:
     # LoadBalancer rather than an ingress: the Engine API's client
     # certificate is checked by this process, so nothing in front of it
     # may terminate that TLS handshake. Layer 4 all the way in.
+    #
+    # ⚠️ Cluster, not Local. cilium BGP speaks only from the network
+    # nodes here, and with Local it advertises a service only from
+    # nodes holding a backend -- the gateway runs on control nodes, so
+    # its address was never announced at all and reached the cluster
+    # by a fabric aggregate route nobody had chosen. Local would buy
+    # the tenant's source address, and nothing reads it: the audit log
+    # records project and certificate, not where the connection came
+    # from (checked, 2026-09-06).
     service:
       type: LoadBalancer
-      externalTrafficPolicy: Local
+      externalTrafficPolicy: Cluster
       labels:
         # Which pool the address comes from …
         io.cilium/ip-pool-public: "true"

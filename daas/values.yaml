@@ -153,10 +153,13 @@ conf:
       enabled: true
       bind_host: 0.0.0.0
       bind_port: 9518
-      # ⚠️ Both are the addresses a *tenant* types, not what this binds.
-      # A certificate handed over without the address to use it against
-      # is half an answer, and this process cannot work it out: it is
-      # behind a load balancer under a name it never sees.
+      # How long a validated keystone token is remembered.
+      token_cache_seconds: 300
+      # ⚠️ Left empty on purpose. Both are derived from the
+      # `daas_docker` / `daas_ssh` endpoints below, as nova derives its
+      # console proxy URLs -- setting one here overrides that, which is
+      # for a deployment whose tenants reach the gateway by some path
+      # the endpoint entry cannot describe.
       engine_endpoint: null
       ssh_endpoint: null
 
@@ -281,6 +284,48 @@ endpoints:
       api:
         default: 9518
         public: 80
+  # The two addresses a tenant types at their docker client. Structured
+  # entries rather than strings in `conf`, the way nova carries the
+  # console proxies: the Service publishes the port from here, and the
+  # sentence handed to the tenant is derived from here, so the two
+  # cannot say different things.
+  #
+  # ⚠️ `host_fqdn_override.public` is the real name tenants resolve, and
+  # it must be in the gateway certificate's SANs -- a name that is not
+  # there fails the TLS handshake with an error about the certificate,
+  # which reads as the tenant's problem and is not.
+  daas_docker:
+    name: daas-gateway
+    hosts:
+      default: daas-gateway
+      public: daas
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme:
+      # docker's own scheme for a TLS endpoint. It is what goes in
+      # `docker context create --docker host=...`.
+      default: tcp
+    port:
+      api:
+        default: 2376
+        public: 2376
+  daas_ssh:
+    name: daas-gateway
+    hosts:
+      default: daas-gateway
+      public: daas
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme:
+      default: ssh
+    port:
+      ssh:
+        default: 2222
+        public: 2222
   container:
     name: zun
     hosts:
@@ -304,6 +349,7 @@ extraObjects: []
 
 manifests:
   configmap_bin: true
+  configmap_api_conf: true
   deployment_gateway: true
   deployment_api: true
   service_gateway: true

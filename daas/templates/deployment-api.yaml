@@ -72,6 +72,11 @@ spec:
             # file the gateway reads.
             - --config-file
             - /etc/daas/ca/signing.conf
+            # Last, so what a deployment sets in values decides: the
+            # addresses tenants type live here rather than in the
+            # hand-made secret, where a second copy went stale.
+            - --config-file
+            - /etc/daas/api.conf
           ports:
             - name: api
               containerPort: {{ .Values.conf.daas.selfservice.bind_port }}
@@ -96,7 +101,15 @@ spec:
             - name: tls
               mountPath: /etc/daas/tls
               readOnly: true
+            - name: api-conf
+              mountPath: /etc/daas/api.conf
+              subPath: api.conf
+              readOnly: true
       volumes:
+        - name: api-conf
+          configMap:
+            name: daas-api-conf
+            defaultMode: 0444
         - name: etc
           secret:
             secretName: {{ .Values.secrets.config.gateway }}

@@ -61,20 +61,20 @@ spec:
             - /etc/daas/daas.conf
           ports:
             - name: docker-api
-              containerPort: {{ tuple "gateway" . | include "daas.gateway.port" }}
+              containerPort: {{ tuple "daas_docker" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
             - name: docker-ssh
-              containerPort: 2222
+              containerPort: {{ tuple "daas_ssh" "internal" "ssh" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
 
 {{- if .Values.pod.probes.gateway.daas.readiness.enabled }}
           readinessProbe:
             tcpSocket:
-              port: {{ tuple "gateway" . | include "daas.gateway.port" }}
+              port: {{ tuple "daas_docker" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
 {{ toYaml .Values.pod.probes.gateway.daas.readiness.params | indent 12 }}
 {{- end }}
 {{- if .Values.pod.probes.gateway.daas.liveness.enabled }}
           livenessProbe:
             tcpSocket:
-              port: {{ tuple "gateway" . | include "daas.gateway.port" }}
+              port: {{ tuple "daas_docker" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
 {{ toYaml .Values.pod.probes.gateway.daas.liveness.params | indent 12 }}
 {{- end }}
           volumeMounts:

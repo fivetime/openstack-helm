@@ -45,15 +45,19 @@ spec:
   selector:
     application: daas
     component: gateway
+  {{/*
+  Ports from the same endpoint entries the tenant-facing addresses are
+  derived from. Written twice, they agree until somebody moves one.
+  */}}
   ports:
     - name: docker-api
       protocol: TCP
-      port: {{ tuple "gateway" . | include "daas.gateway.port" }}
-      targetPort: {{ tuple "gateway" . | include "daas.gateway.port" }}
+      port: {{ tuple "daas_docker" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+      targetPort: {{ tuple "daas_docker" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
     - name: docker-ssh
       protocol: TCP
-      port: 2222
-      targetPort: 2222
+      port: {{ tuple "daas_ssh" "internal" "ssh" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+      targetPort: {{ tuple "daas_ssh" "internal" "ssh" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
 {{/*
   No self-service port here. That API is management-plane HTTP served by
   daas-api on a ClusterIP -- this Service is the one tenants dial with a

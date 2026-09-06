@@ -1,0 +1,67 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+The settings a deployment changes, in the place a deployment changes
+things.
+
+`daas.conf` stays a hand-made secret because it names a database
+password and a service credential. But the addresses tenants type are
+neither secret nor static -- they are the first thing a new deployment
+has to set -- and having a copy in values that nothing rendered meant
+the live value lived somewhere else entirely. One of the two was always
+going to be wrong, and it was the one people read.
+
+A ConfigMap, not a Secret: these are public addresses, and a public
+address in a Secret is a lie about how carefully it needs handling.
+Passed last, so it wins over the same key in either file before it.
+*/}}
+{{- if .Values.manifests.configmap_api_conf }}
+{{- $envAll := . }}
+{{/*
+Derived from the endpoints unless a deployment wrote one, which is how
+nova fills novncproxy_base_url. The endpoint entry already has to be
+right -- the Service publishes its port -- so deriving keeps one truth
+instead of two that agree until they do not.
+*/}}
+{{- if empty .Values.conf.daas.selfservice.engine_endpoint -}}
+{{- $_ := tuple "daas_docker" "public" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.daas.selfservice "engine_endpoint" -}}
+{{- end -}}
+{{- if empty .Values.conf.daas.selfservice.ssh_endpoint -}}
+{{- $_ := tuple "daas_ssh" "public" "ssh" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.daas.selfservice "ssh_endpoint" -}}
+{{- end -}}
+{{- $selfservice := .Values.conf.daas.selfservice }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: daas-api-conf
+data:
+  api.conf: |
+    # Rendered by the daas chart. Anything here overrides daas.conf.
+    [selfservice]
+{{- if $selfservice.engine_endpoint }}
+    # What a tenant types to reach the Engine API. This process cannot
+    # work it out: it is behind a load balancer under a name it never
+    # sees, and a certificate handed over without the address to use it
+    # against is half an answer.
+    engine_endpoint = {{ $selfservice.engine_endpoint }}
+{{- end }}
+{{- if $selfservice.ssh_endpoint }}
+    ssh_endpoint = {{ $selfservice.ssh_endpoint }}
+{{- end }}
+{{- if $selfservice.token_cache_seconds }}
+    token_cache_seconds = {{ $selfservice.token_cache_seconds }}
+{{- end }}
+{{- end }}

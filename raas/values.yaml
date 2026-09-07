@@ -177,6 +177,11 @@ network:
   # BuildKit 数据面的 LoadBalancer(mTLS TCP,租户的 buildx 直连;不是 HTTP)。
   # 域名与端口在 endpoints.buildkit_proxy 里声明,这里只放 Service 的形态:
   # IP 池标签与固定地址是部署环境的事,由 override 给(与 nova 的 network.novncproxy 同一分工)。
+  # gitlab-runner 自己的 Prometheus 口(config.toml 的 listen_address,由 secret-config.yaml 从这里推)。
+  # PodMonitor 抓它:在跑的 build 数、concurrent、request_concurrency 被撞次数、取机就绪时长直方图 ——
+  # 分片打满与供给耗时的权威来源(openstack-raas doc/gitlab.md §6.2)。
+  gitlab_runner:
+    metrics_port: 9252
   buildkit_proxy:
     service_type: LoadBalancer
     external_traffic_policy: Cluster
@@ -300,6 +305,8 @@ conf:
     # 一直正常,谁都看不见。
     gitlab:
       enabled: false
+      # 留空 = 从 network.gitlab_runner.metrics_port 推成 ":<port>"(secret-config.yaml)。
+      metrics_listen: null
     # runs-on 标签目录来自云(flavor 的 raas:label / raas:os,镜像的 raas_os),
     # 不在配置里。编排器的配置解析是严格模式,这里出现 labels: 会起不来。
     tenants: {}
@@ -458,4 +465,9 @@ manifests:
   secret_registry: true
   service: true
   service_buildkit_proxy: true
+  # 抓取对象:编排器的 /metrics(ServiceMonitor 指向 raas-api)与 gitlab-runner 的 /metrics
+  # (PodMonitor,StatefulSet 没有 Service)。本集群的 Prometheus / VM operator 选择器为空,
+  # 任何命名空间的 Monitor 都会被拾取;2026-09-07 之前 chart 里一个都没有,指标只停在 pod 上。
+  servicemonitor: true
+  podmonitor_gitlab_runner: true
 ...

@@ -111,6 +111,11 @@ spec:
         - name: gitlab-runner
 {{ tuple $envAll "raas_gitlab_runner" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ dict "envAll" $envAll "application" "gitlab_runner" "container" "gitlab_runner" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          ports:
+            # runner 的 Prometheus 口(config.toml listen_address),PodMonitor 按名字抓。
+            - name: metrics
+              containerPort: {{ .Values.network.gitlab_runner.metrics_port }}
+              protocol: TCP
           command:
             - /bin/sh
             - -c

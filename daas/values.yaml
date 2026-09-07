@@ -190,6 +190,12 @@ conf:
       bind_port: 9518
       # How long a validated keystone token is remembered.
       token_cache_seconds: 300
+      # ⚠️ The network an account's router is given a gateway on, and
+      # the publish address is taken from. Without it the API refuses
+      # to open an account rather than making one that cannot reach
+      # anything -- which is what it did until an account opened from
+      # the dashboard turned out to have no gateway at all.
+      external_network: null
       # ⚠️ Left empty on purpose. Both are derived from the
       # `daas_docker` / `daas_ssh` endpoints below, as nova derives its
       # console proxy URLs -- setting one here overrides that, which is

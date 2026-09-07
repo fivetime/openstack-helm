@@ -64,4 +64,10 @@ data:
 {{- if $selfservice.token_cache_seconds }}
     token_cache_seconds = {{ $selfservice.token_cache_seconds }}
 {{- end }}
+{{- if $selfservice.external_network }}
+    # Where an account's router is given a gateway and its publish
+    # address is taken. Without it the API refuses to open one, rather
+    # than making an account that cannot reach anything.
+    external_network = {{ $selfservice.external_network }}
+{{- end }}
 {{- end }}

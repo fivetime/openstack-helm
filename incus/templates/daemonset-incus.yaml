@@ -73,6 +73,8 @@ spec:
           env:
             - name: INCUS_RUNTIME_ROLE
               value: incusd
+            - name: INCUS_SKIP_INSTANCE_TYPES
+              value: {{ .Values.incus.skip_instance_types | quote }}
             - name: INCUS_MIGRATION_ENABLED
               value: {{ .Values.incus.migration.enabled | quote }}
             - name: INCUS_MIGRATION_INTERFACE

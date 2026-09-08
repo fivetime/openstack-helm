@@ -158,6 +158,9 @@ incus:
     enabled: true
   cgroup_path: /sys/fs/cgroup
   control_cgroup: /osh-incus
+  # Nova flavors are authoritative for OpenStack instance sizing. Disable the
+  # unrelated daily public cloud instance-type download by default.
+  skip_instance_types: true
   devices_path: /dev
   log_path: /var/log/incus
   lxcfs_path: /var/lib/lxcfs

@@ -245,6 +245,9 @@ network:
       # 表现是授权成功、回调页打不开 —— 而租户看到的是一个白页,
       # 完全看不出是入口的问题。
       - /gitlab/callback
+      # 租户 Jenkins 里我们的插件从公网调这一组(openstack-raas doc/jenkins.md §5)。这是 /v1 下
+      # **唯一**对外的前缀:调用方在集群外面;鉴权仍是 Keystone token,/token 由编排器代向 Keystone 认证。
+      - /v1/jenkins
     pathType: Prefix
     annotations:
       # shared:挂到已有的共享 VIP,不额外占一个 LB IP。

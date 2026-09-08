@@ -314,7 +314,14 @@ endpoints:
       # The management-plane service, not the docker gateway: this is
       # the one in the catalog, and the one a dashboard calls.
       default: daas-api
-      public: daas
+      # ⚠️ Deliberately the same as internal. This process holds the
+      # tenant CA's private key and is not routed to the internet; a
+      # public entry that named a route which did not exist
+      # (`http://daas.openstack.svc.cluster.local`, 2026-09-06) was
+      # a catalog lie a tenant outside the cluster found by curl. If it
+      # is ever exposed (an Ingress on the tue-jp-tls pattern), point
+      # `host_fqdn_override.public` and `scheme.public` at that.
+      public: daas-api
     host_fqdn_override:
       default: null
     path:
@@ -324,7 +331,7 @@ endpoints:
     port:
       api:
         default: 9518
-        public: 80
+        public: 9518
   # The two addresses a tenant types at their docker client. Structured
   # entries rather than strings in `conf`, the way nova carries the
   # console proxies: the Service publishes the port from here, and the

@@ -1,0 +1,31 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+A node drain that takes both gateway pods at once cuts every
+tenant's docker session and every build in flight; one must stay.
+*/}}
+{{- if .Values.manifests.pdb_gateway }}
+{{- $envAll := . }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: daas-gateway
+spec:
+  minAvailable: {{ .Values.pod.lifecycle.disruption_budget.gateway.min_available }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "daas" "gateway" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{- end }}

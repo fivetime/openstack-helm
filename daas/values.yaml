@@ -72,6 +72,14 @@ pod:
     termination_grace_period:
       gateway:
         timeout: 300
+    # Two replicas each, and a drain must not take both: one gateway keeps
+    # tenants' sessions and builds alive, one api keeps the dashboard's
+    # Enable button answering.
+    disruption_budget:
+      gateway:
+        min_available: 1
+      api:
+        min_available: 1
   resources:
     enabled: false
     gateway:
@@ -402,6 +410,8 @@ manifests:
   deployment_api: true
   service_gateway: true
   service_api: true
+  pdb_gateway: true
+  pdb_api: true
   secret_config: false
   job_db_sync: false
   job_ks_service: true

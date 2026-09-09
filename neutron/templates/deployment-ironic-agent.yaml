@@ -12,6 +12,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
+{{- define "ironicAgentLivenessProbeTemplate" }}
+exec:
+  command:
+    - /tmp/neutron-ironic-agent.sh
+    - liveness
+{{- end }}
+
 {{- if .Values.manifests.deployment_ironic_agent }}
 {{- $envAll := . }}
 
@@ -86,6 +93,7 @@ spec:
 {{ tuple $envAll "neutron_ironic_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.ironic_agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
 {{ dict "envAll" $envAll "application" "neutron_ironic_agent" "container" "neutron_ironic_agent" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{ dict "envAll" $envAll "component" "ironic_agent" "container" "neutron_ironic_agent" "type" "liveness" "probeTemplate" (include "ironicAgentLivenessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
           command:
             - /tmp/neutron-ironic-agent.sh
             - start

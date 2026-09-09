@@ -544,6 +544,22 @@ pod:
             initialDelaySeconds: 120
             periodSeconds: 90
             timeoutSeconds: 70
+    ironic_agent:
+      neutron_ironic_agent:
+        liveness:
+          enabled: true
+          # Seconds since the agent last finished a state-report cycle
+          # (conf.neutron.baremetal_agent.heartbeat_file) before the pod
+          # is considered dead. Keep it a few [AGENT] report_interval
+          # (default 30s) so one slow cycle does not restart the pod;
+          # neutron itself declares the per-node agents dead after
+          # agent_down_time (default 75s).
+          stale_after: 120
+          params:
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 2
     server:
       server:
         readiness:
@@ -1977,6 +1993,11 @@ conf:
         # shell (for piped commands)
         sh: CommandFilter, sh, root
   neutron:
+    baremetal_agent:
+      # Touched by ironic-neutron-agent after every state-report cycle;
+      # the liveness probe reads its mtime (pod.probes.ironic_agent).
+      # /tmp is the pod's emptyDir, writable by the agent user.
+      heartbeat_file: /tmp/ironic-neutron-agent.heartbeat
     DEFAULT:
       metadata_proxy_socket: /var/lib/neutron/openstack-helm/metadata_proxy
       log_config_append: /etc/neutron/logging.conf

@@ -1,0 +1,7 @@
+---
+prometheus-openstack-exporter:
+  - |
+    Add .Values.conf.prometheus_openstack_exporter.extra_args to pass extra
+    command line arguments to openstack-exporter, e.g. --disable-metric for
+    services a cloud does not run or for slow metrics.
+...

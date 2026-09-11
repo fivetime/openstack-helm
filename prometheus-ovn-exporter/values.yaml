@@ -18,7 +18,9 @@
 images:
   tags:
     ovn_exporter: ghcr.io/fivetime/openstackhelm/ovn-exporter:latest
-  pull_policy: IfNotPresent
+  # The default tag is a moving "latest" tag: with IfNotPresent a node that
+  # already has an older image never pulls the rebuilt one.
+  pull_policy: Always
   local_registry:
     active: false
     exclude: []

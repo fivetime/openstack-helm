@@ -1,0 +1,6 @@
+---
+prometheus-ovs-exporter:
+  - |
+    The default image pull policy is now Always. The default images use the
+    moving "latest" tag, and with IfNotPresent a node that already had an
+    older image never pulled a rebuilt one.

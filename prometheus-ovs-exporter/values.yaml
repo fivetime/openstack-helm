@@ -19,7 +19,9 @@ images:
   tags:
     ovs_exporter: ghcr.io/fivetime/openstackhelm/ovs-exporter:latest
     network_exporter: ghcr.io/fivetime/openstackhelm/openstack-network-exporter:latest
-  pull_policy: IfNotPresent
+  # The default tags are moving "latest" tags: with IfNotPresent a node that
+  # already has an older image never pulls the rebuilt one.
+  pull_policy: Always
   local_registry:
     active: false
     exclude: []

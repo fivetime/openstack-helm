@@ -1,0 +1,9 @@
+---
+prometheus-openstack-exporter:
+  - |
+    The liveness and readiness probes now request the exporter landing page
+    (/) instead of /metrics. Without --cache every request to /metrics runs a
+    full collection against all OpenStack APIs, so the probes alone caused
+    several collections per minute; with --cache the kubelet closes the
+    connection after 10KB of the metrics body and the exporter logs a write
+    error for every probe.

@@ -1,0 +1,9 @@
+---
+manila:
+  - |
+    The manila-api readiness probe is now rendered from
+    .Values.pod.probes.api.manila-api.readiness, and an optional liveness
+    probe is available under .Values.pod.probes.api.manila-api.liveness
+    (disabled by default). Probe parameters such as timeoutSeconds can be
+    overridden through params. The default values render the same readiness
+    probe as before.

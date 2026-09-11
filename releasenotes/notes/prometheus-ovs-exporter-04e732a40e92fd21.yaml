@@ -1,0 +1,8 @@
+---
+prometheus-ovs-exporter:
+  - |
+    Add a chart that runs ovs_exporter and openstack-network-exporter as a
+    daemonset next to the openvswitch daemonset, reading the host's
+    /run/openvswitch, with a PodMonitor. It exports datapath, interface,
+    tunnel BFD and ovn-controller metrics without restarting ovs-vswitchd.
+...

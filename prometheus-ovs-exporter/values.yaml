@@ -1,0 +1,121 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for prometheus-ovs-exporter.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+---
+images:
+  tags:
+    ovs_exporter: ghcr.io/fivetime/openstackhelm/ovs-exporter:latest
+    network_exporter: ghcr.io/fivetime/openstackhelm/openstack-network-exporter:latest
+  pull_policy: IfNotPresent
+  local_registry:
+    active: false
+    exclude: []
+
+labels:
+  # Same nodes as the openvswitch daemonset.
+  ovs_exporter:
+    node_selector_key: openvswitch
+    node_selector_value: enabled
+
+pod:
+  security_context:
+    ovs_exporter:
+      pod:
+        # The unixctl sockets and db.sock under /run/openvswitch are
+        # root-owned with mode 0750/0770.
+        runAsUser: 0
+      container:
+        ovs_exporter:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        network_exporter:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+  tolerations:
+    ovs_exporter:
+      enabled: true
+      tolerations:
+        - operator: Exists
+  lifecycle:
+    upgrades:
+      daemonsets:
+        pod_replacement_strategy: RollingUpdate
+        ovs_exporter:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+  resources:
+    enabled: false
+    ovs_exporter:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
+    network_exporter:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
+
+network:
+  ovs_exporter:
+    port: 9475
+  network_exporter:
+    port: 1981
+
+conf:
+  ovs_exporter:
+    # Flags of fivetime/ovs_exporter. Containerized OVS logs to stdout, so the
+    # log file paths are left empty to skip the log file metrics.
+    args:
+      - -system.run.dir=/run/openvswitch
+      - -database.vswitch.socket.remote=unix:/run/openvswitch/db.sock
+      - -database.vswitch.file.data.path=/run/openvswitch/conf.db
+      - -database.vswitch.file.log.path=
+      - -service.vswitchd.file.log.path=
+  network_exporter:
+    # openstack-network-exporter adds ovn-controller internals and named
+    # coverage counters that ovs_exporter does not export.
+    enabled: true
+    ovn_rundir: /run/openvswitch
+    config:
+      collectors:
+        - ovn
+        - coverage
+        - bridge
+      metric-sets:
+        - base
+        - errors
+        - perf
+        - counters
+        - debug
+
+monitoring:
+  podmonitor:
+    interval: 30s
+
+manifests:
+  configmap_etc: true
+  daemonset: true
+  podmonitor: true
+
+# -- Extra K8s manifests to deploy. Either a list or a map of manifests.
+extraObjects: {}
+...

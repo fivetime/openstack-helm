@@ -1,0 +1,7 @@
+---
+prometheus-ovn-exporter:
+  - |
+    Add a chart that runs ovn_exporter against the NB/SB databases over TCP
+    for OVN topology metrics, and PodMonitors for it and for exporter
+    sidecars added to the ovn chart database and northd pods.
+...

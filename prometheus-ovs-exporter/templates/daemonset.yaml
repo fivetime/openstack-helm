@@ -1,0 +1,129 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+One pod per Open vSwitch node, next to (not inside) the openvswitch
+daemonset: adding a container to that daemonset would restart ovs-vswitchd
+on every node. Both exporters only need the host's /run/openvswitch, which
+holds the ovsdb-server, ovs-vswitchd and ovn-controller unixctl sockets and
+pid files. The pid files hold pids of the openvswitch pod's PID namespace,
+so nothing here may rely on /proc of those pids; the enabled collectors
+don't.
+*/}}
+{{- if .Values.manifests.daemonset }}
+{{- $envAll := . }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ovs-exporter
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "ovs_exporter" "metrics" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll "ovs_exporter" "metrics" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll "ovs_exporter" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "ovs_exporter" "metrics" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+    spec:
+{{ dict "envAll" $envAll "application" "ovs_exporter" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      automountServiceAccountToken: false
+      nodeSelector:
+        {{ .Values.labels.ovs_exporter.node_selector_key }}: {{ .Values.labels.ovs_exporter.node_selector_value | quote }}
+{{- if .Values.pod.tolerations.ovs_exporter.enabled }}
+{{ tuple $envAll "ovs_exporter" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{- end }}
+      containers:
+        - name: ovs-exporter
+{{ tuple $envAll "ovs_exporter" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.ovs_exporter | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "ovs_exporter" "container" "ovs_exporter" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          args:
+            - -web.listen-address=:{{ .Values.network.ovs_exporter.port }}
+{{- range .Values.conf.ovs_exporter.args }}
+            - {{ . | quote }}
+{{- end }}
+          ports:
+            - name: ovs-metrics
+              containerPort: {{ .Values.network.ovs_exporter.port }}
+          # A TCP check: an HTTP probe on /metrics would trigger a collection.
+          readinessProbe:
+            tcpSocket:
+              port: ovs-metrics
+            periodSeconds: 30
+          livenessProbe:
+            tcpSocket:
+              port: ovs-metrics
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          volumeMounts:
+            - name: run-openvswitch
+              mountPath: /run/openvswitch
+              readOnly: true
+{{- if .Values.conf.network_exporter.enabled }}
+        - name: network-exporter
+{{ tuple $envAll "network_exporter" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.network_exporter | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "ovs_exporter" "container" "network_exporter" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          env:
+            - name: OPENSTACK_NETWORK_EXPORTER_YAML
+              value: /etc/openstack-network-exporter/openstack-network-exporter.yaml
+            - name: OPENSTACK_NETWORK_EXPORTER_HTTP_LISTEN
+              value: ":{{ .Values.network.network_exporter.port }}"
+            - name: OPENSTACK_NETWORK_EXPORTER_OVS_RUNDIR
+              value: /run/openvswitch
+            # ovn-controller keeps its pid file and control socket in the
+            # host's /run/openvswitch on these nodes.
+            - name: OPENSTACK_NETWORK_EXPORTER_OVN_RUNDIR
+              value: {{ .Values.conf.network_exporter.ovn_rundir | quote }}
+          ports:
+            - name: network-metrics
+              containerPort: {{ .Values.network.network_exporter.port }}
+          readinessProbe:
+            tcpSocket:
+              port: network-metrics
+            periodSeconds: 30
+          livenessProbe:
+            tcpSocket:
+              port: network-metrics
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          volumeMounts:
+            - name: run-openvswitch
+              mountPath: /run/openvswitch
+              readOnly: true
+            - name: ovs-exporter-etc
+              mountPath: /etc/openstack-network-exporter
+              readOnly: true
+{{- end }}
+      volumes:
+        - name: run-openvswitch
+          hostPath:
+            path: /run/openvswitch
+            type: Directory
+{{- if .Values.conf.network_exporter.enabled }}
+        - name: ovs-exporter-etc
+          configMap:
+            name: ovs-exporter-etc
+            defaultMode: 0444
+{{- end }}
+{{- end }}

@@ -1,0 +1,80 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+A single ovn_exporter that reads the NB/SB tables over TCP (chassis, logical
+switches and routers, port bindings, gateway port placement). It runs with
+no local components: the database and northd daemons live in other pods, so
+their unixctl probes could never succeed and would hold ovn_up at 0. The
+raft and northd metrics come from openstack-network-exporter sidecars in the
+ovn chart pods instead (.Values.pod.extraContainers of the ovn chart).
+*/}}
+{{- if .Values.manifests.deployment }}
+{{- $envAll := . }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ovn-exporter
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "ovn_exporter" "topology" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ tuple $envAll "ovn_exporter" "topology" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "ovn_exporter" "topology" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+    spec:
+{{ dict "envAll" $envAll "application" "ovn_exporter" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      automountServiceAccountToken: false
+      nodeSelector:
+        {{ .Values.labels.ovn_exporter.node_selector_key }}: {{ .Values.labels.ovn_exporter.node_selector_value | quote }}
+{{- if .Values.pod.tolerations.ovn_exporter.enabled }}
+{{ tuple $envAll "ovn_exporter" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{- end }}
+      containers:
+        - name: ovn-exporter
+{{ tuple $envAll "ovn_exporter" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.ovn_exporter | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "ovn_exporter" "container" "ovn_exporter" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          args:
+            - -web.listen-address=:{{ .Values.network.ovn_exporter.port }}
+            - -database.northbound.socket.remote={{ .Values.conf.ovn_exporter.northbound }}
+            - -database.southbound.socket.remote={{ .Values.conf.ovn_exporter.southbound }}
+            - -collector.components=
+            - -collector.topology=true
+{{- range .Values.conf.ovn_exporter.extra_args }}
+            - {{ . | quote }}
+{{- end }}
+          ports:
+            - name: ovn-metrics
+              containerPort: {{ .Values.network.ovn_exporter.port }}
+          # A TCP check: an HTTP probe on /metrics would trigger a collection.
+          readinessProbe:
+            tcpSocket:
+              port: ovn-metrics
+            periodSeconds: 30
+          livenessProbe:
+            tcpSocket:
+              port: ovn-metrics
+            initialDelaySeconds: 30
+            periodSeconds: 60
+{{- end }}

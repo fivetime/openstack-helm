@@ -75,4 +75,15 @@ spec:
           env:
 {{ if $env_ovn.common }}{{ toYaml $env_ovn.common | indent 12 }}{{ end }}
 {{ if $env_ovn.northd }}{{ toYaml $env_ovn.northd | indent 12 }}{{ end }}
+{{- with .Values.pod.extraContainers.northd }}
+          # ovn-northd names its control socket after its pid under
+          # /var/run/ovn; share that directory with the extra containers.
+          volumeMounts:
+            - name: run-ovn
+              mountPath: /var/run/ovn
+          {{- tpl (toYaml .) $envAll | nindent 8 }}
+      volumes:
+        - name: run-ovn
+          emptyDir: {}
+{{- end }}
 {{- end }}

@@ -1,0 +1,9 @@
+---
+ovn:
+  - |
+    Introduce .Values.pod.extraContainers.ovsdb_nb, .ovsdb_sb and .northd hooks
+    to add extra containers to the OVN database statefulsets and the northd
+    deployment, e.g. a metrics exporter sidecar. A non-empty northd list also
+    mounts an emptyDir at /var/run/ovn so the extra containers can reach the
+    northd control socket.
+...

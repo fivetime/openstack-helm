@@ -226,6 +226,15 @@ conf:
     #   exit-address-family
 
 pod:
+  # Extra containers appended to the OVN database and northd pods, e.g. a
+  # metrics exporter sidecar. Rendered with tpl, so values may reference the
+  # chart context. The database pods already share /var/run/ovn through the
+  # run-openvswitch volume; a non-empty northd list adds an emptyDir at
+  # /var/run/ovn so a sidecar can reach the northd control socket.
+  extraContainers:
+    ovsdb_nb: []
+    ovsdb_sb: []
+    northd: []
   # NOTE: should be same as nova.pod.use_fqdn.compute
   use_fqdn:
     compute: true

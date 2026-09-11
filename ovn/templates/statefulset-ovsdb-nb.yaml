@@ -99,6 +99,9 @@ spec:
               mountPath: /var/run/ovn
             - name: data
               mountPath: {{ $envAll.Values.volume.ovn_ovsdb_nb.path }}
+        {{- with .Values.pod.extraContainers.ovsdb_nb }}
+          {{- tpl (toYaml .) $envAll | nindent 8 }}
+        {{- end }}
       volumes:
         - name: run-openvswitch
           # Per-pod runtime dir for the central NB DB (sockets/pidfiles). It

@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.configmap_cni (eq .Values.network.driver "cni") .Values.network.drivers.cni.deploy_daemon }}
+{{- if and .Values.manifests.configmap_cni .Values.network.drivers.cni.deploy_daemon }}
 {{- $envAll := . }}
 ---
 apiVersion: v1

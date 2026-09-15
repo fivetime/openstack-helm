@@ -12,7 +12,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if and .Values.manifests.daemonset_cni_daemon (eq .Values.network.driver "cni") .Values.network.drivers.cni.deploy_daemon }}
+{{/*
+zun-cni-daemon plugs capsule sandboxes into Neutron for the CRI capsule driver.
+It is independent of network.driver, which selects how the *docker* driver's
+containers are networked (kuryr): a node serves both at once, so enabling
+capsule networking must not switch the docker path away from kuryr.
+*/}}
+{{- if and .Values.manifests.daemonset_cni_daemon .Values.network.drivers.cni.deploy_daemon }}
 {{- $envAll := . }}
 
 {{- $mounts_zun_cni_daemon := .Values.pod.mounts.zun_cni_daemon.zun_cni_daemon }}
@@ -57,31 +63,42 @@ spec:
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.cni_daemon.timeout | default "60" }}
       initContainers:
 {{ tuple $envAll "cni_daemon" $mounts_zun_cni_daemon_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
-        - name: cni-plugins-install
+        # The plugin binary the runtime executes on the host: the static
+        # zun-cni shim built into the image (tools/zun-cni-shim in the fork).
+        # Not the image's `zun-cni` console script, whose interpreter exists
+        # only in the image. Nothing else is written to the host's CNI bin
+        # dir, which the kubelet's CNI plugins share.
+        - name: zun-cni-install
 {{ tuple $envAll "zun_cni_daemon" | include "helm-toolkit.snippets.image" | indent 10 }}
           securityContext:
             runAsUser: 0
-            privileged: true
-            readOnlyRootFilesystem: false
-          command:
-            - /tmp/install-cni-plugins.sh
-          volumeMounts:
-            - name: zun-bin
-              mountPath: /tmp/install-cni-plugins.sh
-              subPath: install-cni-plugins.sh
-              readOnly: true
-            - name: cni-bin
-              mountPath: {{ .Values.network.drivers.cni.paths.bin_dir }}
-        - name: cni-config-setup
-{{ tuple $envAll "zun_cni_daemon" | include "helm-toolkit.snippets.image" | indent 10 }}
           command:
             - /bin/sh
             - -c
             - |
-              echo "Setting up CNI configuration..."
-              cp /tmp/10-zun-cni.conf {{ .Values.network.drivers.cni.paths.conf_dir }}/
-              chmod 644 {{ .Values.network.drivers.cni.paths.conf_dir }}/10-zun-cni.conf
-              echo "CNI configuration installed"
+              set -e
+              src=/usr/local/libexec/zun/zun-cni
+              dst={{ .Values.network.drivers.cni.paths.bin_dir }}/zun-cni
+              CNI_COMMAND=VERSION "$src" </dev/null
+              install -m 0755 "$src" "$dst.new"
+              mv -f "$dst.new" "$dst"
+              echo "installed $dst from $(cat /etc/image_info/zun-cni.txt 2>/dev/null)"
+          volumeMounts:
+            - name: cni-bin
+              mountPath: {{ .Values.network.drivers.cni.paths.bin_dir }}
+        - name: cni-config-setup
+{{ tuple $envAll "zun_cni_daemon" | include "helm-toolkit.snippets.image" | indent 10 }}
+          securityContext:
+            runAsUser: 0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              dir={{ .Values.network.drivers.cni.paths.conf_dir }}
+              install -m 0644 /tmp/10-zun-cni.conf "$dir/.10-zun-cni.conf.new"
+              mv -f "$dir/.10-zun-cni.conf.new" "$dir/10-zun-cni.conf"
+              echo "installed $dir/10-zun-cni.conf:"; cat "$dir/10-zun-cni.conf"
           volumeMounts:
             - name: cni-conf-template
               mountPath: /tmp/10-zun-cni.conf
@@ -146,6 +163,15 @@ spec:
             - name: cni-bin
               mountPath: {{ .Values.network.drivers.cni.paths.bin_dir }}
               readOnly: true
+            # The sandbox's network namespace: the runtime passes its path
+            # (/var/run/netns/cni-...) in CNI_NETNS and creates it after this
+            # pod started, so the mount must follow the host's mounts.
+            - name: host-run-netns
+              mountPath: /run/netns
+              mountPropagation: HostToContainer
+            # os-vif plugs the port into br-int through ovsdb.
+            - name: host-run-openvswitch
+              mountPath: /run/openvswitch
 
             # ═══════════════════════════════════════════════════════════
             # 用户自定义挂载点
@@ -192,6 +218,14 @@ spec:
         - name: cni-bin
           hostPath:
             path: {{ .Values.network.drivers.cni.paths.bin_dir }}
+            type: DirectoryOrCreate
+        - name: host-run-netns
+          hostPath:
+            path: /run/netns
+            type: DirectoryOrCreate
+        - name: host-run-openvswitch
+          hostPath:
+            path: /run/openvswitch
             type: DirectoryOrCreate
 
         # ═══════════════════════════════════════════════════════════

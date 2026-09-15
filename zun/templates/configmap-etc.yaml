@@ -20,8 +20,8 @@ limitations under the License.
 {{- $_ := set .Values.conf.zun.network "driver" .Values.network.driver -}}
 {{- end -}}
 
-{{/* 如果使用 CNI，自动配置 CNI daemon 参数 */}}
-{{- if eq .Values.network.driver "cni" -}}
+{{/* 部署 CNI daemon（capsule 网络）或 driver=cni 时，自动配置 CNI daemon 参数 */}}
+{{- if or (eq .Values.network.driver "cni") .Values.network.drivers.cni.deploy_daemon -}}
   {{- if empty .Values.conf.zun.cni_daemon.cni_daemon_port -}}
   {{- $_ := set .Values.conf.zun.cni_daemon "cni_daemon_port" .Values.network.drivers.cni.daemon.port -}}
   {{- end -}}

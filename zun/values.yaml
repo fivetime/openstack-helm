@@ -69,7 +69,7 @@ labels:
     node_selector_key: openstack-compute-node
     node_selector_value: enabled
 
-  # CNI 守护进程部署在计算节点
+  # CNI 守护进程与 zun-compute 同节点(capsule 沙箱就建在那里)
   cni_daemon:
     node_selector_key: openstack-compute-node
     node_selector_value: enabled
@@ -137,27 +137,26 @@ network:
   drivers:
     # CNI (Container Network Interface) 配置
     cni:
-      deploy_daemon: false                     # 是否部署 CNI daemon
+      # capsule(CRI 驱动)的网络:部署 zun-cni-daemon,并把 zun-cni shim 与
+      # CNI 配置装到宿主机。与上面的 network.driver 无关——driver 管的是 docker
+      # 驱动的容器(kuryr),同一节点两条路径并存,开 capsule 网络不改 docker 路径。
+      deploy_daemon: false
 
       # CNI 路径配置
       paths:
-        conf_dir: /etc/cni/net.d               # CNI 配置文件目录
-        bin_dir: /opt/cni/bin                  # CNI 二进制文件目录
+        # ⚠️ 不能是 /etc/cni/net.d:那是 kubelet(CRI-O)的 CNI 目录,且 containerd
+        # 按文件名只取第一份配置(max_conf_num=1),00-multus 等排在前面,capsule 仍会
+        # 落到 K8s 的 CNI。宿主机前提:Zun 专用 containerd 的
+        # [plugins.'io.containerd.cri.v1.runtime'.cni] conf_dir 指向这里。
+        conf_dir: /etc/cni/zun-net.d
+        bin_dir: /opt/cni/bin                  # 只写入 zun-cni 一个文件
 
-      # CNI 插件配置
-      plugins:
-        version: "v1.7.1"                     # CNI 插件版本
-        install:
-          main: true      # bridge, ipvlan, loopback, macvlan, ptp, vlan, host-device, dummy
-          ipam: true      # dhcp, host-local, static
-          meta: true      # tuning, portmap, bandwidth, sbr, firewall
-          windows: false  # win-bridge, win-overlay
-
-      # CNI 配置文件内容
+      # CNI 配置文件内容(zun_cni_daemon = shim 转发的 daemon 地址)
       config_file:
-        cniVersion: "0.4.0"
-        name: "zun-cni"
+        cniVersion: "0.3.1"
+        name: "zun"
         type: "zun-cni"
+        zun_cni_daemon: "http://127.0.0.1:9036"
 
       # CNI daemon 配置
       daemon:
@@ -473,12 +472,14 @@ pod:
 
     # CNI 守护进程资源
     cni_daemon:
+      # 空闲即约 420MB(master + watcher + server,测试床实测),每个请求再 fork
+      # 一个 worker(worker_num 默认 30):512Mi 会在并发建沙箱时被 OOM
       requests:
-        memory: "128Mi"
+        memory: "512Mi"
         cpu: "100m"
       limits:
-        memory: "512Mi"
-        cpu: "1000m"
+        memory: "2Gi"
+        cpu: "2000m"
 
     # 各种任务的资源配置
     jobs:
@@ -721,6 +722,12 @@ conf:
 
     # === CNI 守护进程配置（自动从顶级配置同步）===
     cni_daemon: {}                            # 保持空，让模板自动填充
+
+    # === os-vif OVS 插口(CNI daemon 用)===
+    # 容器化 OVS 的 ovsdb 在宿主机 /run/openvswitch/db.sock(daemon 已挂载);
+    # 不依赖默认的 tcp:127.0.0.1:6640 是否恰好开着
+    os_vif_ovs:
+      ovsdb_connection: unix:/run/openvswitch/db.sock
 
     # === Neutron 配置 ===
     neutron:

@@ -23,7 +23,7 @@ mkdir -p /var/lib/zun
 echo "=== Starting Zun CNI Daemon ==="
 
 # Check CNI configuration
-{{- if and (eq .Values.network.driver "cni") .Values.conf.zun.cni_daemon.zun_cni_config_file }}
+{{- if .Values.conf.zun.cni_daemon.zun_cni_config_file }}
 CNI_CONFIG_FILE="{{ .Values.conf.zun.cni_daemon.zun_cni_config_file }}"
 if [ -f "$CNI_CONFIG_FILE" ]; then
     echo "CNI config found at: $CNI_CONFIG_FILE"
@@ -73,8 +73,8 @@ echo "- Pyroute2 timeout: {{ .Values.conf.zun.cni_daemon.pyroute2_timeout }}s"
 # Check CNI environment - using standard CNI approach
 echo ""
 echo "Checking CNI environment..."
-echo "CNI daemon will receive network namespace paths via CNI_NETNS environment variable"
-echo "Network namespaces are managed by kubelet, not directly accessed from /var/run/netns"
+echo "The runtime passes each sandbox's netns path in CNI_NETNS (under /run/netns)"
+echo "zun-cni shim on the host: $(cat /etc/image_info/zun-cni.txt 2>/dev/null)"
 
 # Verify CNI binary and config directories
 CNI_BIN_DIR="{{ .Values.network.drivers.cni.paths.bin_dir }}"

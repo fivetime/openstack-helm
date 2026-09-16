@@ -18,6 +18,10 @@ BuildKit 数据面的 Service(doc/buildkit-service.md §4.4):租户的 buildx �
 endpoints.buildkit_proxy 取,形态(LB 类型、双栈、IP 池标签、固定地址)从
 network.buildkit_proxy 取。它曾是 override 里的 extraObjects —— 裸清单被 --values
 接受却不建对象、新环境没有入口,2026-08-31 审计撞过;进 chart 之后没有这条路可走错。
+
+podman 构建线(openstack-raas doc/podman-build.md §5.6)的接入代理也在编排器里,
+开了就在同一个 Service 上多一个端口:同一对 LB 地址、同一条泛解析,
+租户连 podman-<project>.<后缀>,靠主机名前缀与 builder- 区分。
 */}}
 {{- if and .Values.manifests.service_buildkit_proxy .Values.conf.raas.buildkit.enabled }}
 {{- $envAll := . }}
@@ -55,4 +59,10 @@ spec:
       port: {{ tuple "buildkit_proxy" "internal" "proxy" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
       targetPort: {{ tuple "buildkit_proxy" "internal" "proxy" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
       protocol: TCP
+{{- if and .Values.conf.raas.podman .Values.conf.raas.podman.enabled }}
+    - name: podman
+      port: {{ tuple "buildkit_proxy" "internal" "podman" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+      targetPort: {{ tuple "buildkit_proxy" "internal" "podman" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+      protocol: TCP
+{{- end }}
 {{- end }}

@@ -277,6 +277,15 @@ conf:
       endpoint_domain: null
       port: null
       proxy_addr: null
+    # podman 构建线(openstack-raas doc/podman-build.md)。与 BuildKit 共用机器池与
+    # buildkit_proxy 的 Service(多一个 podman 端口)。endpoint_domain / port / proxy_addr
+    # 留空同样从 endpoints.buildkit_proxy 推。打开前镜像要带 podman ≥ 5.7.0 与带
+    # PUT /podman 的 agent,spec 必须显式给(规格表的池键)。
+    podman:
+      enabled: false
+      endpoint_domain: null
+      port: null
+      proxy_addr: null
     openstack:
       cloud: openstack_helm
       # 机器的出网网络由**租户在 Horizon 里选**(tenant_network 表)。这里留
@@ -439,6 +448,9 @@ endpoints:
     port:
       proxy:
         default: 1234
+      # podman 构建线的接入端口(conf.raas.podman.enabled 时 Service 才开它)
+      podman:
+        default: 8443
 
 # GitLab 链路的两个卷。
 volume:

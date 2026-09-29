@@ -324,7 +324,6 @@ conf:
       default_datastore: mysql
       datastore_registry_ext: mysql:trove.guestagent.datastore.mysql.manager.Manager
       trove_conductor_workers: 1
-      notification_service_id: mysql:2f3ff068-2bfb-4f70-9a9d-a6bb65bc084b
       os_region_name: RegionOne
       # nova_compute_url: ""
       # neutron_url: ""
@@ -391,7 +390,6 @@ conf:
       ## conf.trove.DEFAULT.control_exchange, and is left out if that is
       ## unset too, so that both sides use the oslo.messaging default.
       control_exchange: null
-      ignore_users: os_admin
       log_dir: /var/log/trove/
       log_file: trove-guestagent.log
     # -- No [service_credentials] on purpose. Since "Use pre-auth Swift

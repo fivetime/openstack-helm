@@ -333,7 +333,13 @@ conf:
       # glance_url: ""
       # heat_url: ""
       trove_volume_support: true
-      network_isolation: false
+    network:
+      # -- Hand the user's port to the database container and leave the
+      ## instance itself on the management network only. The guest agent then
+      ## needs RabbitMQ, the image registry and Swift to be reachable through
+      ## DEFAULT.management_networks. This is Trove's default; the option lives
+      ## in [network], so the former DEFAULT.network_isolation never applied.
+      network_isolation: true
     database:
       # -- Database connection URI. When empty the URI is auto-generated
       ## from endpoints.oslo_db. Set to null to disable auto-generation,

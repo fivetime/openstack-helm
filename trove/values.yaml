@@ -398,6 +398,13 @@ conf:
     ## The guest declares its own queues, so on RabbitMQ 4.x it needs the
     ## same quorum queue settings as the control plane.
     oslo_messaging_rabbit: {}
+    # -- The queue manager that oslo_messaging_rabbit.use_queue_manager turns
+    ## on takes a file lock. Without a lock_path the guest agent fails to
+    ## start its RPC server ("value required for option lock_path") and
+    ## systemd gives up restarting it. The directory is created on demand;
+    ## /var/lib/trove belongs to the guest agent's user.
+    oslo_concurrency:
+      lock_path: /var/lib/trove/lock
     mysql:
       docker_image: quay.io/openstack.trove/mysql
       backup_docker_image: quay.io/openstack.trove/db-backup-mysql

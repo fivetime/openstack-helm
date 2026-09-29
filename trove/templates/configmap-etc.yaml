@@ -107,6 +107,13 @@ limitations under the License.
 {{- if empty $guest.DEFAULT.transport_url }}
 {{- $_ := set $guest.DEFAULT "transport_url" .Values.conf.trove.DEFAULT.transport_url -}}
 {{- end -}}
+{{- if empty $guest.DEFAULT.control_exchange }}
+{{- if empty .Values.conf.trove.DEFAULT.control_exchange }}
+{{- $_ := unset $guest.DEFAULT "control_exchange" -}}
+{{- else }}
+{{- $_ := set $guest.DEFAULT "control_exchange" .Values.conf.trove.DEFAULT.control_exchange -}}
+{{- end -}}
+{{- end -}}
 {{- $_ := set $guest "oslo_messaging_rabbit" (merge (default (dict) $guest.oslo_messaging_rabbit) (deepCopy .Values.conf.trove.oslo_messaging_rabbit)) -}}
 
 ---

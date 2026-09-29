@@ -385,7 +385,12 @@ conf:
       ## conf.trove.DEFAULT.transport_url, whose default in-cluster host
       ## names a guest cannot resolve; set it to an address guests can reach.
       transport_url: null
-      control_exchange: trove
+      # -- Must be the exchange the control plane uses, or the guest's status
+      ## reports go to an exchange nothing is bound to: instances then stay
+      ## in BUILD although the database is up. When empty it follows
+      ## conf.trove.DEFAULT.control_exchange, and is left out if that is
+      ## unset too, so that both sides use the oslo.messaging default.
+      control_exchange: null
       ignore_users: os_admin
       log_dir: /var/log/trove/
       log_file: trove-guestagent.log

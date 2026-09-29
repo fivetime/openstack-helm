@@ -367,6 +367,42 @@ conf:
       lock_path: /var/lock
     oslo_policy:
       policy_file: /etc/trove/policy.yaml
+  # -- Configuration the taskmanager injects into every database instance as
+  ## trove-guestagent.conf. Rendered into /etc/trove/trove-guestagent.conf
+  ## (the default [DEFAULT] guest_config) of the taskmanager pod. Without it
+  ## the guest agent gets no transport_url and never reports back.
+  ## Guests are Nova VMs outside the cluster: every address here must resolve
+  ## and route from the guest network, which in-cluster service names do not.
+  trove_guestagent:
+    DEFAULT:
+      # -- AMQP URL for the guest agent. When empty it is copied from
+      ## conf.trove.DEFAULT.transport_url, whose default in-cluster host
+      ## names a guest cannot resolve; set it to an address guests can reach.
+      transport_url: null
+      control_exchange: trove
+      ignore_users: os_admin
+      log_dir: /var/log/trove/
+      log_file: trove-guestagent.log
+    # -- Credentials the guest agent uses for backups (Swift). Values left
+    ## empty are copied from conf.trove.service_credentials, except auth_url,
+    ## which defaults to the public identity endpoint.
+    service_credentials:
+      auth_url: null
+      interface: public
+      auth_type: password
+    # -- Keys not set here are copied from conf.trove.oslo_messaging_rabbit.
+    ## The guest declares its own queues, so on RabbitMQ 4.x it needs the
+    ## same quorum queue settings as the control plane.
+    oslo_messaging_rabbit: {}
+    mysql:
+      docker_image: quay.io/openstack.trove/mysql
+      backup_docker_image: quay.io/openstack.trove/db-backup-mysql
+    mariadb:
+      docker_image: quay.io/openstack.trove/mariadb
+      backup_docker_image: quay.io/openstack.trove/db-backup-mariadb
+    postgresql:
+      docker_image: quay.io/openstack.trove/postgres
+      backup_docker_image: quay.io/openstack.trove/db-backup-postgresql
   logging:
     loggers:
       keys:

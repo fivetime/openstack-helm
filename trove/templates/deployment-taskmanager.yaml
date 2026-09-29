@@ -82,6 +82,10 @@ spec:
               subPath: trove.conf
               readOnly: true
             - name: trove-etc
+              mountPath: /etc/trove/trove-guestagent.conf
+              subPath: trove-guestagent.conf
+              readOnly: true
+            - name: trove-etc
               mountPath: {{ .Values.conf.trove.DEFAULT.log_config_append }}
               subPath: {{ base .Values.conf.trove.DEFAULT.log_config_append }}
               readOnly: true

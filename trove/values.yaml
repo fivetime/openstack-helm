@@ -383,13 +383,11 @@ conf:
       ignore_users: os_admin
       log_dir: /var/log/trove/
       log_file: trove-guestagent.log
-    # -- Credentials the guest agent uses for backups (Swift). Values left
-    ## empty are copied from conf.trove.service_credentials, except auth_url,
-    ## which defaults to the public identity endpoint.
-    service_credentials:
-      auth_url: null
-      interface: public
-      auth_type: password
+    # -- No [service_credentials] on purpose. Since "Use pre-auth Swift
+    ## client, drop Keystone re-auth" the taskmanager hands the guest a Swift
+    ## URL and the caller's token for each backup, and "Remove service
+    ## credentials from trove-guestagent.conf" asks operators to drop the
+    ## section: every guest would otherwise carry the trove service password.
     # -- Keys not set here are copied from conf.trove.oslo_messaging_rabbit.
     ## The guest declares its own queues, so on RabbitMQ 4.x it needs the
     ## same quorum queue settings as the control plane.

@@ -107,14 +107,6 @@ limitations under the License.
 {{- if empty $guest.DEFAULT.transport_url }}
 {{- $_ := set $guest.DEFAULT "transport_url" .Values.conf.trove.DEFAULT.transport_url -}}
 {{- end -}}
-{{- if empty $guest.service_credentials.auth_url }}
-{{- $_ := tuple "identity" "public" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set $guest.service_credentials "auth_url" -}}
-{{- end -}}
-{{- range $key := list "region_name" "project_name" "project_domain_name" "user_domain_name" "username" "password" }}
-{{- if empty (index $guest.service_credentials $key) }}
-{{- $_ := set $guest.service_credentials $key (index $envAll.Values.conf.trove.service_credentials $key) -}}
-{{- end -}}
-{{- end -}}
 {{- $_ := set $guest "oslo_messaging_rabbit" (merge (default (dict) $guest.oslo_messaging_rabbit) (deepCopy .Values.conf.trove.oslo_messaging_rabbit)) -}}
 
 ---

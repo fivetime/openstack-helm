@@ -1,0 +1,172 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if and .Values.manifests.incus_monitor .Values.manifests.prometheusrule_incus_monitor }}
+{{- $envAll := . }}
+{{- $daemonset := "masakari-incus-monitor" }}
+{{- $stalled := mul 4 (int .Values.conf.incus_exporter.incus_exporter.probe_interval) }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: masakari-incus-monitor
+  labels:
+{{ tuple $envAll .Chart.Name $daemonset | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  groups:
+    - name: incus-lxcfs
+      rules:
+        - alert: IncusHostLxcfsDown
+          expr: incus_exporter_host_lxcfs_up == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "LXCFS on {{ "{{ $labels.host }}" }} does not answer"
+            description: >-
+              The host LXCFS mount is missing or cannot be read. Check
+              incus-lxcfs.service on the node. No instance is recovered
+              automatically while this lasts.
+        - alert: IncusLxcfsRestarted
+          expr: >-
+            increase(incus_exporter_host_lxcfs_device_changes_total[10m]) > 0
+            or changes(incus_exporter_host_lxcfs_start_time_seconds[10m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "LXCFS on {{ "{{ $labels.host }}" }} was restarted"
+            description: >-
+              Every instance that was running on the node is now bound to a
+              mount nobody serves. Find out what restarted the service.
+        - alert: IncusdLxcfsViewStale
+          expr: >-
+            incus_exporter_incusd_lxcfs_fresh == 0
+            and incus_exporter_host_lxcfs_up == 1
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "incusd on {{ "{{ $labels.host }}" }} is bound to a dead LXCFS mount"
+            description: >-
+              An instance started now would bind the dead mount again, so
+              automatic recovery is withheld. Replace the incusd pod of the
+              node.
+        - alert: IncusInstanceLxcfsStale
+          expr: incus_exporter_instance_lxcfs_stale_confirmed == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ "{{ $labels.instance }}" }} on {{ "{{ $labels.host }}" }} is bound to a dead LXCFS mount"
+            description: >-
+              Reads of /proc/meminfo and the other files LXCFS provides fail
+              inside the instance {{ "{{ $labels.nova_uuid }}" }}. It needs
+              to be stopped and started.
+        - alert: IncusInstanceLxcfsUnreadable
+          expr: incus_exporter_instances_state{state="unreadable"} > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Instances on {{ "{{ $labels.host }}" }} cannot read LXCFS for an unknown reason"
+            description: >-
+              The instances are bound to the mount the host serves and
+              still cannot read it. They are not recovered automatically.
+        - alert: IncusExporterStalled
+          expr: >-
+            time() - incus_exporter_last_sweep_timestamp_seconds > {{ $stalled }}
+            or absent(incus_exporter_last_sweep_timestamp_seconds)
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "The Incus exporter stopped probing"
+            description: >-
+              No sweep finished recently, so a stale instance would go
+              unnoticed.
+        - alert: IncusExporterCannotReachIncus
+          expr: incus_exporter_incus_api_up == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "The Incus exporter on {{ "{{ $labels.host }}" }} cannot list instances"
+            description: >-
+              The Incus socket does not answer, so no instance on the node
+              is being probed.
+{{- if .Values.manifests.incus_notifier }}
+    - name: incus-autoheal
+      rules:
+        - alert: IncusAutohealBlocked
+          expr: incus_notifier_autoheal_blocked == 1
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Automatic recovery is withheld on {{ "{{ $labels.host }}" }}: {{ "{{ $labels.reason }}" }}"
+            description: >-
+              No notification is sent to Masakari from this node until the
+              reason is gone.
+        - alert: IncusInstanceAwaitingManual
+          expr: incus_notifier_instance_awaiting_manual == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ "{{ $labels.instance }}" }} on {{ "{{ $labels.host }}" }} waits for a manual restart"
+            description: >-
+              The instance {{ "{{ $labels.nova_uuid }}" }} is stale and will
+              not be recovered automatically, either because it is not
+              marked HA_Enabled or because its recovery failed.
+        - alert: IncusRecoveryIneffective
+          expr: increase(incus_notifier_recoveries_total{result="ineffective"}[15m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: "A restart did not fix an instance on {{ "{{ $labels.host }}" }}"
+            description: >-
+              An instance was stopped and started by Masakari and is still
+              bound to a dead mount. Recovery is withheld on the node.
+        - alert: IncusRecoveryFailed
+          expr: increase(incus_notifier_recoveries_total{result=~"error|timeout"}[15m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "A recovery failed on {{ "{{ $labels.host }}" }}"
+            description: >-
+              Masakari reported an error for a notification or did not
+              finish it in time. See the notification in Masakari.
+        - alert: IncusNotificationNotAccepted
+          expr: increase(incus_notifier_notifications_total{result=~"rejected|error"}[15m]) > 0
+          labels:
+            severity: critical
+          annotations:
+            summary: "Masakari did not accept a notification from {{ "{{ $labels.host }}" }}"
+            description: >-
+              A rejection usually means the host is missing from every
+              failover segment.
+        - alert: IncusNotifierStalled
+          expr: >-
+            time() - incus_notifier_last_loop_timestamp_seconds > {{ mul 4 (int .Values.conf.masakarimonitors.incus_notifier.loop_interval) }}
+            or absent(incus_notifier_last_loop_timestamp_seconds)
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "The Incus notifier stopped looping"
+            description: >-
+              Stale instances are still reported by the exporter but none
+              is recovered.
+{{- end }}
+{{- end }}

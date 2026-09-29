@@ -25,6 +25,11 @@ images:
     masakari_process_monitor: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
     masakari_instance_monitor: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
     masakari_introspective_instance_monitor: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
+    # The Incus monitor needs an image built from a masakari-monitors tree
+    # that carries the masakari-incus-exporter and masakari-incus-notifier
+    # commands.
+    masakari_incus_exporter: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
+    masakari_incus_notifier: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
     rabbit_init: docker.io/rabbitmq:4.3.5-management
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
   pull_policy: "IfNotPresent"
@@ -43,6 +48,9 @@ labels:
     node_selector_value: enabled
   monitors:
     node_selector_key: openstack-compute-node
+    node_selector_value: enabled
+  incus_monitor:
+    node_selector_key: openstack-incus-compute
     node_selector_value: enabled
   test:
     node_selector_key: openstack-control-plane
@@ -315,6 +323,18 @@ pod:
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
           runAsUser: 0
+        # Reads /proc/<pid>/mountinfo and /proc/<pid>/root of the instances,
+        # which needs the privileges of the host. It is given no
+        # credentials.
+        masakari_incus_exporter:
+          readOnlyRootFilesystem: true
+          privileged: true
+          runAsUser: 0
+        # Holds the credentials and therefore no privileges.
+        masakari_incus_notifier:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsUser: 42424
     test:
       pod:
         runAsUser: 42424
@@ -378,6 +398,10 @@ pod:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
+        incus_monitor:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
     disruption_budget:
       masakari_api:
         min_available: 0
@@ -427,6 +451,14 @@ pod:
     masakari_introspective_instance_monitor:
       init_container: null
       masakari_introspective_instance_monitor:
+        volumeMounts:
+        volumes:
+    masakari_incus_monitor:
+      init_container: null
+      incus_exporter:
+        volumeMounts:
+        volumes:
+      incus_notifier:
         volumeMounts:
         volumes:
     masakari_db_sync:
@@ -489,6 +521,20 @@ pod:
       limits:
         memory: "1024Mi"
         cpu: "2000m"
+    masakari_incus_exporter:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
+    masakari_incus_notifier:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
     jobs:
       rabbit_init:
         requests:
@@ -631,6 +677,41 @@ conf:
       disable_ipmi_checks: true
       corosync_multicast_ports: 5405
       pacemaker_node_type: remote
+    # Read by the incus-notifier container only.
+    incus_notifier:
+      state_url: http://127.0.0.1:9476/state
+      loop_interval: 15
+      # The engine recovers an instance only for an event it knows. An
+      # engine without INCUS_GUEST_ERROR ignores these notifications.
+      event: INCUS_GUEST_ERROR
+      event_detail: LXCFS_STALE
+      min_gap: 30
+      recovery_timeout: 300
+      flap_window: 600
+      flap_threshold: 2
+      error_threshold: 2
+      error_cooldown: 3600
+      reject_cooldown: 600
+      dry_run: false
+      bind_port: 9477
+  # -- Configuration of the incus-exporter container. It is kept out of
+  ## masakarimonitors.conf so that the privileged container never reads the
+  ## credentials of the [api] section.
+  incus_exporter:
+    DEFAULT:
+      debug: false
+    incus_exporter:
+      # Reached through process 1 so that a recreated socket or a restarted
+      # LXCFS is seen without a mount of the pod going stale.
+      socket_path: /proc/1/root/var/lib/incus/unix.socket
+      project: default
+      lxcfs_path: /var/lib/lxcfs
+      proc_root: /proc
+      probe_interval: 15
+      stale_confirmations: 3
+      boot_grace: 60
+      read_timeout: 5
+      bind_port: 9476
   masakari_sudoers: |
     Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/var/lib/openstack/bin"
     masakari-monitors ALL=(ALL:ALL) NOPASSWD: /var/lib/openstack/bin/privsep-helper
@@ -665,6 +746,17 @@ manifests:
   instance_monitor: false
   process_monitor: false
   introspective_instance_monitor: false
+  # The Incus exporter on every Incus compute node. It only observes.
+  incus_monitor: false
+  # The notifier next to the exporter. It asks Masakari to stop and start
+  # the stale instances that are marked HA_Enabled.
+  incus_notifier: false
+  podmonitor_incus_monitor: false
+  prometheusrule_incus_monitor: false
+
+monitoring:
+  incus_monitor:
+    scrape_interval: 30s
 
 # -- Extra K8s manifests to deploy. Either a list or a map of manifests.
 ## Note: Supports use of custom Helm templates

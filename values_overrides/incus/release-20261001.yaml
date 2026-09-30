@@ -1,4 +1,4 @@
-# Incus ebfd98de7c; formal CI artifact verified on three testbeds.
+# Incus ebfd98de7c; SDK eb803e4; verified three-node CI artifact release.
 images:
   tags:
     incus: ghcr.io/fivetime/incus@sha256:07de71e3acb29b3c345a750a5152597fb7cd340d7ff1cda48f322cdbc22151b1

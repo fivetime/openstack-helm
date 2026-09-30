@@ -1,0 +1,17 @@
+# Incus ebfd98de7c; SDK eb803e4; verified three-node CI artifact release.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:fdd763d3c8b6ce784996b54ce29409d581db4f5dd6aebf0b4e600fd8f4e0a0b3
+pod:
+  tolerations:
+    compute_incus:
+      enabled: true
+      tolerations:
+      - key: openstack-incus-compute
+        operator: Equal
+        value: 'true'
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/compute
+        operator: Equal
+        value: 'true'
+        effect: NoSchedule

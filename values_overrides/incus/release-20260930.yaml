@@ -1,0 +1,6 @@
+---
+# Incus 4f839b4f45746a29d6dbe931871a9483d6394aa1, official LXC base plus
+# the checksum-pinned restored-init pidfd patch. Pair with the Nova override.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:88923d6220190237534393823f99057aa4e765242f3102b7703440a1c8cb2a21

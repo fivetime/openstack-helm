@@ -1,0 +1,20 @@
+---
+# Coordinated with Incus revision 4f839b4f45 and its release override.
+# Production Incus computes are amd64; this immutable manifest was built from
+# nova-incus-driver 99349e32fd9e9510bbef3e0ef713b183e137123c.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:92cab660f32398971585f5808601b7f28ec9a99c20e5e186253acdfa569aece2
+pod:
+  tolerations:
+    compute_incus:
+      enabled: true
+      tolerations:
+        - key: openstack-incus-compute
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/compute
+          operator: Equal
+          value: "true"
+          effect: NoSchedule

@@ -68,7 +68,7 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "{{ "{{ $labels.instance }}" }} on {{ "{{ $labels.host }}" }} is bound to a dead LXCFS mount"
+            summary: "{{ "{{ $labels.incus_instance }}" }} on {{ "{{ $labels.host }}" }} is bound to a dead LXCFS mount"
             description: >-
               Reads of /proc/meminfo and the other files LXCFS provides fail
               inside the instance {{ "{{ $labels.nova_uuid }}" }}. It needs
@@ -83,6 +83,33 @@ spec:
             description: >-
               The instances are bound to the mount the host serves and
               still cannot read it. They are not recovered automatically.
+        - alert: IncusdLaunchesStacked
+          expr: incus_exporter_incusd_launches_stacked == 1
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Instances started on {{ "{{ $labels.host }}" }} come up unable to signal their own processes"
+            description: >-
+              incusd runs under the plain unconfined AppArmor label on a host
+              that stacks the profile changes of unprivileged unconfined
+              tasks. Every instance started, restarted or rebuilt on the node
+              gets unconfined stacked onto its profile, and its processes
+              can no longer signal or trace each other. Automatic recovery
+              is withheld. incusd must run under a named label.
+        - alert: IncusInstanceAppArmorStacked
+          expr: incus_exporter_instance_apparmor_stacked == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ "{{ $labels.incus_instance }}" }} on {{ "{{ $labels.host }}" }} cannot signal its own processes"
+            description: >-
+              Unconfined is stacked onto the AppArmor profile of the instance
+              {{ "{{ $labels.nova_uuid }}" }}, which its own rules do not
+              match: kill, service supervision and anything else that
+              signals another process fails inside it. It needs to be
+              stopped and started once incusd runs under a named label.
         - alert: IncusExporterStalled
           expr: >-
             time() - incus_exporter_last_sweep_timestamp_seconds > {{ $stalled }}
@@ -124,7 +151,7 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "{{ "{{ $labels.instance }}" }} on {{ "{{ $labels.host }}" }} waits for a manual restart"
+            summary: "{{ "{{ $labels.incus_instance }}" }} on {{ "{{ $labels.host }}" }} waits for a manual restart"
             description: >-
               The instance {{ "{{ $labels.nova_uuid }}" }} is stale and will
               not be recovered automatically, either because it is not

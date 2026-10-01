@@ -1,4 +1,4 @@
-# Incus 42a76d7e7f; formal CI artifact verified on three testbeds.
+# Incus 3a2c173e994; formal CI artifact verified on three testbeds.
 images:
   tags:
-    incus: ghcr.io/fivetime/incus@sha256:d4a787de3afc193f7c3f89afd0a3d536ff62a5f5c59f46664f82a782de582089
+    incus: ghcr.io/fivetime/incus@sha256:8f7660d2da80d830f08150f87c66428b508fd82f3199e95da9749f4837a64191

@@ -693,6 +693,10 @@ conf:
       error_cooldown: 3600
       reject_cooldown: 600
       dry_run: false
+      # Comma-separated hosts, as the monitors report them, whose notifier
+      # sends. On every other host it only logs, which lets recovery be
+      # enabled one node at a time. Empty means every host sends.
+      armed_hosts: ""
       bind_port: 9477
   # -- Configuration of the incus-exporter container. It is kept out of
   ## masakarimonitors.conf so that the privileged container never reads the

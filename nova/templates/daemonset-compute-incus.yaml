@@ -45,8 +45,7 @@ exec:
     - |
       python /tmp/incus-runtime-health.py \
         --endpoint {{ .Values.conf.nova_incus.incus.endpoint | quote }} \
-        --runtime {{ .Values.pod.host_paths.nova_compute_incus.runtime | quote }} \
-        --lxcfs {{ .Values.pod.host_paths.nova_compute_incus.lxcfs | quote }}
+        --runtime {{ .Values.pod.host_paths.nova_compute_incus.runtime | quote }}
       exec python /tmp/health-probe.py \
         --config-file /etc/nova/nova.conf \
         --config-file /etc/nova/nova-incus.conf \
@@ -487,10 +486,6 @@ spec:
               mountPropagation: HostToContainer
             - name: incus-runtime
               mountPath: {{ $hostPaths.runtime }}
-              readOnly: true
-              mountPropagation: HostToContainer
-            - name: incus-lxcfs
-              mountPath: {{ $hostPaths.lxcfs }}
               readOnly: true
               mountPropagation: HostToContainer
             - name: host-dev

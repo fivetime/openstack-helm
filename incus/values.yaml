@@ -200,6 +200,13 @@ incus:
 monitoring:
   incus:
     scrape_interval: 30s
+    alerts:
+      # Fraction of its memory an instance has left before it alerts.
+      memory_available_ratio: 0.05
+      # Fraction of its root filesystem in use before it alerts; the same
+      # default as the driver's monitoring audit.
+      rootfs_used_ratio: 0.9
+      pressure_for: 15m
   grafana:
     # uid of the Grafana Prometheus data source the dashboard queries.
     prometheus_datasource_uid: prometheus
@@ -211,6 +218,8 @@ manifests:
   secret_registry: true
   # Needs incus.metrics.enabled and the monitoring.coreos.com CRDs.
   podmonitor_incus: false
+  # Instance resource alerts on the scraped metrics.
+  prometheusrule_incus: false
   # The official Incus Grafana dashboard, picked up by the Grafana sidecar.
   configmap_grafana_dashboard: false
 

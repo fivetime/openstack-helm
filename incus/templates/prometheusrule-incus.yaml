@@ -1,0 +1,87 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.prometheusrule_incus }}
+{{- if not .Values.manifests.podmonitor_incus }}
+{{- fail "manifests.prometheusrule_incus needs manifests.podmonitor_incus: the rules read the metrics it scrapes" }}
+{{- end }}
+{{- $envAll := . }}
+{{- $alerts := .Values.monitoring.incus.alerts }}
+{{- /*
+The labels naming the scraped pod are dropped, so that a replaced incusd
+pod does not restart a pending alert.
+*/}}
+{{- $pod := "instance, pod, container, endpoint" }}
+{{- /* The Nova instance an Incus instance belongs to, read from the
+masakari Incus exporter when it runs. */}}
+{{- $nova := `{{ range query (printf "max by (nova_uuid) (incus_exporter_instance_apparmor_stacked{incus_instance=%q})" $labels.name) }}Nova instance {{ .Labels.nova_uuid }}. {{ end }}` }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: incus
+  labels:
+{{ tuple $envAll .Chart.Name "incusd" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  groups:
+    - name: incus-instances
+      rules:
+        - alert: IncusInstanceOOMKilled
+          expr: >-
+            sum without ({{ $pod }}) (increase(incus_memory_OOM_kills_total[10m])) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ `{{ $labels.name }}` }} on {{ `{{ $labels.node }}` }} killed a process for lack of memory"
+            description: >-
+              {{ $nova }}The kernel OOM killer ran inside the instance in the
+              last ten minutes. Its memory limit is too small for what it
+              runs.
+        - alert: IncusInstanceMemoryExhausted
+          expr: >-
+            min without ({{ $pod }}) (incus_memory_MemAvailable_bytes / incus_memory_MemTotal_bytes)
+            < {{ $alerts.memory_available_ratio }}
+          for: {{ $alerts.pressure_for }}
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ `{{ $labels.name }}` }} on {{ `{{ $labels.node }}` }} has {{ `{{ $value | humanizePercentage }}` }} of its memory available"
+            description: >-
+              {{ $nova }}The instance is close to its memory limit; the next
+              allocation peak ends with the OOM killer.
+        - alert: IncusInstanceRootfsAlmostFull
+          expr: >-
+            max without ({{ $pod }}) (1 - incus_filesystem_avail_bytes{mountpoint="/"}
+            / incus_filesystem_size_bytes{mountpoint="/"}) > {{ $alerts.rootfs_used_ratio }}
+          for: {{ $alerts.pressure_for }}
+          labels:
+            severity: warning
+          annotations:
+            summary: "The root filesystem of {{ `{{ $labels.name }}` }} on {{ `{{ $labels.node }}` }} is {{ `{{ $value | humanizePercentage }}` }} full"
+            description: >-
+              {{ $nova }}Writes inside the instance start failing once it is
+              full. Its flavor bounds the root disk.
+        - alert: IncusMetricsDown
+          expr: >-
+            max without ({{ $pod }}) (up{job="incus"}) == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "The Incus metrics of {{ `{{ $labels.node }}` }} cannot be scraped"
+            description: >-
+              Memory, disk and OOM alerts for the instances of the node are
+              blind until the scrape works again. Check that incusd trusts
+              the metrics certificate and that the listener answers.
+{{- end }}

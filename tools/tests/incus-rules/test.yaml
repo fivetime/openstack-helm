@@ -7,7 +7,7 @@ tests:
   - name: an OOM kill alerts at once and names the Nova instance
     interval: 30s
     input_series:
-      - series: 'incus_memory_OOM_kills_total{job="incus",name="instance-1",project="default",type="container",node="w1",instance="10.0.0.1:8443",pod="incusd-a",container="incusd",endpoint="https"}'
+      - series: 'incus_memory_OOM_kills_total{job="incus-w1",name="instance-1",project="default",type="container",node="w1",instance="10.0.0.1:8443",pod="incusd-a",container="incusd",endpoint="https"}'
         values: '0x10 1x10'
       # The masakari Incus exporter maps Incus names to Nova instances.
       - series: 'incus_exporter_instance_apparmor_stacked{host="w1.cloud.local",incus_instance="instance-1",nova_uuid="uuid-1",node="w1"}'
@@ -19,7 +19,7 @@ tests:
       - eval_time: 6m
         alertname: IncusInstanceOOMKilled
         exp_alerts:
-          - exp_labels: {severity: warning, job: incus, name: instance-1, project: default, type: container, node: w1}
+          - exp_labels: {severity: warning, job: incus-w1, name: instance-1, project: default, type: container, node: w1}
             exp_annotations:
               summary: instance-1 on w1 killed a process for lack of memory
               description: Nova instance uuid-1. The kernel OOM killer ran inside the instance in the last ten minutes. Its memory limit is too small for what it runs.
@@ -29,9 +29,9 @@ tests:
   - name: a replaced incusd pod is not an OOM kill
     interval: 30s
     input_series:
-      - series: 'incus_memory_OOM_kills_total{job="incus",name="instance-1",project="default",type="container",node="w1",instance="10.0.0.1:8443",pod="incusd-a",container="incusd",endpoint="https"}'
+      - series: 'incus_memory_OOM_kills_total{job="incus-w1",name="instance-1",project="default",type="container",node="w1",instance="10.0.0.1:8443",pod="incusd-a",container="incusd",endpoint="https"}'
         values: '3x10 stale'
-      - series: 'incus_memory_OOM_kills_total{job="incus",name="instance-1",project="default",type="container",node="w1",instance="10.0.0.1:8443",pod="incusd-b",container="incusd",endpoint="https"}'
+      - series: 'incus_memory_OOM_kills_total{job="incus-w1",name="instance-1",project="default",type="container",node="w1",instance="10.0.0.1:8443",pod="incusd-b",container="incusd",endpoint="https"}'
         values: '_x11 3x10'
     alert_rule_test:
       - eval_time: 8m
@@ -41,13 +41,13 @@ tests:
   - name: memory and root filesystem pressure alert after fifteen minutes
     interval: 30s
     input_series:
-      - series: 'incus_memory_MemTotal_bytes{job="incus",name="instance-2",project="default",type="container",node="w2",instance="10.0.0.2:8443",pod="incusd-c",container="incusd",endpoint="https"}'
+      - series: 'incus_memory_MemTotal_bytes{job="incus-w1",name="instance-2",project="default",type="container",node="w2",instance="10.0.0.2:8443",pod="incusd-c",container="incusd",endpoint="https"}'
         values: '100x40'
-      - series: 'incus_memory_MemAvailable_bytes{job="incus",name="instance-2",project="default",type="container",node="w2",instance="10.0.0.2:8443",pod="incusd-c",container="incusd",endpoint="https"}'
+      - series: 'incus_memory_MemAvailable_bytes{job="incus-w1",name="instance-2",project="default",type="container",node="w2",instance="10.0.0.2:8443",pod="incusd-c",container="incusd",endpoint="https"}'
         values: '3x40'
-      - series: 'incus_filesystem_size_bytes{job="incus",name="instance-2",project="default",type="container",node="w2",mountpoint="/",device="/dev/rbd0",fstype="ext4",instance="10.0.0.2:8443",pod="incusd-c",container="incusd",endpoint="https"}'
+      - series: 'incus_filesystem_size_bytes{job="incus-w1",name="instance-2",project="default",type="container",node="w2",mountpoint="/",device="/dev/rbd0",fstype="ext4",instance="10.0.0.2:8443",pod="incusd-c",container="incusd",endpoint="https"}'
         values: '1000x40'
-      - series: 'incus_filesystem_avail_bytes{job="incus",name="instance-2",project="default",type="container",node="w2",mountpoint="/",device="/dev/rbd0",fstype="ext4",instance="10.0.0.2:8443",pod="incusd-c",container="incusd",endpoint="https"}'
+      - series: 'incus_filesystem_avail_bytes{job="incus-w1",name="instance-2",project="default",type="container",node="w2",mountpoint="/",device="/dev/rbd0",fstype="ext4",instance="10.0.0.2:8443",pod="incusd-c",container="incusd",endpoint="https"}'
         values: '50x40'
     alert_rule_test:
       - eval_time: 14m
@@ -56,14 +56,14 @@ tests:
       - eval_time: 16m
         alertname: IncusInstanceMemoryExhausted
         exp_alerts:
-          - exp_labels: {severity: warning, job: incus, name: instance-2, project: default, type: container, node: w2}
+          - exp_labels: {severity: warning, job: incus-w1, name: instance-2, project: default, type: container, node: w2}
             exp_annotations:
               summary: instance-2 on w2 has 3% of its memory available
               description: The instance is close to its memory limit; the next allocation peak ends with the OOM killer.
       - eval_time: 16m
         alertname: IncusInstanceRootfsAlmostFull
         exp_alerts:
-          - exp_labels: {severity: warning, job: incus, name: instance-2, project: default, type: container, node: w2, mountpoint: /, device: /dev/rbd0, fstype: ext4}
+          - exp_labels: {severity: warning, job: incus-w1, name: instance-2, project: default, type: container, node: w2, mountpoint: /, device: /dev/rbd0, fstype: ext4}
             exp_annotations:
               summary: The root filesystem of instance-2 on w2 is 95% full
               description: Writes inside the instance start failing once it is full. Its flavor bounds the root disk.
@@ -71,13 +71,13 @@ tests:
   - name: below the thresholds nothing alerts
     interval: 30s
     input_series:
-      - series: 'incus_memory_MemTotal_bytes{job="incus",name="instance-3",project="default",type="container",node="w3",instance="10.0.0.3:8443",pod="incusd-d",container="incusd",endpoint="https"}'
+      - series: 'incus_memory_MemTotal_bytes{job="incus-w1",name="instance-3",project="default",type="container",node="w3",instance="10.0.0.3:8443",pod="incusd-d",container="incusd",endpoint="https"}'
         values: '100x40'
-      - series: 'incus_memory_MemAvailable_bytes{job="incus",name="instance-3",project="default",type="container",node="w3",instance="10.0.0.3:8443",pod="incusd-d",container="incusd",endpoint="https"}'
+      - series: 'incus_memory_MemAvailable_bytes{job="incus-w1",name="instance-3",project="default",type="container",node="w3",instance="10.0.0.3:8443",pod="incusd-d",container="incusd",endpoint="https"}'
         values: '6x40'
-      - series: 'incus_filesystem_size_bytes{job="incus",name="instance-3",project="default",type="container",node="w3",mountpoint="/",device="/dev/rbd0",fstype="ext4",instance="10.0.0.3:8443",pod="incusd-d",container="incusd",endpoint="https"}'
+      - series: 'incus_filesystem_size_bytes{job="incus-w1",name="instance-3",project="default",type="container",node="w3",mountpoint="/",device="/dev/rbd0",fstype="ext4",instance="10.0.0.3:8443",pod="incusd-d",container="incusd",endpoint="https"}'
         values: '1000x40'
-      - series: 'incus_filesystem_avail_bytes{job="incus",name="instance-3",project="default",type="container",node="w3",mountpoint="/",device="/dev/rbd0",fstype="ext4",instance="10.0.0.3:8443",pod="incusd-d",container="incusd",endpoint="https"}'
+      - series: 'incus_filesystem_avail_bytes{job="incus-w1",name="instance-3",project="default",type="container",node="w3",mountpoint="/",device="/dev/rbd0",fstype="ext4",instance="10.0.0.3:8443",pod="incusd-d",container="incusd",endpoint="https"}'
         values: '110x40'
     alert_rule_test:
       - eval_time: 18m
@@ -90,7 +90,7 @@ tests:
   - name: a node whose metrics cannot be scraped
     interval: 30s
     input_series:
-      - series: 'up{job="incus",node="w1",instance="10.0.0.1:8443",pod="incusd-a",container="incusd",endpoint="https",namespace="openstack"}'
+      - series: 'up{job="incus-w1",node="w1",instance="10.0.0.1:8443",pod="incusd-a",container="incusd",endpoint="https",namespace="openstack"}'
         values: '1x4 0x20'
     alert_rule_test:
       - eval_time: 6m
@@ -99,7 +99,7 @@ tests:
       - eval_time: 8m
         alertname: IncusMetricsDown
         exp_alerts:
-          - exp_labels: {severity: warning, job: incus, node: w1, namespace: openstack}
+          - exp_labels: {severity: warning, job: incus-w1, node: w1, namespace: openstack}
             exp_annotations:
               summary: The Incus metrics of w1 cannot be scraped
               description: Memory, disk and OOM alerts for the instances of the node are blind until the scrape works again. Check that incusd trusts the metrics certificate and that the listener answers.

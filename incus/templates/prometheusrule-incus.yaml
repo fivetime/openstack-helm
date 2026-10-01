@@ -74,7 +74,7 @@ spec:
               full. Its flavor bounds the root disk.
         - alert: IncusMetricsDown
           expr: >-
-            max without ({{ $pod }}) (up{job="incus"}) == 0
+            max without ({{ $pod }}) (up{job=~"incus-.+"}) == 0
           for: 5m
           labels:
             severity: warning

@@ -25,7 +25,6 @@ metadata:
   labels:
 {{ tuple $envAll .Chart.Name "incusd" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
-  # The official dashboard selects Incus servers by this job label.
   jobLabel: application
   namespaceSelector:
     matchNames:
@@ -58,4 +57,12 @@ spec:
           sourceLabels:
             - __meta_kubernetes_pod_node_name
           targetLabel: node
+        # The official dashboard treats a job as one Incus deployment and
+        # selects by it. Every incusd here is a standalone server, so each
+        # node is its own job: the dashboard's job selector picks a node.
+        - action: replace
+          sourceLabels:
+            - __meta_kubernetes_pod_node_name
+          targetLabel: job
+          replacement: incus-$1
 {{- end }}

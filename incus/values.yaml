@@ -186,12 +186,33 @@ incus:
     interface: null
     network_cidr: null
     port: 8443
+  # Incus serves /1.0/metrics on the migration listener to clients that
+  # hold a certificate trusted as type "metrics". The Secret is created by
+  # the deployment PKI workflow and holds tls.crt and tls.key, the client
+  # pair Prometheus presents, and ca.crt, the Incus server certificate it
+  # verifies the listener against.
+  metrics:
+    enabled: false
+    secret_name: incus-metrics
+    certificate_name: prometheus-metrics
+    mount_path: /etc/incus-metrics
+
+monitoring:
+  incus:
+    scrape_interval: 30s
+  grafana:
+    # uid of the Grafana Prometheus data source the dashboard queries.
+    prometheus_datasource_uid: prometheus
 
 manifests:
   configmap_bin: true
   daemonset_incus: true
   job_image_repo_sync: true
   secret_registry: true
+  # Needs incus.metrics.enabled and the monitoring.coreos.com CRDs.
+  podmonitor_incus: false
+  # The official Incus Grafana dashboard, picked up by the Grafana sidecar.
+  configmap_grafana_dashboard: false
 
 # -- Extra K8s manifests to deploy. Either a list or a map of manifests.
 ## Note: Supports use of custom Helm templates

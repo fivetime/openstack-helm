@@ -95,8 +95,19 @@ spec:
             postStart:
               exec:
                 command:
+{{- if .Values.incus.metrics.enabled }}
+                  # Metrics are an aid: failing to trust their certificate
+                  # must not keep incusd from starting. Prometheus then
+                  # reports the target down.
+                  - /bin/sh
+                  - -c
+                  - >-
+                    /tmp/incus-migration-listener.sh configure &&
+                    { /tmp/incus-metrics-trust.sh || true; }
+{{- else }}
                   - /tmp/incus-migration-listener.sh
                   - configure
+{{- end }}
 {{ dict "envAll" $envAll "component" "incus" "container" "incus" "type" "startup" "probeTemplate" (include "incusReadyProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
 {{ dict "envAll" $envAll "component" "incus" "container" "incus" "type" "readiness" "probeTemplate" (include "incusReadyProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
 {{ dict "envAll" $envAll "component" "incus" "container" "incus" "type" "liveness" "probeTemplate" (include "incusLivenessProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
@@ -110,6 +121,15 @@ spec:
               mountPath: /tmp/incus-migration-listener.sh
               subPath: incus-migration-listener.sh
               readOnly: true
+{{- if .Values.incus.metrics.enabled }}
+            - name: incus-bin
+              mountPath: /tmp/incus-metrics-trust.sh
+              subPath: incus-metrics-trust.sh
+              readOnly: true
+            - name: metrics-client
+              mountPath: {{ .Values.incus.metrics.mount_path }}
+              readOnly: true
+{{- end }}
             - name: state
               mountPath: {{ .Values.incus.state_path }}
               mountPropagation: Bidirectional
@@ -187,6 +207,15 @@ spec:
           hostPath:
             path: {{ .Values.incus.nova_instances_host_path }}
             type: DirectoryOrCreate
+{{- if .Values.incus.metrics.enabled }}
+        - name: metrics-client
+          secret:
+            secretName: {{ .Values.incus.metrics.secret_name }}
+            defaultMode: 0400
+            items:
+              - key: tls.crt
+                path: tls.crt
+{{- end }}
 {{- if .Values.incus.ceph.enabled }}
         - name: ceph
           hostPath:

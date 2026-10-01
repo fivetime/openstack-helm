@@ -27,4 +27,8 @@ data:
 {{ tuple "bin/_incus-ready.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   incus-migration-listener.sh: |
 {{ tuple "bin/_incus-migration-listener.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- if .Values.incus.metrics.enabled }}
+  incus-metrics-trust.sh: |
+{{ tuple "bin/_incus-metrics-trust.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- end }}
 {{- end }}

@@ -757,10 +757,15 @@ manifests:
   incus_notifier: false
   podmonitor_incus_monitor: false
   prometheusrule_incus_monitor: false
+  # Grafana dashboard of the Incus monitor, picked up by the Grafana sidecar.
+  configmap_grafana_dashboard_incus_monitor: false
 
 monitoring:
   incus_monitor:
     scrape_interval: 30s
+  grafana:
+    # uid of the Grafana Prometheus data source the dashboard queries.
+    prometheus_datasource_uid: prometheus
 
 # -- Extra K8s manifests to deploy. Either a list or a map of manifests.
 ## Note: Supports use of custom Helm templates

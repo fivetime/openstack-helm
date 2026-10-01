@@ -1,0 +1,39 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+The per-node LXCFS, AppArmor and self-healing view of the Incus monitor,
+picked up by the Grafana sidecar. dashboards/incus-nodes.json is generated
+by tools/dashboards/masakari-incus-nodes.py. Its instance table links to the
+official Incus dashboard of the incus chart (uid incus-official), which
+selects an Incus server by job incus-<node>.
+*/}}
+
+{{- if .Values.manifests.configmap_grafana_dashboard_incus_monitor }}
+{{- if not .Values.manifests.incus_monitor }}
+{{- fail "manifests.configmap_grafana_dashboard_incus_monitor needs manifests.incus_monitor" }}
+{{- end }}
+{{- $envAll := . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: masakari-incus-grafana-dashboard
+  labels:
+{{ tuple $envAll .Chart.Name "masakari-incus-monitor" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+    grafana_dashboard: "1"
+data:
+  incus-nodes.json: |
+{{ .Files.Get "dashboards/incus-nodes.json" | replace "${DS_PROMETHEUS}" .Values.monitoring.grafana.prometheus_datasource_uid | indent 4 }}
+{{- end }}

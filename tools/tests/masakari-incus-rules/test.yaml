@@ -1,0 +1,58 @@
+# promtool unit tests for masakari/templates/prometheusrule-incus-monitor.yaml.
+# Run tools/tests/masakari-incus-rules/run.sh; it renders the rules first.
+rule_files:
+  - rules.yaml
+evaluation_interval: 15s
+tests:
+  # Mirrors 2026-10-01 04:26: the exporter pod is replaced at 3m: the series moves to a new pod address
+  # and the stale verdict is unconfirmed again for a while. The instance stays
+  # stale throughout, so the alert must still fire 5m after it first was.
+  - name: stale instance across an exporter restart
+    interval: 15s
+    input_series:
+      - series: 'incus_exporter_instance_lxcfs_stale_confirmed{host="w1",incus_instance="i1",nova_uuid="u1",instance="10.0.0.1:9476",pod="mon-a",container="incus-exporter",endpoint="exporter",job="j",namespace="openstack",node="w1"}'
+        # The old pod is gone at 3m15s: Prometheus marks its series stale.
+        values: '1x12 stale'
+      - series: 'incus_exporter_instance_lxcfs_stale_confirmed{host="w1",incus_instance="i1",nova_uuid="u1",instance="10.0.0.2:9476",pod="mon-b",container="incus-exporter",endpoint="exporter",job="j",namespace="openstack",node="w1"}'
+        values: '_x18 0x2 1x8'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: IncusInstanceLxcfsStale
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: IncusInstanceLxcfsStale
+        exp_alerts:
+          - exp_labels: {severity: warning, host: w1, incus_instance: i1, nova_uuid: u1, job: j, namespace: openstack, node: w1}
+            exp_annotations:
+              summary: i1 on w1 is bound to a dead LXCFS mount
+              description: Reads of /proc/meminfo and the other files LXCFS provides fail inside the instance u1. It needs to be stopped and started.
+  # A short incusd view loss that heals itself (incusd liveness restart) must
+  # not page.
+  - name: short view loss does not page
+    interval: 15s
+    input_series:
+      - series: 'incus_exporter_incusd_lxcfs_fresh{host="w1",instance="10.0.0.1:9476",pod="mon-a",container="incus-exporter",endpoint="exporter",job="j",namespace="openstack",node="w1"}'
+        values: '1x4 0x6 1x20'
+      - series: 'incus_exporter_host_lxcfs_up{host="w1",instance="10.0.0.1:9476",pod="mon-a",container="incus-exporter",endpoint="exporter",job="j",namespace="openstack",node="w1"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: IncusdLxcfsViewStale
+        exp_alerts: []
+  # The look-back delays clearing by at most three minutes, not more.
+  - name: recovered instance clears within the look-back
+    interval: 15s
+    input_series:
+      - series: 'incus_exporter_instance_lxcfs_stale_confirmed{host="w1",incus_instance="i1",nova_uuid="u1",instance="10.0.0.1:9476",pod="mon-a",container="incus-exporter",endpoint="exporter",job="j",namespace="openstack",node="w1"}'
+        values: '1x28 0x24'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: IncusInstanceLxcfsStale
+        exp_alerts:
+          - exp_labels: {severity: warning, host: w1, incus_instance: i1, nova_uuid: u1, job: j, namespace: openstack, node: w1}
+            exp_annotations:
+              summary: i1 on w1 is bound to a dead LXCFS mount
+              description: Reads of /proc/meminfo and the other files LXCFS provides fail inside the instance u1. It needs to be stopped and started.
+      - eval_time: 10m30s
+        alertname: IncusInstanceLxcfsStale
+        exp_alerts: []

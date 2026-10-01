@@ -16,6 +16,13 @@ limitations under the License.
 {{- $envAll := . }}
 {{- $daemonset := "masakari-incus-monitor" }}
 {{- $stalled := mul 4 (int .Values.conf.incus_exporter.incus_exporter.probe_interval) }}
+{{- /*
+Every expression drops the labels that name the monitor pod. A replaced pod
+starts new series, and an alert keyed on the old ones would start its "for"
+over. The alerts that wait five minutes or more also look back three minutes,
+which spans the gap a replaced exporter leaves before it confirms again.
+*/}}
+{{- $pod := "instance, pod, container, endpoint" }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -28,7 +35,7 @@ spec:
     - name: incus-lxcfs
       rules:
         - alert: IncusHostLxcfsDown
-          expr: incus_exporter_host_lxcfs_up == 0
+          expr: max without ({{ $pod }}) (incus_exporter_host_lxcfs_up) == 0
           for: 1m
           labels:
             severity: critical
@@ -40,8 +47,8 @@ spec:
               automatically while this lasts.
         - alert: IncusLxcfsRestarted
           expr: >-
-            increase(incus_exporter_host_lxcfs_device_changes_total[10m]) > 0
-            or changes(incus_exporter_host_lxcfs_start_time_seconds[10m]) > 0
+            sum without ({{ $pod }}) (increase(incus_exporter_host_lxcfs_device_changes_total[10m])) > 0
+            or max without ({{ $pod }}) (changes(incus_exporter_host_lxcfs_start_time_seconds[10m])) > 0
           labels:
             severity: warning
           annotations:
@@ -51,8 +58,8 @@ spec:
               mount nobody serves. Find out what restarted the service.
         - alert: IncusdLxcfsViewStale
           expr: >-
-            incus_exporter_incusd_lxcfs_fresh == 0
-            and incus_exporter_host_lxcfs_up == 1
+            max without ({{ $pod }}) (incus_exporter_incusd_lxcfs_fresh) == 0
+            and max without ({{ $pod }}) (incus_exporter_host_lxcfs_up) == 1
           for: 2m
           labels:
             severity: critical
@@ -63,7 +70,7 @@ spec:
               automatic recovery is withheld. Replace the incusd pod of the
               node.
         - alert: IncusInstanceLxcfsStale
-          expr: incus_exporter_instance_lxcfs_stale_confirmed == 1
+          expr: max without ({{ $pod }}) (max_over_time(incus_exporter_instance_lxcfs_stale_confirmed[3m])) == 1
           for: 5m
           labels:
             severity: warning
@@ -74,7 +81,7 @@ spec:
               inside the instance {{ "{{ $labels.nova_uuid }}" }}. It needs
               to be stopped and started.
         - alert: IncusInstanceLxcfsUnreadable
-          expr: incus_exporter_instances_state{state="unreadable"} > 0
+          expr: max without ({{ $pod }}) (max_over_time(incus_exporter_instances_state{state="unreadable"}[3m])) > 0
           for: 5m
           labels:
             severity: warning
@@ -84,7 +91,7 @@ spec:
               The instances are bound to the mount the host serves and
               still cannot read it. They are not recovered automatically.
         - alert: IncusdLaunchesStacked
-          expr: incus_exporter_incusd_launches_stacked == 1
+          expr: max without ({{ $pod }}) (incus_exporter_incusd_launches_stacked) == 1
           for: 2m
           labels:
             severity: critical
@@ -98,7 +105,7 @@ spec:
               can no longer signal or trace each other. Automatic recovery
               is withheld. incusd must run under a named label.
         - alert: IncusInstanceAppArmorStacked
-          expr: incus_exporter_instance_apparmor_stacked == 1
+          expr: max without ({{ $pod }}) (max_over_time(incus_exporter_instance_apparmor_stacked[3m])) == 1
           for: 5m
           labels:
             severity: warning
@@ -112,7 +119,7 @@ spec:
               stopped and started once incusd runs under a named label.
         - alert: IncusExporterStalled
           expr: >-
-            time() - incus_exporter_last_sweep_timestamp_seconds > {{ $stalled }}
+            time() - max without ({{ $pod }}) (incus_exporter_last_sweep_timestamp_seconds) > {{ $stalled }}
             or absent(incus_exporter_last_sweep_timestamp_seconds)
           for: 2m
           labels:
@@ -123,7 +130,7 @@ spec:
               No sweep finished recently, so a stale instance would go
               unnoticed.
         - alert: IncusExporterCannotReachIncus
-          expr: incus_exporter_incus_api_up == 0
+          expr: max without ({{ $pod }}) (incus_exporter_incus_api_up) == 0
           for: 2m
           labels:
             severity: critical
@@ -136,7 +143,7 @@ spec:
     - name: incus-autoheal
       rules:
         - alert: IncusAutohealBlocked
-          expr: incus_notifier_autoheal_blocked == 1
+          expr: max without ({{ $pod }}) (incus_notifier_autoheal_blocked) == 1
           for: 2m
           labels:
             severity: critical
@@ -146,7 +153,7 @@ spec:
               No notification is sent to Masakari from this node until the
               reason is gone.
         - alert: IncusInstanceAwaitingManual
-          expr: incus_notifier_instance_awaiting_manual == 1
+          expr: max without ({{ $pod }}) (max_over_time(incus_notifier_instance_awaiting_manual[3m])) == 1
           for: 10m
           labels:
             severity: warning
@@ -157,7 +164,7 @@ spec:
               not be recovered automatically, either because it is not
               marked HA_Enabled or because its recovery failed.
         - alert: IncusRecoveryIneffective
-          expr: increase(incus_notifier_recoveries_total{result="ineffective"}[15m]) > 0
+          expr: sum without ({{ $pod }}) (increase(incus_notifier_recoveries_total{result="ineffective"}[15m])) > 0
           labels:
             severity: critical
           annotations:
@@ -166,7 +173,7 @@ spec:
               An instance was stopped and started by Masakari and is still
               bound to a dead mount. Recovery is withheld on the node.
         - alert: IncusRecoveryFailed
-          expr: increase(incus_notifier_recoveries_total{result=~"error|timeout"}[15m]) > 0
+          expr: sum without ({{ $pod }}) (increase(incus_notifier_recoveries_total{result=~"error|timeout"}[15m])) > 0
           labels:
             severity: warning
           annotations:
@@ -175,7 +182,7 @@ spec:
               Masakari reported an error for a notification or did not
               finish it in time. See the notification in Masakari.
         - alert: IncusNotificationNotAccepted
-          expr: increase(incus_notifier_notifications_total{result=~"rejected|error"}[15m]) > 0
+          expr: sum without ({{ $pod }}) (increase(incus_notifier_notifications_total{result=~"rejected|error"}[15m])) > 0
           labels:
             severity: critical
           annotations:
@@ -185,7 +192,7 @@ spec:
               failover segment.
         - alert: IncusNotifierStalled
           expr: >-
-            time() - incus_notifier_last_loop_timestamp_seconds > {{ mul 4 (int .Values.conf.masakarimonitors.incus_notifier.loop_interval) }}
+            time() - max without ({{ $pod }}) (incus_notifier_last_loop_timestamp_seconds) > {{ mul 4 (int .Values.conf.masakarimonitors.incus_notifier.loop_interval) }}
             or absent(incus_notifier_last_loop_timestamp_seconds)
           for: 2m
           labels:

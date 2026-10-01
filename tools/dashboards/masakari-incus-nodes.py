@@ -223,15 +223,15 @@ y += 8
 # ------------------------------------------------------------ instances
 panels.append(row("Instances", y))
 y += 1
-inst_link = [{"title": "Open in the official Incus dashboard",
-              "url": "/d/incus-official/incus?var-job=incus-"
+inst_link = [{"title": "Open in Incus resources",
+              "url": "/d/incus-official/incus-resources?var-job=incus-"
                      "${__data.fields.Node}&var-project=default"
                      "&var-name=${__value.raw}"}]
 panels.append(table(
     "Incus instances",
     "Every running instance the exporter judged, with its Nova instance. "
     "Resource columns are the official Incus metrics. Click an instance "
-    "name to open it in the official Incus dashboard.",
+    "name to open it in Incus resources, the official Incus dashboard.",
     [
         'max by (node, incus_instance, nova_uuid) '
         '(incus_exporter_instance_lxcfs_stale{%s})' % N,
@@ -310,15 +310,15 @@ y += 8
 
 dash = {
     "uid": "incus-nodes-autoheal",
-    "title": "Incus nodes and self-healing",
+    "title": "Incus faults",
     "description": "Per-node LXCFS, AppArmor and self-healing state of the "
                    "Incus computes, from the masakari Incus exporter and "
                    "notifier, next to the official Incus metrics.",
     "tags": ["incus", "masakari"],
     "editable": True, "graphTooltip": 1, "schemaVersion": 39,
     "time": {"from": "now-6h", "to": "now"}, "refresh": "1m",
-    "links": [{"title": "Incus (official)", "type": "link",
-               "url": "/d/incus-official/incus", "icon": "dashboard",
+    "links": [{"title": "Incus resources", "type": "link",
+               "url": "/d/incus-official/incus-resources", "icon": "dashboard",
                "targetBlank": False}],
     "templating": {"list": [{
         "name": "node", "label": "Node", "type": "query", "datasource": DS,

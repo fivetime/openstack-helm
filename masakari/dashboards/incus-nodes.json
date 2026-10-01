@@ -1,6 +1,6 @@
 {
   "uid": "incus-nodes-autoheal",
-  "title": "Incus nodes and self-healing",
+  "title": "Incus faults",
   "description": "Per-node LXCFS, AppArmor and self-healing state of the Incus computes, from the masakari Incus exporter and notifier, next to the official Incus metrics.",
   "tags": [
     "incus",
@@ -16,9 +16,9 @@
   "refresh": "1m",
   "links": [
     {
-      "title": "Incus (official)",
+      "title": "Incus resources",
       "type": "link",
-      "url": "/d/incus-official/incus",
+      "url": "/d/incus-official/incus-resources",
       "icon": "dashboard",
       "targetBlank": false
     }
@@ -770,7 +770,7 @@
     {
       "type": "table",
       "title": "Incus instances",
-      "description": "Every running instance the exporter judged, with its Nova instance. Resource columns are the official Incus metrics. Click an instance name to open it in the official Incus dashboard.",
+      "description": "Every running instance the exporter judged, with its Nova instance. Resource columns are the official Incus metrics. Click an instance name to open it in Incus resources, the official Incus dashboard.",
       "id": 6,
       "datasource": {
         "type": "prometheus",
@@ -927,8 +927,8 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "Open in the official Incus dashboard",
-                    "url": "/d/incus-official/incus?var-job=incus-${__data.fields.Node}&var-project=default&var-name=${__value.raw}"
+                    "title": "Open in Incus resources",
+                    "url": "/d/incus-official/incus-resources?var-job=incus-${__data.fields.Node}&var-project=default&var-name=${__value.raw}"
                   }
                 ]
               }

@@ -15,7 +15,8 @@ limitations under the License.
 {{/*
 dashboards/incus.json is grafana/incus.json of github.com/fivetime/incus at
 9d31814a93669e38d6b6a2a8215175f546f582d1, the official Incus dashboard (grafana.com
-19727), without its two Loki log panels and with the uid incus-official.
+19727), without its two Loki log panels, with the uid incus-official and
+the title "Incus resources" (the masakari chart ships "Incus faults").
 The Prometheus data source input is filled in here, because the Grafana
 sidecar provisions dashboards as they are and does not resolve inputs.
 */}}

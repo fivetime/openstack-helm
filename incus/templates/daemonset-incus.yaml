@@ -91,6 +91,14 @@ spec:
               value: {{ .Values.incus.socket_gid | quote }}
             - name: INCUS_CONTROL_CGROUP
               value: {{ .Values.incus.control_cgroup | quote }}
+{{- if .Values.incus.migration.enabled }}
+          ports:
+            # Declared so that the listener, on the host network, can be
+            # discovered: a PodMonitor only scrapes declared ports.
+            - name: https
+              containerPort: {{ .Values.incus.migration.port }}
+              protocol: TCP
+{{- end }}
           lifecycle:
             postStart:
               exec:

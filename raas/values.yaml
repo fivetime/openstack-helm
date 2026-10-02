@@ -484,5 +484,19 @@ manifests:
   # (PodMonitor,StatefulSet 没有 Service)。本集群的 Prometheus / VM operator 选择器为空,
   # 任何命名空间的 Monitor 都会被拾取;2026-09-07 之前 chart 里一个都没有,指标只停在 pod 上。
   servicemonitor: true
+  # 丢失 webhook 投递的告警(templates/prometheusrule.yaml),阈值在 monitoring.alerts。
+  prometheusrule: true
   podmonitor_gitlab_runner: true
+
+# 告警阈值(templates/prometheusrule.yaml)。
+monitoring:
+  alerts:
+    # 15 分钟内失败投递超过这个数:入口挂过一段。
+    delivery_failures_15m: 5
+    # 1 小时内从 GitHub 队列认领超过这个数:GitHub 侧在丢 queued 事件。
+    claimed_from_queue_1h: 3
+    # 排队作业对账这么久没完成一轮。
+    sweep_stalled_seconds: 900
+    # 某个安装的主配额余量低于这个数。
+    github_rate_remaining_min: 1000
 ...

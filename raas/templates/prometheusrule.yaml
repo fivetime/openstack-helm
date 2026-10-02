@@ -1,0 +1,85 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+丢失 webhook 投递的告警(openstack-raas doc/architecture.md §6.1.4、§6.1.5)。2026-09-30 编排器的
+数据库连不上 78 分钟,对 GitHub 回了 140 次 503,两天后才被人从 GitHub 的投递日志里翻出来 ——
+GitHub 不自动重发,也没有任何告警。指标来自 ServiceMonitor raas,两个副本各报各的,规则里先求和。
+*/}}
+{{- if .Values.manifests.prometheusrule }}
+{{- if not .Values.manifests.servicemonitor }}
+{{- fail "manifests.prometheusrule needs manifests.servicemonitor: the rules read the metrics it scrapes" }}
+{{- end }}
+{{- $envAll := . }}
+{{- $a := .Values.monitoring.alerts }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: raas
+  labels:
+{{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  groups:
+    - name: raas-webhook-delivery
+      rules:
+        - alert: RaaSWebhookDeliveriesFailing
+          expr: sum(increase(raas_webhook_delivery_failures_total[15m])) > {{ $a.delivery_failures_15m }}
+          labels:
+            severity: warning
+          annotations:
+            summary: GitHub webhook deliveries to RaaS are failing
+            description: >-
+              {{ "{{ $value | humanize }}" }} deliveries in GitHub's log failed in the last 15 minutes
+              (our 5xx or timeout). GitHub does not redeliver on its own; the orchestrator does.
+              A burst means the entry was down: check orchestrator readiness, the database and the ingress.
+        - alert: RaaSWebhookRedeliveryGaveUp
+          expr: sum(increase(raas_webhook_redeliveries_total{result="gave_up"}[1h])) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: RaaS gave up redelivering a webhook delivery
+            description: >-
+              A failed delivery was redelivered 5 times and never reached us.
+              The queued-job sweep and ReconcileUnsettled still back it up; repeated give-ups mean the entry is still down.
+        - alert: RaaSJobsClaimedFromQueue
+          expr: sum(increase(raas_orphaned_jobs_total{outcome="claimed_from_queue"}[1h])) > {{ $a.claimed_from_queue_1h }}
+          labels:
+            severity: warning
+          annotations:
+            summary: GitHub is not sending queued events for RaaS jobs
+            description: >-
+              {{ "{{ $value | humanize }}" }} jobs in the last hour had no queued event and were found by the queued-job sweep.
+              Occasional ones are GitHub's; many in an hour mean GitHub is dropping events (check githubstatus.com).
+        - alert: RaaSQueuedSweepStalled
+          expr: (time() - max(raas_queued_sweep_last_success_timestamp_seconds)) > {{ $a.sweep_stalled_seconds }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: The RaaS queued-job sweep has not completed a round
+            description: >-
+              No orchestrator replica has completed the queued-job sweep for {{ "{{ $value | humanizeDuration }}" }}.
+              A job whose queued event GitHub never sent would wait until GitHub cancels it after 24 hours.
+        - alert: RaaSGitHubRateLimitLow
+          expr: min by (installation) (raas_github_rate_remaining) < {{ $a.github_rate_remaining_min }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: A GitHub installation is close to its API rate limit
+            description: >-
+              Installation {{ "{{ $labels.installation }}" }} has {{ "{{ $value }}" }} requests left this hour.
+              When it runs out RaaS cannot issue runner credentials for that tenant until the window resets.
+{{- end }}

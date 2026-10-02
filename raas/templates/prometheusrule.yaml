@@ -13,9 +13,20 @@ limitations under the License.
 */}}
 
 {{/*
-丢失 webhook 投递的告警(openstack-raas doc/architecture.md §6.1.4、§6.1.5)。2026-09-30 编排器的
-数据库连不上 78 分钟,对 GitHub 回了 140 次 503,两天后才被人从 GitHub 的投递日志里翻出来 ——
-GitHub 不自动重发,也没有任何告警。指标来自 ServiceMonitor raas,两个副本各报各的,规则里先求和。
+RaaS 编排器的告警。指标来自 ServiceMonitor raas;**两个副本各报一份**:计数器按副本求和,
+从库里算出来的仪表量(水位、待命机器、孤儿卷……)两份相同,取 max —— 求和会翻倍。
+
+- raas-webhook-delivery:丢失 webhook 投递(openstack-raas doc/architecture.md §6.1.4、§6.1.5)。
+  2026-09-30 编排器的数据库连不上 78 分钟,对 GitHub 回了 140 次 503,两天后才被人从 GitHub 的
+  投递日志里翻出来 —— GitHub 不自动重发,也没有任何告警。
+- raas-pool / raas-money / raas-certs:机器池、缓存卷对账、构建器证书。原在 openstack-raas 的
+  deploy/prometheus/raas-alerts.yaml,写于集群还没有 Prometheus 的时候(2026-08-31),从没 apply
+  过;2026-10-02 并进来,先在过去 7 天的真实数据上回放过:
+  · RaaSPoolStarved 原写法(水位 - 就绪 > 0)7 天 24 段,几乎全是作业把待命机器取走、正在补的
+    正常过程。改成"就绪 + 开机中 + 占位中仍少于水位",即连补都补不上:0 段。开不出来的情况由
+    RaaSPoolBootFailing / RaaSPoolNovaErrors 报。
+  · RaaSPoolBootFailing(09-30 两段)、RaaSPoolNovaErrors(09-29 三段)、RaaSVolumeAuditFailing
+    (09-30 08:09,数据库中断那次)回放出来的都是真实故障。
 */}}
 {{- if .Values.manifests.prometheusrule }}
 {{- if not .Values.manifests.servicemonitor }}
@@ -39,47 +50,127 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: GitHub webhook deliveries to RaaS are failing
+            summary: GitHub 投递给 RaaS 的 webhook 在失败
             description: >-
-              {{ "{{ $value | humanize }}" }} deliveries in GitHub's log failed in the last 15 minutes
-              (our 5xx or timeout). GitHub does not redeliver on its own; the orchestrator does.
-              A burst means the entry was down: check orchestrator readiness, the database and the ingress.
+              过去 15 分钟 GitHub 投递日志里有 {{ "{{ $value | humanize }}" }} 次投递失败(我们回了 5xx 或超时)。
+              GitHub 不会自己重发,编排器会;成片出现说明入口挂过一段:查编排器就绪探针、数据库、Ingress。
         - alert: RaaSWebhookRedeliveryGaveUp
           expr: sum(increase(raas_webhook_redeliveries_total{result="gave_up"}[1h])) > 0
           labels:
             severity: warning
           annotations:
-            summary: RaaS gave up redelivering a webhook delivery
+            summary: RaaS 放弃了一次 webhook 重发
             description: >-
-              A failed delivery was redelivered 5 times and never reached us.
-              The queued-job sweep and ReconcileUnsettled still back it up; repeated give-ups mean the entry is still down.
+              一次失败投递重发 5 次仍没送到。queued 由补漏扫描兜底、completed 由 ReconcileUnsettled 兜底;
+              反复放弃说明入口一直不通。
         - alert: RaaSJobsClaimedFromQueue
           expr: sum(increase(raas_orphaned_jobs_total{outcome="claimed_from_queue"}[1h])) > {{ $a.claimed_from_queue_1h }}
           labels:
             severity: warning
           annotations:
-            summary: GitHub is not sending queued events for RaaS jobs
+            summary: GitHub 没有给 RaaS 的作业发 queued 事件
             description: >-
-              {{ "{{ $value | humanize }}" }} jobs in the last hour had no queued event and were found by the queued-job sweep.
-              Occasional ones are GitHub's; many in an hour mean GitHub is dropping events (check githubstatus.com).
+              过去 1 小时有 {{ "{{ $value | humanize }}" }} 个作业没收到 queued、由补漏扫描从 GitHub 队列里找回。
+              偶发属 GitHub 侧;一小时多个说明 GitHub 在丢事件(看 githubstatus.com)。
         - alert: RaaSQueuedSweepStalled
           expr: (time() - max(raas_queued_sweep_last_success_timestamp_seconds)) > {{ $a.sweep_stalled_seconds }}
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: The RaaS queued-job sweep has not completed a round
+            summary: RaaS 补漏扫描停了
             description: >-
-              No orchestrator replica has completed the queued-job sweep for {{ "{{ $value | humanizeDuration }}" }}.
-              A job whose queued event GitHub never sent would wait until GitHub cancels it after 24 hours.
+              已经 {{ "{{ $value | humanizeDuration }}" }} 没有任何编排器副本跑完一轮补漏扫描。
+              这期间 GitHub 漏发 queued 的作业会一直排到 24 小时后被 GitHub 取消。
         - alert: RaaSGitHubRateLimitLow
           expr: min by (installation) (raas_github_rate_remaining) < {{ $a.github_rate_remaining_min }}
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: A GitHub installation is close to its API rate limit
+            summary: GitHub 安装的 API 配额快用完了
             description: >-
-              Installation {{ "{{ $labels.installation }}" }} has {{ "{{ $value }}" }} requests left this hour.
-              When it runs out RaaS cannot issue runner credentials for that tenant until the window resets.
+              安装 {{ "{{ $labels.installation }}" }} 这一小时只剩 {{ "{{ $value }}" }} 次请求。
+              用完后在窗口重置前,RaaS 给这个租户签不出 runner 凭据,作业接不了。
+
+    - name: raas-pool
+      rules:
+        # 连补都补不上:就绪 + 开机中 + 占位中仍少于水位。作业取走待命机器、正在补的时候不算。
+        - alert: RaaSPoolStarved
+          expr: >-
+            max by (spec) (raas_pool_size)
+            - sum by (spec) (max by (spec, state) (raas_pool_machines{state=~"ready|booting|reserving"})) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: 机器池 {{ "{{ $labels.spec }}" }} 补不满
+            description: >-
+              就绪、开机中、占位中的待命机器加起来仍少于水位,已 15 分钟:池连补机器都没在补。
+              租户会持续拿到"稍后重试"。先看 raas_pool_launch_failures_total 与 raas_pool_swept_total 的 reason,
+              以及 Nova 的容量与配额。
+        # 连续销毁 = 系统性故障,最常见的是镜像里没有 agent。
+        - alert: RaaSPoolBootFailing
+          expr: sum by (spec) (increase(raas_pool_swept_total{reason="boot_timeout"}[30m])) >= 3
+          labels:
+            severity: critical
+          annotations:
+            summary: '{{ "{{ $labels.spec }}" }} 半小时内三台待命机器没能就绪'
+            description: >-
+              先查镜像是否带 /usr/local/bin/raas-bkagent —— 它不在的话机器一切正常,只是 agent 永远不应答,
+              池永远补不满。再看机器控制台日志(cloud-init)。
+        - alert: RaaSPoolNovaErrors
+          expr: sum by (spec) (increase(raas_pool_swept_total{reason="nova_error"}[30m])) >= 3
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ "{{ $labels.spec }}" }} 半小时内三台机器进了 Nova ERROR'
+            description: >-
+              多半是容量或调度过滤(镜像没打 hypervisor_type 会被调度到 lxd 主机)。查 nova-scheduler 日志。
+
+    - name: raas-money
+      rules:
+        # 孤儿卷 = 正在计费却没有主人。只报不删是有意的,所以必须有人看见。
+        - alert: RaaSOrphanVolumes
+          expr: max(raas_orphan_volumes) > 0
+          for: 2h
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ "{{ $value }}" }} 个孤儿缓存卷正在计费'
+            description: >-
+              卷带 raas_builder 标记但没有构建器记录。对账只报不删(删错不可逆),
+              需要人核对后手工 openstack volume delete。
+        - alert: RaaSDanglingBuilders
+          expr: max(raas_dangling_builders) > 0
+          for: 2h
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ "{{ $value }}" }} 个构建器记录指向已不存在的卷'
+            description: 租户下次连会失败。让租户删掉重建构建器(DELETE /v1/buildkit 或 /v1/podman)。
+        # 对账连续失败 = 上面两个数字是陈旧的,别信它们。
+        - alert: RaaSVolumeAuditFailing
+          expr: sum(increase(raas_volume_audit_failures_total[3h])) >= 3
+          labels:
+            severity: warning
+          annotations:
+            summary: 缓存卷对账连续失败
+            description: >-
+              raas_orphan_volumes / raas_dangling_builders 停在上一次成功的值上,不代表现状。
+              查 Cinder API 与数据库连通。
+
+    - name: raas-certs
+      rules:
+        # 到期那天所有构建同时报证书错误,而换证要改租户的 CI 配置。
+        - alert: RaaSBuilderCertsExpiring
+          expr: max(raas_builders_due_for_rotation) > 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ "{{ $value }}" }} 个构建器的客户端证书将在 30 天内过期'
+            description: >-
+              过期当天该租户所有构建同时开始报证书错误。让租户换发(POST /v1/buildkit/credentials 或
+              /v1/podman/credentials,不动 CA,旧证书仍有效)。
 {{- end }}

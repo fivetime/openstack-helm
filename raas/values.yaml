@@ -486,10 +486,15 @@ manifests:
   servicemonitor: true
   # 丢失 webhook 投递的告警(templates/prometheusrule.yaml),阈值在 monitoring.alerts。
   prometheusrule: true
+  # RaaS 运行概览仪表盘(templates/configmap-grafana-dashboard.yaml),Grafana sidecar 自动加载。
+  configmap_grafana_dashboard: true
   podmonitor_gitlab_runner: true
 
-# 告警阈值(templates/prometheusrule.yaml)。
+# 告警阈值(templates/prometheusrule.yaml)与仪表盘(templates/configmap-grafana-dashboard.yaml)。
 monitoring:
+  grafana:
+    # 仪表盘查询用的 Grafana Prometheus 数据源 uid。
+    prometheus_datasource_uid: prometheus
   alerts:
     # 15 分钟内失败投递超过这个数:入口挂过一段。
     delivery_failures_15m: 5

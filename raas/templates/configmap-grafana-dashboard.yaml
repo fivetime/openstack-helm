@@ -1,0 +1,37 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+RaaS 运行概览仪表盘(dashboards/raas.json):webhook 投递可靠性、作业、机器池。Grafana 的
+sidecar 拾取任何命名空间里带 grafana_dashboard: "1" 的 ConfigMap,原样加载、不解析 inputs,
+所以 Prometheus 数据源的 uid 在这里填进去(与 incus chart 同一做法)。
+面板的查询读的是 ServiceMonitor raas 抓的指标。
+*/}}
+{{- if .Values.manifests.configmap_grafana_dashboard }}
+{{- if not .Values.manifests.servicemonitor }}
+{{- fail "manifests.configmap_grafana_dashboard needs manifests.servicemonitor: the panels read the metrics it scrapes" }}
+{{- end }}
+{{- $envAll := . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: raas-grafana-dashboard
+  labels:
+{{ tuple $envAll "raas" "orchestrator" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+    grafana_dashboard: "1"
+data:
+  raas.json: |
+{{ .Files.Get "dashboards/raas.json" | replace "${DS_PROMETHEUS}" .Values.monitoring.grafana.prometheus_datasource_uid | indent 4 }}
+{{- end }}

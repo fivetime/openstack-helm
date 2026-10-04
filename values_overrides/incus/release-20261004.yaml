@@ -1,0 +1,5 @@
+# Incus d34485b9d9d3a57da2a9c09e79b3d874e49f487b.
+# Build Incus novm image run 37168991548; LXCFS remains independently pinned.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:9639a83aac927acfaee6a0acb5ee7927f8edfc27f94ae101cee60b223379ba99

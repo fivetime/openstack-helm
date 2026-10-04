@@ -1,8 +1,8 @@
 ---
 # Incus RPC objects must be registered by API/conductor before any Incus
-# compute is upgraded. Keep these as immutable multi-architecture digests.
+# compute is upgraded. Keep these as immutable CI digests; compute is pinned
+# separately in incus-release-YYYYMMDD.yaml, applied last.
 images:
   tags:
-    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:d49593c25a22b6fdc6b4776840e60b5c39fc3cecf20441f2fe96a8984962baed
-    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:d49593c25a22b6fdc6b4776840e60b5c39fc3cecf20441f2fe96a8984962baed
-    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:50ac284897441ab5f3c8635fb536ec515ce2bd943b57cf453c66c41e1171518f
+    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:5ae66d186d4389c87235f6e6931eb16eaa67e62dd2d3bcbb3e00528d939cd20f
+    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:5ae66d186d4389c87235f6e6931eb16eaa67e62dd2d3bcbb3e00528d939cd20f

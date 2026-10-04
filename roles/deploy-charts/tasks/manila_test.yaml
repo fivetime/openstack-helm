@@ -31,9 +31,11 @@
   until: manila_api_check.rc == 0
 
 - name: Run Manila end-to-end share test
-  shell: |
-    set -xe
-    ./tools/deployment/component/manila/test-share.sh
-  args:
-    chdir: "{{ osh_git_repo }}"
-    executable: /bin/bash
+  include_tasks: _script.yaml
+  vars:
+    osh_script: manila_test_share.sh
+    osh_script_assets:
+      - heat
+    osh_script_env:
+      HEAT_DIR: "{{ osh_scripts_dir }}/heat"
+...

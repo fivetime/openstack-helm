@@ -36,7 +36,7 @@ images:
     csi_attacher: 'registry.k8s.io/sig-storage/csi-attacher:v4.5.1'
     csi_resizer: 'registry.k8s.io/sig-storage/csi-resizer:v1.10.1'
     csi_registrar: 'registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.1'
-    cephcsi: 'quay.io/cephcsi/cephcsi:v3.16.2'
+    cephcsi: 'quay.io/cephcsi/cephcsi:v3.17.1'
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     image_repo_sync: 'quay.io/airshipit/docker:27.5.0'
   local_registry:
@@ -282,9 +282,11 @@ network:
 conf:
   csi_rbd:
     # mon_port controls which ceph_mon endpoint port is used for the ceph-csi-config
-    # ConfigMap monitor address. Use "mon" (6789, msgr v1) when mapOptions includes
-    # ms_mode=legacy; use "mon_msgr2" (3300, msgr v2) otherwise.
-    mon_port: mon
+    # ConfigMap monitor address. The default "general" StorageClass uses the
+    # rbd-nbd mounter, whose librbd client speaks msgr v2, so this defaults to
+    # "mon_msgr2" (3300). Set it to "mon" (6789, msgr v1) only when the mounter
+    # is overridden back to krbd with mapOptions including ms_mode=legacy.
+    mon_port: mon_msgr2
   ceph:
     global:
       # auth
@@ -393,7 +395,12 @@ storageclass:
       default_storage_class: true
       name: general
     parameters:
-      mapOptions: "ms_mode=legacy"
+      mounter: rbd-nbd
+      # ms_mode is a krbd-only map option. ceph-csi's parseMapOptions() assigns
+      # unprefixed mapOptions to krbd only, so this must carry the "krbd:"
+      # prefix to be meaningful; it is deliberately not applied to rbd-nbd,
+      # which negotiates the messenger protocol through librbd instead.
+      mapOptions: "krbd:ms_mode=legacy"
       clusterID: ceph
       csi.storage.k8s.io/controller-expand-secret-name: pvc-ceph-conf-combined-storageclass
       csi.storage.k8s.io/controller-expand-secret-namespace: ceph

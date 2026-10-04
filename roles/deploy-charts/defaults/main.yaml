@@ -20,6 +20,28 @@ osh_helm_timeout: 600
 osh_openstack_client_image_tag: 2026.1-ubuntu_noble
 osh_helm_tests_tries: 2
 osh_test_timeout: 1200
+# Directory on the target node into which _script.yaml stages the shell
+# scripts shipped in this role's files/ directory before running them. Also
+# the working directory they run in, so anything a script writes beside
+# itself (the Octavia dual_ca tree, for one) lands here and not in the git
+# checkout.
+osh_scripts_dir: /tmp/osh-scripts
+
+# Where the stateful charts put their data.
+#
+# When Ceph is deployed, Rook creates the "general" StorageClass (the cluster
+# default, backed by the rbd CephBlockPool) and the stateful charts take real
+# PersistentVolumes from it -- which is what a real deployment looks like, and
+# the only way the Ceph CSI path gets exercised at all.
+#
+# Off by default, and deliberately not derived from cinder_enabled here: most
+# playbooks deploy mariadb or glance without deploying Ceph at all, never set
+# cinder_enabled, and have no StorageClass in the cluster, so a claim would sit
+# Pending until the job times out. A playbook that does deploy Rook opts in by
+# setting this -- see playbooks/deploy-compute-kit.yaml.
+osh_ceph_storage: false
+# The StorageClass Rook creates; matches class_name in the chart values.
+osh_ceph_storage_class: general
 
 # TLS settings for OpenStack client (clouds.yaml)
 osh_openstack_client_tls: false
@@ -77,3 +99,6 @@ osh_octavia_lb_subnet_end: "172.31.0.200"
 osh_octavia_amphora_image_name: "amphora-x64-haproxy-ubuntu-jammy"
 osh_octavia_amphora_image_file: "test-only-amphora-x64-haproxy-ubuntu-jammy.qcow2"
 osh_octavia_amphora_image_url: "https://tarballs.opendev.org/openstack/octavia/test-images/test-only-amphora-x64-haproxy-ubuntu-jammy.qcow2"
+osh_octavia_test_image_name: "Ubuntu Jammy Minimal"
+osh_octavia_test_image_file: "ubuntu-22.04-minimal-cloudimg-amd64.img"
+osh_octavia_test_image_url: "https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img"

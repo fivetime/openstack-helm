@@ -15,11 +15,27 @@ limitations under the License.
 */}}
 
 
+{{/*
+Liveness and readiness answer different questions and must not share an
+endpoint. /healthcheck is served by the uwsgi request workers, so it can only
+be answered while one is free. A saturated worker pool is a readiness
+condition (take the replica out of rotation until it drains), not a liveness
+one (kill it).
+
+Liveness therefore asks the uwsgi master through its stats socket, which the
+chart already opens (conf.octavia_api_uwsgi.uwsgi.stats) and which the master
+serves independently of the workers. That socket serves the stats document at
+/, not the API's healthcheck path. Readiness keeps /healthcheck.
+*/}}
 {{- define "octaviaApiLivenessProbeTemplate" }}
 httpGet:
   scheme: {{ tuple "load_balancer" "service" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_scheme_lookup" | upper }}
-  path: {{ tuple "load_balancer" "healthcheck" "internal" . | include "helm-toolkit.endpoints.keystone_endpoint_path_lookup" }}
+  path: /
+  {{- if index .Values.pod.probes.api "octavia-api" "liveness" "port" }}
+  port: {{ index .Values.pod.probes.api "octavia-api" "liveness" "port" }}
+  {{- else }}
   port: {{ (splitList ":" (index (index .Values.conf.octavia_api_uwsgi "uwsgi") "http-socket") | last) }}
+  {{- end }}
 {{- end }}
 
 {{- define "octaviaApiReadinessProbeTemplate" }}
@@ -34,6 +50,7 @@ httpGet:
 
 {{- $mounts_octavia_api := .Values.pod.mounts.octavia_api.octavia_api }}
 {{- $mounts_octavia_api_init := .Values.pod.mounts.octavia_api.init_container }}
+{{- $mounts_octavia_driver_agent := .Values.pod.mounts.octavia_driver_agent.octavia_driver_agent }}
 
 {{- $serviceAccountName := "octavia-api" }}
 {{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
@@ -69,12 +86,6 @@ spec:
 {{ dict "envAll" $envAll "application" "octavia_api" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       affinity:
 {{ tuple $envAll "octavia" "api" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
-      # -------------- Add by Simon Start --------------
-      {{- if and $envAll.Values.pod.tolerations.octavia_api.enabled $envAll.Values.pod.tolerations.octavia_api.tolerations }}
-      tolerations:
-      {{- toYaml $envAll.Values.pod.tolerations.octavia_api.tolerations | nindent 8 }}
-      {{- end }}
-      # -------------- Add by Simon End --------------
       nodeSelector:
         {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "30" }}
@@ -120,16 +131,11 @@ spec:
               subPath: {{ base .Values.conf.octavia.DEFAULT.log_config_append }}
               readOnly: true
             {{- end }}
-            {{- if .Values.pod.sidecars.driver_agent }}
             - name: octavia-driver-agents
               mountPath: /var/run/octavia
-            {{- end }}
+            - name: run-openvswitch
+              mountPath: /var/run/ovn
 {{ if $mounts_octavia_api.volumeMounts }}{{ toYaml $mounts_octavia_api.volumeMounts | indent 12 }}{{ end }}
-        {{- if .Values.pod.sidecars.driver_agent }}
-        # -------------- Add by Simon Start --------------
-        # OVN provider requires the driver agent sockets (/var/run/octavia/*.sock)
-        # to be reachable from the octavia-api process, so run the driver agent
-        # as a sidecar sharing an emptyDir instead of a separate deployment.
         - name: octavia-driver-agent
 {{ tuple $envAll "octavia_driver_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.driver_agent | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
@@ -138,14 +144,11 @@ spec:
             - octavia-driver-agent
             - --config-file
             - /etc/octavia/octavia.conf
-            # -------------- Add by Simon Start --------------
-            # The snippets directory is mounted just below but was never read,
-            # so per-component overrides silently did nothing. The standalone
-            # driver-agent deployment has always passed this.
             - --config-dir
             - /etc/octavia/octavia.conf.d
-            # -------------- Add by Simon End --------------
           volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
             - name: oslo-lock-path
               mountPath: {{ .Values.conf.octavia.oslo_concurrency.lock_path }}
             - name: pod-etc-octavia
@@ -165,23 +168,22 @@ spec:
             {{- end }}
             - name: octavia-driver-agents
               mountPath: /var/run/octavia
-            # The sidecar runs the same binary against the same
-            # octavia.conf as the api container, so it needs the same
-            # extra mounts -- notably the Kafka CA. Without it this
-            # container cannot build a producer and drops whatever it
-            # tries to emit.
-{{ if $mounts_octavia_api.volumeMounts }}{{ toYaml $mounts_octavia_api.volumeMounts | indent 12 }}{{ end }}
-        # -------------- Add by Simon End --------------
-        {{- end }}
+            - name: run-openvswitch
+              mountPath: /var/run/ovn
+{{ if $mounts_octavia_driver_agent.volumeMounts }}{{ toYaml $mounts_octavia_driver_agent.volumeMounts | indent 12 }}{{ end }}
       volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: octavia-driver-agents
+          emptyDir: {}
+        - name: run-openvswitch
+          hostPath:
+            path: /run/openvswitch
+            type: DirectoryOrCreate
         - name: oslo-lock-path
           emptyDir: {}
         - name: pod-etc-octavia
           emptyDir: {}
-        {{- if .Values.pod.sidecars.driver_agent }}
-        - name: octavia-driver-agents
-          emptyDir: {}
-        {{- end }}
         - name: octavia-bin
           configMap:
             name: octavia-bin

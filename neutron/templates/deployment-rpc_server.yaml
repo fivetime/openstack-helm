@@ -15,7 +15,7 @@ limitations under the License.
 {{- if .Values.manifests.deployment_rpc_server }}
 {{- $envAll := . }}
 
-{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "server" -}}
+{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "rpc_server" -}}
 {{- $_ := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
 
 {{- $mounts_neutron_rpc_server := .Values.pod.mounts.neutron_rpc_server.neutron_rpc_server }}
@@ -50,6 +50,7 @@ spec:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "neutron_rpc_server" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
 {{ dict "envAll" $envAll "podName" "neutron-rpc-server" "containerNames" (list "neutron-rpc-server" "init") | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
     spec:
 {{ dict "envAll" $envAll "application" "neutron_rpc_server" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
@@ -67,17 +68,7 @@ spec:
       initContainers:
 {{ tuple $envAll "pod_dependency" $mounts_neutron_rpc_server_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         {{- if ( has "ovn" .Values.network.backend ) }}
-        - name: ovn-neutron-init
-{{ tuple $envAll "neutron_rpc_server" | include "helm-toolkit.snippets.image" | indent 10 }}
-          command:
-            - /tmp/neutron-ovn-init.sh
-          volumeMounts:
-            - name: pod-shared
-              mountPath: /tmp/pod-shared
-            - name: neutron-bin
-              mountPath: /tmp/neutron-ovn-init.sh
-              subPath: neutron-ovn-init.sh
-              readOnly: true
+{{ dict "envAll" $envAll "application" "neutron_rpc_server" "image" "neutron_rpc_server" "resources" $envAll.Values.pod.resources.rpc_server | include "neutron.snippets.ovn_neutron_init_container" | indent 8 }}
         {{- end }}
       containers:
         - name: neutron-rpc-server

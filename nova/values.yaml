@@ -2289,6 +2289,9 @@ pod:
       default:
         liveness:
           enabled: True
+          # uwsgi stats socket (conf.nova_metadata_uwsgi.uwsgi.stats); served
+          # by the master, so it answers even when every worker is busy.
+          port: 1717
           params:
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -2303,6 +2306,9 @@ pod:
       default:
         liveness:
           enabled: True
+          # uwsgi stats socket (conf.nova_api_uwsgi.uwsgi.stats); served by
+          # the master, so it answers even when every worker is busy.
+          port: 1717
           params:
             initialDelaySeconds: 5
             periodSeconds: 10

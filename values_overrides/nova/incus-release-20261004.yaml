@@ -1,7 +1,7 @@
-# Nova Incus e4d774c62146c97db1c3798ab519acd5caf44bb4; SDK eb803e4.
-# Build All Images run 37168989886. Apply after current deployment overrides.
-# Deployed candidate; final acceptance is blocked by cold-source volume
-# transaction retirement. See nova-incus-driver TEST_STATUS.md (2026-10-04).
+# Nova Incus d6c3476cfd63eade1787aa894469bd2efa23047d; SDK eb803e4.
+# Build All Images run 37179101434. Apply after current deployment overrides.
+# Three-node native acceptance passed; production lifecycle acceptance is
+# recorded in nova-incus-driver TEST_STATUS.md (2026-10-04).
 images:
   tags:
-    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:0a1cfd05f1caec4be36571881c97b916546ddacac90a640d8f61ee5fcc9b3306
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:2a4a171b412f8736e4bf2940f3188084dbcc27d1e5d7d2aaf448bc04f12455e4

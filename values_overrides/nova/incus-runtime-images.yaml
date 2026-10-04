@@ -4,5 +4,5 @@
 # separately in incus-release-YYYYMMDD.yaml, applied last.
 images:
   tags:
-    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:5ae66d186d4389c87235f6e6931eb16eaa67e62dd2d3bcbb3e00528d939cd20f
-    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:5ae66d186d4389c87235f6e6931eb16eaa67e62dd2d3bcbb3e00528d939cd20f
+    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:b71dfe3dcee7f1b14285c1a1e7cb489b8392ee14943724ce25ca475fa04786bb
+    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:b71dfe3dcee7f1b14285c1a1e7cb489b8392ee14943724ce25ca475fa04786bb

@@ -1,0 +1,6 @@
+# Nova Incus a6d65d4d4dcc95a5f6e0e5662492b242b22e95c5; SDK eb803e4.
+# Build All Images run 37241105099. Apply after current overrides.
+# Requires API/conductor 1.7 before compute rollout; acceptance in TEST_STATUS.md.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:bff95bb646c98668405102a88e1aaa76e1173030200344f6074eecc36612ac30

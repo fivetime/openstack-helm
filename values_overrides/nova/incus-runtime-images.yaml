@@ -1,8 +1,5 @@
----
-# Incus RPC objects must be registered by API/conductor before any Incus
-# compute is upgraded. Keep these as immutable CI digests; compute is pinned
-# separately in incus-release-YYYYMMDD.yaml, applied last.
+# Nova Incus RPC 1.7 control artifact; CI 37241105099.
 images:
   tags:
-    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:b71dfe3dcee7f1b14285c1a1e7cb489b8392ee14943724ce25ca475fa04786bb
-    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:b71dfe3dcee7f1b14285c1a1e7cb489b8392ee14943724ce25ca475fa04786bb
+    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:eb366287e73b718b6f731ed4481c3a22551c7e338556e5bfb144b94e68faf9b0
+    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:eb366287e73b718b6f731ed4481c3a22551c7e338556e5bfb144b94e68faf9b0

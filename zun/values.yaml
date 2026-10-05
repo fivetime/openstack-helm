@@ -105,7 +105,6 @@ container_runtime:
     socket_group: docker                       # Docker socket 用户组
     socket_path: /var/run/docker.sock          # Docker socket 路径
     library_dir: /var/lib/docker               # Docker 类库目录
-    plugins_dir: /run/docker/plugins           # Docker 插件目录
 
     # Docker API 配置
     api_version: "1.26"                        # Docker API 版本

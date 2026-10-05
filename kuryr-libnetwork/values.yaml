@@ -52,7 +52,9 @@ tls:
 
 network:
   kuryr:
-    plugins_dir: /run/docker/plugins/kuryr
+    # docker 只在 /etc/docker/plugins 和 /usr/lib/docker/plugins 找 .spec 文件；
+    # /run/docker/plugins 下只认 .sock，spec 放那里不报错但永远不会被发现
+    plugins_dir: /usr/lib/docker/plugins/kuryr
     external_policy_local: false
     bind_host: "0.0.0.0"
     bind_port: 23750

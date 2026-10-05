@@ -476,6 +476,11 @@ dependencies:
       services:
         - service: oslo_messaging
           endpoint: internal
+    # The storage init job only creates the RBD pool in Ceph, which the
+    # chart has no endpoint for, so it waits on nothing.
+    storage_init:
+      jobs: null
+      services: null
     novncproxy:
       jobs:
         - nova-db-sync
@@ -2289,6 +2294,9 @@ pod:
       default:
         liveness:
           enabled: True
+          # uwsgi stats socket (conf.nova_metadata_uwsgi.uwsgi.stats); served
+          # by the master, so it answers even when every worker is busy.
+          port: 1717
           params:
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -2303,6 +2311,9 @@ pod:
       default:
         liveness:
           enabled: True
+          # uwsgi stats socket (conf.nova_api_uwsgi.uwsgi.stats); served by
+          # the master, so it answers even when every worker is busy.
+          port: 1717
           params:
             initialDelaySeconds: 5
             periodSeconds: 10

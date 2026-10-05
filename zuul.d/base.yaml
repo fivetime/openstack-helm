@@ -37,7 +37,6 @@
       - zuul: zuul/zuul-jobs
     required-projects:
       - openstack/openstack-helm
-      - openstack/openstack-helm-plugin
     irrelevant-files:
       - ^.*\.rst$
       - ^.*\.rst.gotmpl$
@@ -64,7 +63,6 @@
         pod_network_cidr: "10.244.0.0/16"
         service_cidr: "10.96.0.0/16"
       osh_helm_repo: "{{ ansible_user_dir }}/{{ zuul.project.src_dir }}/../openstack-helm"
-      osh_plugin_repo: "{{ ansible_user_dir }}/{{ zuul.project.src_dir }}/../openstack-helm-plugin"
       osh_git_repo: "{{ ansible_user_dir }}/{{ zuul.project.src_dir }}/../openstack-helm"
       loopback_setup: true
       loopback_device: /dev/loop100
@@ -110,10 +108,9 @@
     name: openstack-helm-publish-charts
     timeout: 10800
     parent: publish-openstack-artifacts
-    run: playbooks/build-chart.yaml
+    run: playbooks/charts-publish.yaml
     required-projects:
       - openstack/openstack-helm
-    post-run: playbooks/publish/post.yaml
 
 - job:
     name: openstack-helm-build-charts
@@ -126,5 +123,5 @@
       - openstack/openstack-helm
     pre-run:
       - playbooks/prepare-hosts.yaml
-    run: playbooks/build-chart.yaml
+    run: playbooks/charts-build.yaml
 ...

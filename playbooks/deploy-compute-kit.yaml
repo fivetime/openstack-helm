@@ -23,12 +23,25 @@
 # The ovn.yaml override files exist per chart (openvswitch, libvirt,
 # nova, neutron) and are applied automatically when present.
 #
+# Ceph (via Rook) and cinder are deployed by default, because that is the
+# shape of a real deployment and of every job that has the nodes for it. A
+# job on a nodeset with no storage nodes has to opt out explicitly:
+#   vars:
+#     cinder_enabled: false
+#
 # Usage in zuul.d job definition:
 #   run:
 #     - playbooks/deploy-env.yaml
 #     - playbooks/deploy-compute-kit.yaml
 ---
 - hosts: primary
+  vars:
+    # This playbook is the one that deploys Rook, so it is also the one that
+    # can promise the stateful charts a StorageClass to claim from. True
+    # exactly when Ceph is deployed below; the role default is false so that
+    # every playbook which deploys mariadb or glance without Ceph keeps its
+    # host paths rather than waiting on a claim that can never bind.
+    osh_ceph_storage: "{{ cinder_enabled | default(true) | bool }}"
   tasks:
     - name: Prepare Kubernetes
       include_role:
@@ -45,18 +58,19 @@
         name: deploy-charts
         tasks_from: setup-client
 
-    # Optional Ceph, enabled only by the TLS job (for cinder's RBD backend).
-    # Deployed before any OpenStack chart, matching the order in deploy-cinder.
+    # Ceph, for cinder's RBD backend. Deployed before any OpenStack chart.
+    # On by default, so a job that cannot host Ceph has to set
+    # cinder_enabled: false rather than a job that can having to remember.
     - name: Deploy Ceph Rook
       include_role:
         name: deploy-ceph
-      when: cinder_enabled | default(false)
+      when: cinder_enabled | default(true)
 
     - name: Deploy Ceph adapter Rook
       include_role:
         name: deploy-charts
         tasks_from: ceph-adapter-rook
-      when: cinder_enabled | default(false)
+      when: cinder_enabled | default(true)
 
     # Skipped when the broker is provided by the upstream RabbitMQ operators
     # instead, which playbooks/deploy-rabbitmq-operator.yaml has already set up.
@@ -84,26 +98,24 @@
         name: deploy-charts
         tasks_from: keystone
 
-    # Optional cinder, enabled only by the TLS job so its nginx TLS sidecar is
-    # exercised. Deployed right after keystone, matching the order in
-    # deploy-cinder (ceph + keystone already up by this point).
     - name: Deploy Cinder
       include_role:
         name: deploy-charts
         tasks_from: cinder
-      when: cinder_enabled | default(false)
+      when: cinder_enabled | default(true)
 
     - name: Deploy Heat
       include_role:
         name: deploy-charts
         tasks_from: heat
 
+    # No osh_glance_backend here on purpose: the glance task picks "pvc" when
+    # Ceph is deployed and "local" when it is not, so this follows the same
+    # cinder_enabled flag as the rest of the storage configuration.
     - name: Deploy Glance
       include_role:
         name: deploy-charts
         tasks_from: glance
-      vars:
-        osh_glance_backend: local
 
     - name: Deploy Open vSwitch
       include_role:
@@ -157,20 +169,20 @@
         - keystone
 
     - name: Verify MariaDB TLS is used by services that enable it
-      shell: |
-        set -e
-        ./tools/deployment/common/verify-mariadb-tls.sh {{ item }} {{ osh_namespace | default('osh') }}
-      args:
-        chdir: "{{ osh_git_repo }}"
-        executable: /bin/bash
-      # nova no longer exposes a <svc>-db-user secret: its api and cell1 DB
-      # connections live in nova.conf (the [api_database] and [database]
-      # sections) and only cell0 keeps a user/admin secret pair.
-      # Point nova's check at the cell0 secrets; the empty string lets every
-      # other service fall back to the default <svc>-db-user / <svc>-db-admin.
-      environment:
-        USER_SECRET: "{{ 'nova-db-cell0-user' if item == 'nova' else '' }}"
-        ADMIN_SECRET: "{{ 'nova-db-cell0-admin' if item == 'nova' else '' }}"
+      include_role:
+        name: deploy-charts
+        tasks_from: _script
+      vars:
+        osh_script: verify-mariadb-tls.sh
+        osh_script_args: "{{ item }} {{ osh_namespace | default('osh') }}"
+        # nova no longer exposes a <svc>-db-user secret: its api and cell1 DB
+        # connections live in nova.conf (the [api_database] and [database]
+        # sections) and only cell0 keeps a user/admin secret pair.
+        # Point nova's check at the cell0 secrets; the empty string lets every
+        # other service fall back to the default <svc>-db-user / <svc>-db-admin.
+        osh_script_env:
+          USER_SECRET: "{{ 'nova-db-cell0-user' if item == 'nova' else '' }}"
+          ADMIN_SECRET: "{{ 'nova-db-cell0-admin' if item == 'nova' else '' }}"
       loop:
         - keystone
         - glance
@@ -180,12 +192,12 @@
         - heat
 
     - name: Verify RabbitMQ mTLS is used by services that enable it
-      shell: |
-        set -e
-        ./tools/deployment/common/verify-rabbitmq-tls.sh {{ item }} {{ osh_namespace | default('osh') }}
-      args:
-        chdir: "{{ osh_git_repo }}"
-        executable: /bin/bash
+      include_role:
+        name: deploy-charts
+        tasks_from: _script
+      vars:
+        osh_script: verify-rabbitmq-tls.sh
+        osh_script_args: "{{ item }} {{ osh_namespace | default('osh') }}"
       loop:
         - keystone
         - glance
@@ -193,27 +205,24 @@
         - neutron
         - heat
 
-    - name: Run functional tests
-      shell: |
-        set -xe
-        {{ item }}
-      args:
-        chdir: "{{ osh_git_repo }}"
-        executable: /bin/bash
-      environment:
-        DPDK_ENABLED: "{{ 'enabled' if 'dpdk.yaml' in (osh_values_overrides | default([])) else 'disabled' }}"
-      loop:
-        - ./tools/deployment/common/use-it.sh
-        - ./tools/deployment/common/force-cronjob-run.sh
+    - name: Exercise the compute kit
+      include_role:
+        name: deploy-charts
+        tasks_from: nova_test
+
+    - name: Force a run of every CronJob
+      include_role:
+        name: deploy-charts
+        tasks_from: force-cronjob-run
 
     # Self-skipping: exits 0 when no rabbitmq.osh.openstack.org resources exist,
     # which is every job that still provisions messaging with the per-chart
     # rabbit-init jobs. The definitions themselves are installed either way, so
     # they do not distinguish the two paths.
     - name: Verify the RabbitMQ topology custom resources reconciled
-      shell: |
-        set -e
-        ./tools/deployment/common/verify-rabbitmq-topology.sh {{ osh_namespace | default('osh') }}
-      args:
-        chdir: "{{ osh_git_repo }}"
-        executable: /bin/bash
+      include_role:
+        name: deploy-charts
+        tasks_from: _script
+      vars:
+        osh_script: verify-rabbitmq-topology.sh
+        osh_script_args: "{{ osh_namespace | default('osh') }}"

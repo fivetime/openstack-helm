@@ -394,6 +394,12 @@ dependencies:
       services:
         - endpoint: internal
           service: local_image_registry
+    ovn_db_sync:
+      jobs:
+        - neutron-db-sync
+      services:
+        - endpoint: internal
+          service: oslo_db
 
 pod:
   ## Extra containers and volumes to inject into the neutron-server
@@ -408,6 +414,37 @@ pod:
   probes:
     rpc_timeout: 60
     rpc_retries: 2
+    ironic_agent:
+      ironic_agent:
+        # NOTE: this probes the neutron server on the agent state report
+        # topic, not the agent itself, because the ironic agent only casts
+        # its state and cannot observe whether it was received. Readiness
+        # only: a liveness probe here would restart every agent whenever
+        # the neutron server RPC workers are unavailable.
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            periodSeconds: 190
+            timeoutSeconds: 185
+        # The liveness probe does not involve the neutron server: it reads
+        # the heartbeat file the agent's own state-report loop touches at
+        # the end of every cycle, so it restarts the pod only when that
+        # loop has died or hung, which readiness cannot see.
+        liveness:
+          enabled: true
+          # Seconds since the agent last finished a state-report cycle
+          # (conf.neutron.baremetal_agent.heartbeat_file) before the pod
+          # is considered dead. Keep it a few [AGENT] report_interval
+          # (default 30s) so one slow cycle does not restart the pod;
+          # neutron itself declares the per-node agents dead after
+          # agent_down_time (default 75s).
+          stale_after: 120
+          params:
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 2
     dhcp_agent:
       dhcp_agent:
         readiness:
@@ -544,22 +581,6 @@ pod:
             initialDelaySeconds: 120
             periodSeconds: 90
             timeoutSeconds: 70
-    ironic_agent:
-      neutron_ironic_agent:
-        liveness:
-          enabled: true
-          # Seconds since the agent last finished a state-report cycle
-          # (conf.neutron.baremetal_agent.heartbeat_file) before the pod
-          # is considered dead. Keep it a few [AGENT] report_interval
-          # (default 30s) so one slow cycle does not restart the pod;
-          # neutron itself declares the per-node agents dead after
-          # agent_down_time (default 75s).
-          stale_after: 120
-          params:
-            initialDelaySeconds: 120
-            periodSeconds: 30
-            timeoutSeconds: 10
-            failureThreshold: 2
     server:
       server:
         readiness:
@@ -592,6 +613,11 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        neutron_dhcp_agent_init:
+          readOnlyRootFilesystem: true
         neutron_dhcp_agent:
           readOnlyRootFilesystem: true
           privileged: true
@@ -620,6 +646,8 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        neutron_l3_agent_init:
+          readOnlyRootFilesystem: true
         neutron_l3_agent:
           readOnlyRootFilesystem: true
           privileged: true
@@ -630,10 +658,18 @@ pod:
         neutron_metadata_agent_init:
           runAsUser: 0
           readOnlyRootFilesystem: true
+    neutron_ovn_db_sync:
+      container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
     neutron_ovn_agent:
       pod:
         runAsUser: 42424
       container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         neutron_ovn_agent_init:
           runAsUser: 0
           readOnlyRootFilesystem: true
@@ -641,6 +677,9 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         neutron_ovn_metadata_agent_init:
           runAsUser: 0
           readOnlyRootFilesystem: true
@@ -648,6 +687,9 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         ovn_vpn_agent_init:
           runAsUser: 0
           readOnlyRootFilesystem: true
@@ -677,6 +719,9 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         neutron_server:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -684,6 +729,9 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         neutron_rpc_server:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -691,6 +739,9 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         neutron_periodic_worker:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -698,6 +749,9 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         neutron_ovn_maintenance_worker:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -716,6 +770,9 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        ovn_neutron_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         neutron_ironic_agent_init:
           runAsUser: 0
           readOnlyRootFilesystem: true
@@ -889,6 +946,8 @@ pod:
     ironic_agent: 1
   lifecycle:
     upgrades:
+      statefulsets:
+        pod_replacement_strategy: RollingUpdate
       deployments:
         revision_history: 3
         pod_replacement_strategy: RollingUpdate
@@ -930,6 +989,18 @@ pod:
           min_ready_seconds: 0
           max_unavailable: 1
         netns_cleanup_cron:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+        bagpipe_bgp:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+        bgp_dragent:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+        l2gw_agent:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
@@ -1028,6 +1099,13 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
     server:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    rpc_server:
       requests:
         memory: "128Mi"
         cpu: "100m"
@@ -2833,9 +2911,26 @@ manifests:
   daemonset_ovn_agent: false
   daemonset_ovn_metadata_agent: false
   daemonset_ovn_vpn_agent: false
-  deployment_ironic_agent: false
+  # NOTE: The ironic agent runs as a StatefulSet because it names its
+  # notification listener pool queue after its own hostname. Under a
+  # Deployment that is the pod name, so it changed on every rollout, and
+  # quorum queues cannot be declared `auto_delete`, which left the previous
+  # pool queue behind each time. The StatefulSet gives each pod a stable
+  # hostname (neutron-ironic-agent-0, neutron-ironic-agent-1, ...) that is
+  # reused across restarts, which also keeps the agent's hash ring membership
+  # stable. This also renders the headless service those DNS names are
+  # published through.
+  statefulset_ironic_agent: false
   deployment_server: true
-  deployment_rpc_server: true
+  # NOTE: The rpc server runs as a StatefulSet because oslo.messaging names
+  # its per-server `<topic>.<host>` queues after its host, which defaults to
+  # the hostname. Under a Deployment that is the pod name, so it changed on
+  # every rollout, and quorum queues cannot be declared `auto_delete`, which
+  # left the previous queues behind each time. The StatefulSet gives each pod
+  # a stable hostname (neutron-rpc-server-0, neutron-rpc-server-1, ...) that
+  # is reused across restarts. This also renders the headless service those
+  # DNS names are published through.
+  statefulset_rpc_server: true
   deployment_periodic_worker: true
   deployment_ovn_maintenance_worker: true
   job_bootstrap: true

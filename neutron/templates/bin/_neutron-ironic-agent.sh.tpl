@@ -20,6 +20,9 @@ COMMAND="${@:-start}"
 function start () {
   exec ironic-neutron-agent \
         --config-file /etc/neutron/neutron.conf \
+{{- if ( has "ovn" .Values.network.backend ) }}
+        --config-file /tmp/pod-shared/ovn.ini \
+{{- end }}
 {{- if and ( empty .Values.conf.neutron.DEFAULT.host ) ( .Values.pod.use_fqdn.neutron_agent ) }}
   --config-file /tmp/pod-shared/neutron-agent.ini \
 {{- end }}
@@ -39,7 +42,7 @@ function stop () {
 # going dead while this process stays Running with 0 restarts.
 function liveness () {
   local hb="{{ .Values.conf.neutron.baremetal_agent.heartbeat_file }}"
-  local stale_after="{{ .Values.pod.probes.ironic_agent.neutron_ironic_agent.liveness.stale_after }}"
+  local stale_after="{{ .Values.pod.probes.ironic_agent.ironic_agent.liveness.stale_after }}"
   local now last age
   now=$(date +%s)
   last=$(stat -c %Y "${hb}" 2>/dev/null || echo 0)

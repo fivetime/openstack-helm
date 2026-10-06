@@ -59,7 +59,7 @@ spec:
 {{ tuple $envAll "neutron" "ovn-evpn-frr" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
-        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-bin-hash: {{ tuple "configmap-ovn-evpn-frr.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-ovn-evpn-frr.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "neutron_ovn_evpn_frr" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
 {{ dict "envAll" $envAll "podName" "neutron-ovn-evpn-frr" "containerNames" (list "neutron-ovn-evpn-frr" "neutron-ovn-evpn-frr-init" "init") | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
@@ -90,7 +90,7 @@ spec:
               mountPath: /run/openvswitch
             - name: frr-etc
               mountPath: /etc/frr
-            - name: neutron-bin
+            - name: neutron-ovn-evpn-frr-bin
               mountPath: /tmp/neutron-ovn-evpn-frr-init.sh
               subPath: neutron-ovn-evpn-frr-init.sh
               readOnly: true
@@ -118,7 +118,7 @@ spec:
               mountPath: /etc/frr
             - name: frr-run
               mountPath: /var/run/frr
-            - name: neutron-bin
+            - name: neutron-ovn-evpn-frr-bin
               mountPath: /tmp/neutron-ovn-evpn-frr.sh
               subPath: neutron-ovn-evpn-frr.sh
               readOnly: true
@@ -135,9 +135,9 @@ spec:
         - name: run-openvswitch
           hostPath:
             path: /run/openvswitch
-        - name: neutron-bin
+        - name: neutron-ovn-evpn-frr-bin
           configMap:
-            name: neutron-bin
+            name: neutron-ovn-evpn-frr-bin
             defaultMode: 0555
         - name: neutron-ovn-evpn-frr-etc
           secret:

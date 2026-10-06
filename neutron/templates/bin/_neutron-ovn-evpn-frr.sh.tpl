@@ -22,4 +22,10 @@ set -ex
 chown frr:frr /var/run/frr
 chown -R frr:frr /etc/frr
 
+# The PID files in the hostPath are from the previous FRR of this node, which
+# ran in another PID namespace. Left in place, FRR's start-up ("restart all")
+# takes their PIDs for running daemons and signals whatever process of this
+# container has those numbers, and the daemons may never start.
+rm -f /var/run/frr/*.pid
+
 exec /sbin/tini -- /usr/lib/frr/docker-start

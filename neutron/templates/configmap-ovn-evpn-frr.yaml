@@ -12,11 +12,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- /* FRR configuration of the ovn-evpn-frr daemonset, in its own Secret so
-       that a change to it only rolls that daemonset (which is OnDelete), not
-       every Neutron component that hashes neutron-etc. */ -}}
+{{- /* Scripts and FRR configuration of the ovn-evpn-frr daemonset, in their
+       own ConfigMap and Secret so that a change to them only rolls that
+       daemonset (which is OnDelete), not every Neutron component that hashes
+       neutron-bin or neutron-etc. */ -}}
 {{- if .Values.manifests.daemonset_ovn_evpn_frr }}
 {{- $envAll := . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: neutron-ovn-evpn-frr-bin
+data:
+  neutron-ovn-evpn-frr-init.sh: |
+{{ tuple "bin/_neutron-ovn-evpn-frr-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  neutron-ovn-evpn-frr.sh: |
+{{ tuple "bin/_neutron-ovn-evpn-frr.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 ---
 apiVersion: v1
 kind: Secret

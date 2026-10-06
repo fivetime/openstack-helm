@@ -2405,10 +2405,14 @@ conf:
     # Directory holding the FRR vty sockets, shared with the OVN agent
     # through a hostPath ([ovn_evpn] frr_vty_socket).
     vty_socket_dir: /run/frr
-    # BGP peers of the default instance, activated for l2vpn evpn. The agent
-    # reuses this instance only if at least one peer is activated for
-    # l2vpn evpn; with no peer it creates its own instance.
-    #   - peer: 192.0.2.1           # address, or an interface name
+    # BGP peers of the default instance. The agent reuses this instance only
+    # if at least one peer is activated for l2vpn evpn; with no peer it
+    # creates its own instance.
+    #   - peer: 192.0.2.1           # address, or an interface name; or
+    #                               # ${GW6:<if>} / ${GW4:<if>}: the IPv6/IPv4
+    #                               # gateway of interface <if> on each node
+    #                               # (its default route, else its first
+    #                               # route with a next hop)
     #     interface: false          # true: unnumbered peering on "peer"
     #     remote_as: 65001          # or "internal" / "external"
     #     description: leaf-1
@@ -2418,8 +2422,16 @@ conf:
     #     connect_timer: null       # seconds
     #     update_source: null       # interface name or address to source
     #                               # the session from, e.g. the underlay NIC
-    #     route_map_in: null        # route-map name, define it in extra_config
-    #     route_map_out: null
+    #     bfd: false
+    #     capability_extended_nexthop: false  # IPv4 routes over IPv6 peering
+    #     route_map_in: null        # l2vpn evpn, when address_families
+    #     route_map_out: null       # is not set
+    #     # Address families to activate the peer in, each with optional
+    #     # route-maps. Default: l2vpn_evpn only, with route_map_in/out above.
+    #     address_families:
+    #       ipv4_unicast: {route_map_in: null, route_map_out: null}
+    #       ipv6_unicast: {route_map_in: null, route_map_out: null}
+    #       l2vpn_evpn: {route_map_in: null, route_map_out: null}
     neighbors: []
     # Announce this chassis' router-id (its ovn-evpn-local-ip, the VTEP) as
     # a /32 in ipv4 unicast to the peers, for underlays that learn VTEPs
@@ -2434,7 +2446,7 @@ conf:
       zebra=yes
       bgpd=yes
       staticd=yes
-      bfdd=no
+      bfdd=yes
       ospfd=no
       ospf6d=no
       ripd=no
@@ -2454,6 +2466,7 @@ conf:
       zebra_options="  -A 127.0.0.1 -s 90000000 -r -K 120"
       bgpd_options="   -A 127.0.0.1"
       staticd_options="-A 127.0.0.1"
+      bfdd_options="   -A 127.0.0.1"
     # ${ROUTER_ID} and ${HOSTNAME} are replaced on each node: ROUTER_ID is
     # the chassis' ovn-evpn-local-ip, which the OVN agent also uses as the
     # router-id when it looks for an existing BGP instance.
@@ -2492,25 +2505,64 @@ conf:
       {{- if $n.update_source }}
        neighbor {{ $n.peer }} update-source {{ $n.update_source }}
       {{- end }}
+      {{- if $n.bfd }}
+       neighbor {{ $n.peer }} bfd
+      {{- end }}
+      {{- if $n.capability_extended_nexthop }}
+       neighbor {{ $n.peer }} capability extended-nexthop
+      {{- end }}
       {{- end }}
        !
        address-family ipv4 unicast
       {{- if .Values.conf.ovn_evpn_frr.advertise_vtep_ip }}
         network ${ROUTER_ID}/32
+      {{- end }}
       {{- range $n := .Values.conf.ovn_evpn_frr.neighbors }}
+      {{- $afs := default dict $n.address_families }}
+      {{- if or (hasKey $afs "ipv4_unicast") (and (not $n.address_families) $.Values.conf.ovn_evpn_frr.advertise_vtep_ip) }}
+      {{- $af := default dict (index $afs "ipv4_unicast") }}
         neighbor {{ $n.peer }} activate
+      {{- if $af.route_map_in }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_in }} in
+      {{- end }}
+      {{- if $af.route_map_out }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_out }} out
+      {{- end }}
+      {{- end }}
+      {{- end }}
+       exit-address-family
+       !
+       address-family ipv6 unicast
+      {{- range $n := .Values.conf.ovn_evpn_frr.neighbors }}
+      {{- $afs := default dict $n.address_families }}
+      {{- if hasKey $afs "ipv6_unicast" }}
+      {{- $af := default dict (index $afs "ipv6_unicast") }}
+        neighbor {{ $n.peer }} activate
+      {{- if $af.route_map_in }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_in }} in
+      {{- end }}
+      {{- if $af.route_map_out }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_out }} out
+      {{- end }}
       {{- end }}
       {{- end }}
        exit-address-family
        !
        address-family l2vpn evpn
       {{- range $n := .Values.conf.ovn_evpn_frr.neighbors }}
-        neighbor {{ $n.peer }} activate
-      {{- if $n.route_map_in }}
-        neighbor {{ $n.peer }} route-map {{ $n.route_map_in }} in
+      {{- $afs := default dict $n.address_families }}
+      {{- if or (hasKey $afs "l2vpn_evpn") (not $n.address_families) }}
+      {{- $af := default dict (index $afs "l2vpn_evpn") }}
+      {{- if not $n.address_families }}
+      {{- $af = dict "route_map_in" $n.route_map_in "route_map_out" $n.route_map_out }}
       {{- end }}
-      {{- if $n.route_map_out }}
-        neighbor {{ $n.peer }} route-map {{ $n.route_map_out }} out
+        neighbor {{ $n.peer }} activate
+      {{- if $af.route_map_in }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_in }} in
+      {{- end }}
+      {{- if $af.route_map_out }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_out }} out
+      {{- end }}
       {{- end }}
       {{- end }}
         advertise-all-vni

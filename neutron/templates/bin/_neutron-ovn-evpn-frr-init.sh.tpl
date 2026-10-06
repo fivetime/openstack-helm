@@ -36,5 +36,34 @@ HOSTNAME=$(hostname -s)
 sed -e "s|\${ROUTER_ID}|${ROUTER_ID}|g" \
     -e "s|\${HOSTNAME}|${HOSTNAME}|g" \
     /tmp/ovn-evpn-frr.conf.in > /etc/frr/frr.conf
+
+# ${GW6:<if>} / ${GW4:<if>} stand for this node's IPv6/IPv4 gateway on
+# interface <if>, so one configuration peers every node with its own
+# first-hop router: the next hop of the interface's default route, or else
+# of its first route that has one.
+gateway_of() {
+  for routes in "default dev $2" "dev $2"; do
+    gw=$(ip -"$1" route show ${routes} 2>/dev/null \
+      | awk '{for (i = 1; i < NF; i++) if ($i == "via") {print $(i + 1); exit}}')
+    if [ -n "${gw}" ]; then
+      echo "${gw}"
+      return
+    fi
+  done
+}
+for token in $(grep -o '\${GW[46]:[A-Za-z0-9_.@-]*}' /etc/frr/frr.conf | sort -u); do
+  family=${token#\$\{GW}
+  family=${family%%:*}
+  dev=${token#*:}
+  dev=${dev%\}}
+  gw=$(gateway_of "${family}" "${dev}")
+  if [ -z "${gw}" ]; then
+    echo "no IPv${family} gateway on ${dev} for ${token}" >&2
+    exit 1
+  fi
+  pattern=$(printf '%s' "${token}" | sed 's/[$.]/\\&/g')
+  sed -i "s|${pattern}|${gw}|g" /etc/frr/frr.conf
+done
+
 cp /tmp/ovn-evpn-frr-daemons /etc/frr/daemons
 cp /tmp/ovn-evpn-frr-vtysh.conf /etc/frr/vtysh.conf

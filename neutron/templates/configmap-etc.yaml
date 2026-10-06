@@ -235,6 +235,26 @@ limitations under the License.
 {{- end }}
 {{- end -}}
 
+{{- /* The OVN agent's ovn-evpn extension drives the FRR of the
+       ovn-evpn-frr daemonset through vtysh. Derive its settings from the
+       same values the daemonset renders, so the two cannot disagree: the
+       agent only reuses a BGP instance whose AS is [ovn_evpn] bgp_as, and
+       reaches FRR through the shared vty socket directory. Values set
+       explicitly under conf.ovn_agent.ovn_evpn take precedence. */ -}}
+{{- if $envAll.Values.manifests.daemonset_ovn_evpn_frr }}
+{{- if empty $envAll.Values.conf.ovn_evpn_frr.asn }}
+{{- fail "conf.ovn_evpn_frr.asn is required when manifests.daemonset_ovn_evpn_frr is enabled" }}
+{{- end }}
+{{- $agentSection := default dict $envAll.Values.conf.ovn_agent.agent }}
+{{- $extensions := splitList "," (default "" $agentSection.extensions | toString) | compact }}
+{{- if not (has "ovn-evpn" $extensions) }}
+{{- $_ := set $agentSection "extensions" (append $extensions "ovn-evpn" | join ",") }}
+{{- end }}
+{{- $_ := set $envAll.Values.conf.ovn_agent "agent" $agentSection }}
+{{- $evpnDefaults := dict "bgp_as" (printf "%d" ($envAll.Values.conf.ovn_evpn_frr.asn | int64)) "frr_vty_socket" $envAll.Values.conf.ovn_evpn_frr.vty_socket_dir }}
+{{- $_ := set $envAll.Values.conf.ovn_agent "ovn_evpn" (merge (default dict $envAll.Values.conf.ovn_agent.ovn_evpn) $evpnDefaults) }}
+{{- end -}}
+
 ---
 apiVersion: v1
 kind: Secret
@@ -277,6 +297,11 @@ data:
   neutron_ovn_vpn_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.ovn_vpn_agent | b64enc }}
   ovn_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.ovn_agent | b64enc }}
   ovn_metadata_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.ovn_metadata_agent | b64enc }}
+{{- if $envAll.Values.manifests.daemonset_ovn_evpn_frr }}
+  ovn-evpn-frr.conf: {{ tpl (index $envAll.Values.conf.ovn_evpn_frr "frr.conf") $envAll | b64enc }}
+  ovn-evpn-frr-daemons: {{ $envAll.Values.conf.ovn_evpn_frr.daemons | b64enc }}
+  ovn-evpn-frr-vtysh.conf: {{ index $envAll.Values.conf.ovn_evpn_frr "vtysh.conf" | b64enc }}
+{{- end }}
 {{- else }}
   metadata_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.metadata_agent | b64enc }}
 {{- end }}

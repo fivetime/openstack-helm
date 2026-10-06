@@ -2413,7 +2413,9 @@ conf:
     #     remote_as: 65001          # or "internal" / "external"
     #     description: leaf-1
     #     password: null
-    #     ebgp_multihop: null
+    #     ebgp_multihop: null       # true (no hop count) or a hop count
+    #     timers: null              # "<keepalive> <holdtime>", e.g. "3 9"
+    #     connect_timer: null       # seconds
     #     route_map_in: null        # route-map name, define it in extra_config
     #     route_map_out: null
     neighbors: []
@@ -2462,6 +2464,7 @@ conf:
       router bgp {{ .Values.conf.ovn_evpn_frr.asn | int64 }}
        bgp router-id ${ROUTER_ID}
        bgp graceful-restart
+       no bgp ebgp-requires-policy
        no bgp default ipv4-unicast
       {{- range $n := .Values.conf.ovn_evpn_frr.neighbors }}
       {{- if $n.interface }}
@@ -2476,7 +2479,13 @@ conf:
        neighbor {{ $n.peer }} password {{ $n.password }}
       {{- end }}
       {{- if $n.ebgp_multihop }}
-       neighbor {{ $n.peer }} ebgp-multihop {{ $n.ebgp_multihop }}
+       neighbor {{ $n.peer }} ebgp-multihop{{ if not (kindIs "bool" $n.ebgp_multihop) }} {{ $n.ebgp_multihop | int64 }}{{ end }}
+      {{- end }}
+      {{- if $n.timers }}
+       neighbor {{ $n.peer }} timers {{ $n.timers }}
+      {{- end }}
+      {{- if $n.connect_timer }}
+       neighbor {{ $n.peer }} timers connect {{ $n.connect_timer | int64 }}
       {{- end }}
       {{- end }}
        !

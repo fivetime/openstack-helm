@@ -60,7 +60,7 @@ spec:
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-ovn-evpn-frr.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "neutron_ovn_evpn_frr" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
 {{ dict "envAll" $envAll "podName" "neutron-ovn-evpn-frr" "containerNames" (list "neutron-ovn-evpn-frr" "neutron-ovn-evpn-frr-init" "init") | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
     spec:
@@ -94,15 +94,15 @@ spec:
               mountPath: /tmp/neutron-ovn-evpn-frr-init.sh
               subPath: neutron-ovn-evpn-frr-init.sh
               readOnly: true
-            - name: neutron-etc
+            - name: neutron-ovn-evpn-frr-etc
               mountPath: /tmp/ovn-evpn-frr.conf.in
               subPath: ovn-evpn-frr.conf
               readOnly: true
-            - name: neutron-etc
+            - name: neutron-ovn-evpn-frr-etc
               mountPath: /tmp/ovn-evpn-frr-daemons
               subPath: ovn-evpn-frr-daemons
               readOnly: true
-            - name: neutron-etc
+            - name: neutron-ovn-evpn-frr-etc
               mountPath: /tmp/ovn-evpn-frr-vtysh.conf
               subPath: ovn-evpn-frr-vtysh.conf
               readOnly: true
@@ -139,9 +139,9 @@ spec:
           configMap:
             name: neutron-bin
             defaultMode: 0555
-        - name: neutron-etc
+        - name: neutron-ovn-evpn-frr-etc
           secret:
-            secretName: neutron-etc
+            secretName: neutron-ovn-evpn-frr-etc
             defaultMode: 0444
 {{ if $mounts_ovn_evpn_frr.volumes }}{{ toYaml $mounts_ovn_evpn_frr.volumes | indent 8 }}{{ end }}
 {{- end }}

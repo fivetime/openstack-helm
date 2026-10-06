@@ -302,11 +302,6 @@ data:
   neutron_ovn_vpn_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.ovn_vpn_agent | b64enc }}
   ovn_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.ovn_agent | b64enc }}
   ovn_metadata_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.ovn_metadata_agent | b64enc }}
-{{- if $envAll.Values.manifests.daemonset_ovn_evpn_frr }}
-  ovn-evpn-frr.conf: {{ tpl (index $envAll.Values.conf.ovn_evpn_frr "frr.conf") $envAll | b64enc }}
-  ovn-evpn-frr-daemons: {{ $envAll.Values.conf.ovn_evpn_frr.daemons | b64enc }}
-  ovn-evpn-frr-vtysh.conf: {{ index $envAll.Values.conf.ovn_evpn_frr "vtysh.conf" | b64enc }}
-{{- end }}
 {{- else }}
   metadata_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.metadata_agent | b64enc }}
 {{- end }}

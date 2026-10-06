@@ -38,7 +38,7 @@ images:
     neutron_metadata: quay.io/airshipit/neutron:2026.1-ubuntu_noble
     neutron_ovn_agent: quay.io/airshipit/neutron:2026.1-ubuntu_noble
     # FRR for the OVN agent's ovn-evpn extension (manifests.daemonset_ovn_evpn_frr).
-    neutron_ovn_evpn_frr: quay.io/frrouting/frr:10.5.3
+    neutron_ovn_evpn_frr: quay.io/frrouting/frr:10.7.1
     neutron_ovn_metadata: quay.io/airshipit/neutron:2026.1-ubuntu_noble
     neutron_ovn_db_sync: quay.io/airshipit/neutron:2026.1-ubuntu_noble
     neutron_ovn_vpn: quay.io/airshipit/neutron:2026.1-ubuntu_noble

@@ -2416,6 +2416,8 @@ conf:
     #     ebgp_multihop: null       # true (no hop count) or a hop count
     #     timers: null              # "<keepalive> <holdtime>", e.g. "3 9"
     #     connect_timer: null       # seconds
+    #     update_source: null       # interface name or address to source
+    #                               # the session from, e.g. the underlay NIC
     #     route_map_in: null        # route-map name, define it in extra_config
     #     route_map_out: null
     neighbors: []
@@ -2486,6 +2488,9 @@ conf:
       {{- end }}
       {{- if $n.connect_timer }}
        neighbor {{ $n.peer }} timers connect {{ $n.connect_timer | int64 }}
+      {{- end }}
+      {{- if $n.update_source }}
+       neighbor {{ $n.peer }} update-source {{ $n.update_source }}
       {{- end }}
       {{- end }}
        !

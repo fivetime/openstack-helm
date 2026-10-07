@@ -127,6 +127,8 @@ conf:
         instance_type_id:
           type: int
           fields: payload.instance_type_id
+        instance_flavor_id:
+          fields: payload.instance_flavor_id
         instance_type:
           fields: payload.instance_type
         state:
@@ -779,7 +781,7 @@ conf:
           display_name: display_name
           host: host
           availability_zone: availability_zone
-          flavor_id: instance_type_id
+          flavor_id: instance_flavor_id
           flavor_name: instance_type
           user_id: user_id
           project_id: project_id
@@ -912,6 +914,15 @@ conf:
         event_attributes:
           id: resource_id
           project_id: project_id
+      # 2026.2: volume.service.health pollster (one sample per cinder service).
+      - resource_type: volume_service
+        metrics:
+          volume.service.health: null
+        attributes:
+          host: resource_metadata.host
+          binary: resource_metadata.binary
+          zone: resource_metadata.zone
+          status: resource_metadata.status
       - resource_type: volume_provider
         metrics:
           volume.provider.capacity.total: null

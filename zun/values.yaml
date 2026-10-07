@@ -107,7 +107,6 @@ container_runtime:
     library_dir: /var/lib/docker               # Docker 类库目录
 
     # Docker API 配置
-    api_version: "1.26"                        # Docker API 版本
     default_timeout: 45                        # 运行时调用的上限;必须低于 rpc_response_timeout(默认 60),否则两者同时到期、RPC 必输,任何慢调用都变成"节点不再应答"
     execute_timeout: 30                        # 一次 exec 的上限;与 CriDriver 的 cri_exec_timeout 对齐,且须低于 rpc_response_timeout(默认 60)
 
@@ -685,7 +684,7 @@ conf:
 
     # === Docker 配置 ===
     docker:
-      docker_remote_api_version: "1.26"       # Docker API 版本
+      docker_remote_api_version: "1.40"       # Docker API 版本;与上游 Zun 默认一致,也是 Docker 29 接受的最低版本(1.26 会被拒:client version too old)
       default_timeout: 45                     # 运行时调用的上限;必须低于 rpc_response_timeout(默认 60),否则两者同时到期、RPC 必输,任何慢调用都变成"节点不再应答"
       api_url: unix:///var/run/docker.sock   # API URL
       docker_remote_api_port: 2375            # Docker API 端口

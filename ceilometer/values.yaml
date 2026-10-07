@@ -94,6 +94,11 @@ conf:
       enabled: true
       backend: dogpile.cache.memcached
       expiration_time: 86400
+  # Copied from ceilometer stable/2026.2 ceilometer/pipeline/data/event_definitions.yaml.
+  # The gnocchi publisher builds resources from these traits through
+  # gnocchi_resources event_attributes, so the two files have to match the
+  # same release (display_name, availability_zone and instance_flavor_id
+  # were missing from the older copy, and every instance event was rejected).
   event_definitions:
     - event_type: 'compute.instance.*'
       traits: &instance_traits
@@ -103,8 +108,12 @@ conf:
           fields: payload.user_id
         instance_id:
           fields: payload.instance_id
+        display_name:
+          fields: payload.display_name
         resource_id:
           fields: payload.instance_id
+        cell_name:
+          fields: payload.cell_name
         host:
           fields: publisher_id.`split(., 1, 1)`
         service:
@@ -125,7 +134,6 @@ conf:
           type: int
           fields: payload.vcpus
         instance_type_id:
-          type: int
           fields: payload.instance_type_id
         instance_flavor_id:
           fields: payload.instance_flavor_id
@@ -145,6 +153,11 @@ conf:
         deleted_at:
           type: datetime
           fields: payload.deleted_at
+    - event_type: compute.instance.create.end
+      traits:
+        <<: *instance_traits
+        availability_zone:
+          fields: payload.availability_zone
     - event_type: compute.instance.update
       traits:
         <<: *instance_traits
@@ -159,7 +172,7 @@ conf:
         audit_period_ending:
           type: datetime
           fields: payload.audit_period_ending
-    - event_type: ['volume.exists', 'volume.create.*', 'volume.delete.*', 'volume.resize.*', 'volume.attach.*', 'volume.detach.*', 'volume.update.*', 'snapshot.exists', 'snapshot.create.*', 'snapshot.delete.*', 'snapshot.update.*']
+    - event_type: ['volume.exists', 'volume.retype', 'volume.create.*', 'volume.delete.*', 'volume.resize.*', 'volume.attach.*', 'volume.detach.*', 'volume.update.*', 'snapshot.exists', 'snapshot.create.*', 'snapshot.delete.*', 'snapshot.update.*', 'volume.transfer.accept.end', 'snapshot.transfer.accept.end']
       traits: &cinder_traits
         user_id:
           fields: payload.user_id
@@ -174,8 +187,13 @@ conf:
         status:
           fields: payload.status
         created_at:
+          type: datetime
           fields: payload.created_at
-    - event_type: ['volume.exists', 'volume.create.*', 'volume.delete.*', 'volume.resize.*', 'volume.attach.*', 'volume.detach.*', 'volume.update.*']
+        image_id:
+          fields: payload.glance_metadata[?key=image_id].value
+        instance_id:
+          fields: payload.volume_attachment[0].server_id
+    - event_type: ['volume.transfer.*', 'volume.exists', 'volume.retype', 'volume.create.*', 'volume.delete.*', 'volume.resize.*', 'volume.attach.*', 'volume.detach.*', 'volume.update.*', 'snapshot.transfer.accept.end']
       traits:
         <<: *cinder_traits
         resource_id:
@@ -183,11 +201,51 @@ conf:
         host:
           fields: payload.host
         size:
+          type: int
           fields: payload.size
         type:
           fields: payload.volume_type
         replication_status:
           fields: payload.replication_status
+    - event_type: ['snapshot.transfer.accept.end']
+      traits:
+        <<: *cinder_traits
+        resource_id:
+          fields: payload.snapshot_id
+        project_id:
+          fields: payload.tenant_id
+    - event_type: ['share.create.*', 'share.delete.*', 'share.extend.*', 'share.shrink.*']
+      traits: &share_traits
+        share_id:
+          fields: payload.share_id
+        user_id:
+          fields: payload.user_id
+        project_id:
+          fields: payload.tenant_id
+        snapshot_id:
+          fields: payload.snapshot_id
+        availability_zone:
+          fields: payload.availability_zone
+        status:
+          fields: payload.status
+        created_at:
+          type: datetime
+          fields: payload.created_at
+        share_group_id:
+          fields: payload.share_group_id
+        size:
+          type: int
+          fields: payload.size
+        name:
+          fields: payload.name
+        proto:
+          fields: payload.proto
+        is_public:
+          fields: payload.is_public
+        description:
+          fields: payload.description
+        host:
+          fields: payload.host
     - event_type: ['snapshot.exists', 'snapshot.create.*', 'snapshot.delete.*', 'snapshot.update.*']
       traits:
         <<: *cinder_traits
@@ -212,12 +270,15 @@ conf:
         status:
           fields: payload.status
         created_at:
+          type: datetime
           fields: payload.created_at
         user_id:
           fields: payload.owner
         deleted_at:
+          type: datetime
           fields: payload.deleted_at
         size:
+          type: int
           fields: payload.size
     - event_type: image.send
       traits: &glance_send
@@ -239,34 +300,11 @@ conf:
         project_id:
           fields: payload.tenant_id
         user_id:
-          fields: ['_context_trustor_user_id', '_context_user_id']
+          fields: ['ctxt.trustor_user_id', 'ctxt.user_id']
         resource_id:
           fields: payload.stack_identity
-    - event_type: sahara.cluster.*
-      traits: &sahara_crud
-        project_id:
-          fields: payload.project_id
-        user_id:
-          fields: _context_user_id
-        resource_id:
-          fields: payload.cluster_id
-    - event_type: sahara.cluster.health
-      traits: &sahara_health
-        <<: *sahara_crud
-        verification_id:
-          fields: payload.verification_id
-        health_check_status:
-          fields: payload.health_check_status
-        health_check_name:
-          fields: payload.health_check_name
-        health_check_description:
-          fields: payload.health_check_description
-        created_at:
-          type: datetime
-          fields: payload.created_at
-        updated_at:
-          type: datetime
-          fields: payload.updated_at
+        name:
+          fields: payload.name
     - event_type: ['identity.user.*', 'identity.project.*', 'identity.group.*', 'identity.role.*', 'identity.OS-TRUST:trust.*',
                    'identity.region.*', 'identity.service.*', 'identity.endpoint.*', 'identity.policy.*']
       traits: &identity_crud
@@ -301,6 +339,7 @@ conf:
         eventType:
           fields: payload.eventType
         eventTime:
+          type: datetime
           fields: payload.eventTime
         outcome:
           fields: payload.outcome
@@ -333,6 +372,7 @@ conf:
         eventType:
           fields: payload.eventType
         eventTime:
+          type: datetime
           fields: payload.eventTime
         outcome:
           fields: payload.outcome
@@ -358,30 +398,38 @@ conf:
           fields: payload.target.metadata.object
         observer_id:
           fields: payload.observer.id
-    - event_type: ['network.*', 'subnet.*', 'port.*', 'router.*', 'floatingip.*', 'pool.*', 'vip.*', 'member.*', 'health_monitor.*', 'healthmonitor.*', 'listener.*', 'loadbalancer.*', 'firewall.*', 'firewall_policy.*', 'firewall_rule.*', 'vpnservice.*', 'ipsecpolicy.*', 'ikepolicy.*', 'ipsec_site_connection.*']
+    - event_type: ['network.*', 'subnet.*', 'port.*', 'router.*', 'floatingip.*', 'firewall.*', 'firewall_policy.*', 'firewall_rule.*', 'vpnservice.*', 'ipsecpolicy.*', 'ikepolicy.*', 'ipsec_site_connection.*']
       traits: &network_traits
         user_id:
-          fields: _context_user_id
+          fields: ctxt.user_id
         project_id:
-          fields: _context_tenant_id
+          fields: ctxt.tenant_id
     - event_type: network.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.network.name
         resource_id:
           fields: ['payload.network.id', 'payload.id']
     - event_type: subnet.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.subnet.name
         resource_id:
           fields: ['payload.subnet.id', 'payload.id']
     - event_type: port.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.port.name
         resource_id:
           fields: ['payload.port.id', 'payload.id']
     - event_type: router.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.router.name
         resource_id:
           fields: ['payload.router.id', 'payload.id']
     - event_type: floatingip.*
@@ -389,69 +437,46 @@ conf:
         <<: *network_traits
         resource_id:
           fields: ['payload.floatingip.id', 'payload.id']
-    - event_type: pool.*
-      traits:
-        <<: *network_traits
-        resource_id:
-          fields: ['payload.pool.id', 'payload.id']
-    - event_type: vip.*
-      traits:
-        <<: *network_traits
-        resource_id:
-          fields: ['payload.vip.id', 'payload.id']
-    - event_type: member.*
-      traits:
-        <<: *network_traits
-        resource_id:
-          fields: ['payload.member.id', 'payload.id']
-    - event_type: health_monitor.*
-      traits:
-        <<: *network_traits
-        resource_id:
-          fields: ['payload.health_monitor.id', 'payload.id']
-    - event_type: healthmonitor.*
-      traits:
-        <<: *network_traits
-        resource_id:
-          fields: ['payload.healthmonitor.id', 'payload.id']
-    - event_type: listener.*
-      traits:
-        <<: *network_traits
-        resource_id:
-          fields: ['payload.listener.id', 'payload.id']
-    - event_type: loadbalancer.*
-      traits:
-        <<: *network_traits
-        resource_id:
-          fields: ['payload.loadbalancer.id', 'payload.id']
     - event_type: firewall.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.firewall.name
         resource_id:
           fields: ['payload.firewall.id', 'payload.id']
     - event_type: firewall_policy.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.firewall_policy.name
         resource_id:
           fields: ['payload.firewall_policy.id', 'payload.id']
     - event_type: firewall_rule.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.firewall_rule.name
         resource_id:
           fields: ['payload.firewall_rule.id', 'payload.id']
     - event_type: vpnservice.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.vpnservice.name
         resource_id:
           fields: ['payload.vpnservice.id', 'payload.id']
     - event_type: ipsecpolicy.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.ipsecpolicy.name
         resource_id:
           fields: ['payload.ipsecpolicy.id', 'payload.id']
     - event_type: ikepolicy.*
       traits:
         <<: *network_traits
+        name:
+          fields: payload.ikepolicy.name
         resource_id:
           fields: ['payload.ikepolicy.id', 'payload.id']
     - event_type: ipsec_site_connection.*
@@ -476,6 +501,7 @@ conf:
         id:
           fields: payload.id
         eventTime:
+          type: datetime
           fields: payload.eventTime
         requestPath:
           fields: payload.requestPath
@@ -521,8 +547,10 @@ conf:
         resource_id:
           fields: payload.id
         created_at:
+          type: datetime
           fields: payload.created_at
         updated_at:
+          type: datetime
           fields: payload.updated_at
         version:
           fields: payload.version
@@ -533,6 +561,53 @@ conf:
     - event_type: dns.domain.exists
       traits:
         <<: *dns_domain_traits
+        audit_period_beginning:
+          type: datetime
+          fields: payload.audit_period_beginning
+        audit_period_ending:
+          type: datetime
+          fields: payload.audit_period_ending
+    - event_type: ['dns.zone.create', 'dns.zone.update', 'dns.zone.delete']
+      traits: &dns_zone_traits
+        resource_id:
+          fields: payload.id
+        project_id:
+          fields: payload.tenant_id
+        name:
+          fields: payload.name
+        description:
+          fields: payload.description
+        action:
+          fields: payload.action
+        created_at:
+          type: datetime
+          fields: payload.created_at
+        email:
+          fields: payload.email
+        expire:
+          fields: payload.expire
+        pool_id:
+          fields: payload.pool_id
+        refresh:
+          fields: payload.refresh
+        retry:
+          fields: payload.retry
+        serial:
+          fields: payload.serial
+        status:
+          fields: payload.status
+        ttl:
+          fields: payload.ttl
+        type:
+          fields: payload.type
+        updated_at:
+          type: datetime
+          fields: payload.updated_at
+        version:
+          fields: payload.version
+    - event_type: dns.zone.exists
+      traits:
+        <<: *dns_zone_traits
         audit_period_beginning:
           type: datetime
           fields: payload.audit_period_beginning
@@ -632,6 +707,7 @@ conf:
         parent_id:
           fields: payload.parent_id
         timestamp:
+          type: datetime
           fields: payload.timestamp
         host:
           fields: payload.info.host
@@ -647,8 +723,8 @@ conf:
           fields: payload.info.db.statement
         db.params:
           fields: payload.info.db.params
-    - event_type: 'magnum.bay.*'
-      traits: &magnum_bay_crud
+    - event_type: 'magnum.cluster.*'
+      traits: &magnum_cluster_crud
         id:
           fields: payload.id
         typeURI:
@@ -656,6 +732,7 @@ conf:
         eventType:
           fields: payload.eventType
         eventTime:
+          type: datetime
           fields: payload.eventTime
         action:
           fields: payload.action
@@ -679,6 +756,47 @@ conf:
           fields: payload.observer.id
         observer_typeURI:
           fields: payload.observer.typeURI
+    - event_type: 'octavia.loadbalancer.*'
+      traits:
+        resource_id:
+          fields: payload.loadbalancer_id
+        project_id:
+          fields: payload.project_id
+        name:
+          fields: payload.name
+        description:
+          fields: payload.description
+        admin_state_up:
+          fields: payload.admin_state_up
+        availability_zone:
+          fields: payload.availability_zone
+        vip_address:
+          fields: payload.vip_address
+        vip_network_id:
+          fields: payload.vip_network_id
+        vip_port_id:
+          fields: payload.vip_port_id
+        vip_qos_policy_id:
+          fields: payload.vip_qos_policy_id
+        vip_subnet_id:
+          fields: payload.vip_subnet_id
+    - event_type: 'alarm.*'
+      traits:
+        id:
+          fields: payload.alarm_id
+        user_id:
+          fields: payload.user_id
+        project_id:
+          fields: payload.project_id
+        on_behalf_of:
+          fields: payload.on_behalf_of
+        severity:
+          fields: payload.severity
+        detail:
+          fields: payload.detail
+        type:
+          fields: payload.type
+
   event_pipeline:
     sinks:
       - name: event_sink

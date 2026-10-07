@@ -892,7 +892,11 @@ conf:
           flavor_id: resource_metadata.(instance_flavor_id|(flavor.id)|flavor_id)
           flavor_name: resource_metadata.(instance_type|(flavor.name)|flavor_name)
           server_group: resource_metadata.user_metadata.server_group
-        event_delete: compute.instance.delete.start
+        # delete.end, not delete.start: the samples the delete.end notification
+        # still produces (memory, vcpus, disk.*) are newer than an ended_at set
+        # at delete.start, and gnocchi >= 4.7 clears ended_at again when a
+        # resource receives newer measures.
+        event_delete: compute.instance.delete.end
         event_create: compute.instance.create.end
         event_attributes:
           id: instance_id

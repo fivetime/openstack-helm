@@ -1230,7 +1230,7 @@ conf:
         volume: $.payload.free
         resource_id: $.payload.name_to_id
         metadata:
-           <<: *provider_pool_meta
+          <<: *provider_pool_meta
 
       - name: 'volume.provider.pool.capacity.allocated'
         event_type: 'capacity.pool.*'
@@ -1239,7 +1239,7 @@ conf:
         volume: $.payload.allocated
         resource_id: $.payload.name_to_id
         metadata:
-           <<: *provider_pool_meta
+          <<: *provider_pool_meta
 
       - name: 'volume.provider.pool.capacity.provisioned'
         event_type: 'capacity.pool.*'
@@ -1248,7 +1248,7 @@ conf:
         volume: $.payload.provisioned
         resource_id: $.payload.name_to_id
         metadata:
-           <<: *provider_pool_meta
+          <<: *provider_pool_meta
 
       - name: 'volume.provider.pool.capacity.virtual_free'
         event_type: 'capacity.pool.*'
@@ -1257,7 +1257,7 @@ conf:
         volume: $.payload.virtual_free
         resource_id: $.payload.name_to_id
         metadata:
-           <<: *provider_pool_meta
+          <<: *provider_pool_meta
 
       - name: 'volume.size'
         event_type:
@@ -1365,7 +1365,7 @@ conf:
         resource_id: $.payload.instance_id
         user_metadata: $.payload.metadata
         metadata:
-           <<: *instance_meta
+          <<: *instance_meta
 
       - name: 'compute.instance.booting.time'
         event_type: 'compute.instance.create.end'
@@ -1390,7 +1390,7 @@ conf:
         resource_id: $.payload.instance_id
         user_metadata: $.payload.metadata
         metadata:
-           <<: *instance_meta
+          <<: *instance_meta
 
       - name: 'disk.ephemeral.size'
         event_type: *instance_events
@@ -1402,7 +1402,7 @@ conf:
         resource_id: $.payload.instance_id
         user_metadata: $.payload.metadata
         metadata:
-           <<: *instance_meta
+          <<: *instance_meta
 
       - name: 'bandwidth'
         event_type: 'l3.meter'

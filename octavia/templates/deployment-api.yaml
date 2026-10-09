@@ -86,6 +86,10 @@ spec:
 {{ dict "envAll" $envAll "application" "octavia_api" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       affinity:
 {{ tuple $envAll "octavia" "api" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      {{- if and $envAll.Values.pod.tolerations.octavia_api.enabled $envAll.Values.pod.tolerations.octavia_api.tolerations }}
+      tolerations:
+      {{- toYaml $envAll.Values.pod.tolerations.octavia_api.tolerations | nindent 8 }}
+      {{- end }}
       nodeSelector:
         {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "30" }}

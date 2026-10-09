@@ -816,6 +816,7 @@ pod:
   replicas:
     api: 1
     worker: 1
+    driver_agent: 1
     housekeeping: 1
   lifecycle:
     upgrades:
@@ -958,6 +959,10 @@ manifests:
   daemonset_worker: false
   deployment_worker: true
   deployment_api: true
+  # Optional standalone provider-agent Deployment. Keep disabled for the
+  # upstream sidecar-only shape; enable it when lb_mgmt attachments or
+  # provider-specific mounts require separate agent pods.
+  deployment_driver_agent: false
   deployment_housekeeping: true
   network_attachment_definition: false
   job_bootstrap: true

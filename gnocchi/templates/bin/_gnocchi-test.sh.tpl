@@ -21,8 +21,10 @@ echo "Test: list archive policies"
 gnocchi archive-policy list
 
 echo "Test: create metric"
-gnocchi metric create --archive-policy-name low
-METRIC_UUID=$(gnocchi metric list -c id -f value | head -1)
+# Take the id from the create call. "metric list | head -1" is the first
+# metric of the whole deployment, so on a live cloud the test wrote its
+# measures into, and then deleted, a real metric.
+METRIC_UUID=$(gnocchi metric create --archive-policy-name low -c id -f value)
 sleep 5
 
 echo "Test: show metric"
@@ -31,9 +33,11 @@ gnocchi metric show ${METRIC_UUID}
 sleep 5
 
 echo "Test: add measures"
-gnocchi measures add -m 2017-06-27T12:00:00@31 \
-  -m 2017-06-27T12:03:27@20 \
-  -m 2017-06-27T12:06:51@41 \
+# Recent timestamps: the low policy keeps 30 days, older measures are
+# dropped and the measures shown below would be empty.
+gnocchi measures add -m "$(date -u -d '-10 minutes' +%Y-%m-%dT%H:%M:%S)@31" \
+  -m "$(date -u -d '-7 minutes' +%Y-%m-%dT%H:%M:%S)@20" \
+  -m "$(date -u -d '-4 minutes' +%Y-%m-%dT%H:%M:%S)@41" \
   ${METRIC_UUID}
 
 sleep 15
@@ -45,7 +49,9 @@ gnocchi measures show --aggregation min ${METRIC_UUID}
 echo "Test: delete metric"
 gnocchi metric delete ${METRIC_UUID}
 
-RESOURCE_UUID={{ uuidv4 }}
+# Generated when the test runs: a uuidv4 rendered into this ConfigMap changed
+# gnocchi-bin, and with it the pods' configmap-bin-hash, on every upgrade.
+RESOURCE_UUID=$(cat /proc/sys/kernel/random/uuid)
 
 echo "Test: create resource type"
 gnocchi resource-type create --attribute name:string --attribute host:string test

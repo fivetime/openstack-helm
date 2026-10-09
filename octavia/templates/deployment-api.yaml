@@ -170,7 +170,13 @@ spec:
               mountPath: /var/run/octavia
             - name: run-openvswitch
               mountPath: /var/run/ovn
-{{ if $mounts_octavia_driver_agent.volumeMounts }}{{ toYaml $mounts_octavia_driver_agent.volumeMounts | indent 12 }}{{ end }}
+            # The sidecar runs the same binary against the same octavia.conf as
+            # the api container, so it takes the api's extra mounts (the Kafka
+            # CA among them). Only those are added to this pod's volumes: the
+            # driver agent's mounts belong to the standalone driver-agent
+            # Deployment, and mounting them here referenced volumes this pod
+            # never defines.
+{{ if $mounts_octavia_api.volumeMounts }}{{ toYaml $mounts_octavia_api.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: pod-tmp
           emptyDir: {}

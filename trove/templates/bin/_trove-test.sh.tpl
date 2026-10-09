@@ -16,7 +16,15 @@ limitations under the License.
 
 set -ex
 
-echo "Purging the deleted resources with its associated metrics which have lived more than ${DELETED_RESOURCES_TTL}"
-gnocchi resource batch delete "ended_at < '-${DELETED_RESOURCES_TTL}'"
-
-exit 0
+# Read-only calls through the Trove API, which authenticate against Keystone
+# and read the Trove database. Creating an instance needs a guest image, a
+# registered datastore and a network, none of which a deployment of the
+# chart alone provides.
+openstack datastore list
+for datastore in $(openstack datastore list -f value -c ID); do
+  openstack datastore version list "${datastore}"
+done
+openstack database instance list
+openstack database cluster list
+openstack database backup list
+openstack database configuration list

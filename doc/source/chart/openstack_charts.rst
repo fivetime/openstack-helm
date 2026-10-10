@@ -27,6 +27,7 @@ OpenStack charts options
     octavia
     placement
     rally
+    senlin
     skyline
     swift
     tacker

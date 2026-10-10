@@ -73,6 +73,7 @@ sections:
   - [rally, rally Chart]
   - [redis, redis Chart]
   - [registry, registry Chart]
+  - [senlin, senlin Chart]
   - [tacker, tacker Chart]
   - [tempest, tempest Chart]
   - [trove, trove Chart]

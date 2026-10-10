@@ -1,0 +1,19 @@
+---
+senlin:
+  - |
+    Reintroduced the senlin chart, which was retired in 2025.1, for the
+    fork of Senlin (fivetime/openstack-senlin) that runs on 2026.2 with
+    native threads instead of eventlet. The chart follows the current
+    layout of the other charts: no Ingress templates (expose the API through
+    ``extraObjects``, see ``values_overrides/senlin/gateway.yaml``), API TLS
+    terminated by an nginx sidecar, mTLS client certificates for MariaDB and
+    RabbitMQ, declarative MariaDB and RabbitMQ resources
+    (``manifests.mariadb_db``, ``manifests.rabbitmq_topology``),
+    ``etcSources`` for ``/etc/senlin/senlin.conf.d``, oslo lock path,
+    RabbitMQ 4 defaults (quorum queues), uWSGI ``need-app`` with stats based
+    liveness and ``/healthcheck`` readiness probes, priority and runtime
+    classes, and a rally test pod. The API runs
+    ``senlin.wsgi.api:application`` under uWSGI; the daemons are started
+    directly instead of through wrapper scripts. The images default to
+    ``ghcr.io/fivetime/openstackhelm/senlin:2026.2-ubuntu_resolute``.
+...

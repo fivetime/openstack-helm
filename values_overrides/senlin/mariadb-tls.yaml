@@ -1,0 +1,14 @@
+---
+endpoints:
+  oslo_db:
+    host_fqdn_override:
+      default:
+        tls:
+          issuerRef:
+            name: ca-issuer
+            kind: ClusterIssuer
+          usages:
+          - client auth
+tls:
+  oslo_db: true
+...

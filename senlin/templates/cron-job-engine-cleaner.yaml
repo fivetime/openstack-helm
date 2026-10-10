@@ -20,6 +20,8 @@ limitations under the License.
 
 {{- $serviceAccountName := "senlin-engine-cleaner" }}
 {{ tuple $envAll "engine_cleaner" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+
+{{- $etcSources := .Values.pod.etcSources.senlin_engine_cleaner }}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -31,19 +33,35 @@ spec:
   schedule: {{ .Values.jobs.engine_cleaner.cron | quote }}
   successfulJobsHistoryLimit: {{ .Values.jobs.engine_cleaner.history.success }}
   failedJobsHistoryLimit: {{ .Values.jobs.engine_cleaner.history.failed }}
+  {{- if .Values.jobs.engine_cleaner.starting_deadline }}
+  startingDeadlineSeconds: {{ .Values.jobs.engine_cleaner.starting_deadline }}
+  {{- end }}
   concurrencyPolicy: Forbid
   jobTemplate:
     metadata:
       labels:
 {{ tuple $envAll "senlin" "engine-cleaner" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ dict "envAll" $envAll "podName" "senlin-engine-cleaner" "containerNames" (list "senlin-engine-cleaner" "init" ) | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
     spec:
       template:
         metadata:
           labels:
 {{ tuple $envAll "senlin" "engine-cleaner" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 12 }}
+          annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 12 }}
+            configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+            configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ dict "envAll" $envAll "podName" "senlin-engine-cleaner" "containerNames" (list "senlin-engine-cleaner" "init" ) | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 12 }}
         spec:
+{{ tuple "senlin_engine_cleaner" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 10 }}
+{{ tuple "senlin_engine_cleaner" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 10 }}
           serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "engine_cleaner" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 10 }}
           restartPolicy: OnFailure
+{{ if $envAll.Values.pod.tolerations.senlin.enabled }}
+{{ tuple $envAll "senlin" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 10 }}
+{{ end }}
           nodeSelector:
             {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
           initContainers:
@@ -52,28 +70,39 @@ spec:
             - name: senlin-engine-cleaner
 {{ tuple $envAll "senlin_engine_cleaner" | include "helm-toolkit.snippets.image" | indent 14 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.engine_cleaner | include "helm-toolkit.snippets.kubernetes_resources" | indent 14 }}
+{{ dict "envAll" $envAll "application" "engine_cleaner" "container" "senlin_engine_cleaner" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 14 }}
+{{- if .Values.secrets.tls.ca }}
+              env:
+                - name: REQUESTS_CA_BUNDLE
+                  value: "/etc/ssl/certs/openstack-helm.crt"
+{{- end }}
               command:
                 - /tmp/senlin-engine-cleaner.sh
               volumeMounts:
-                - name: pod-tmp
-                  mountPath: /tmp
-                - name: senlin-bin
-                  mountPath: /tmp/senlin-engine-cleaner.sh
-                  subPath: senlin-engine-cleaner.sh
-                  readOnly: true
-                - name: etcsenlin
-                  mountPath: /etc/senlin
-                - name: senlin-etc
-                  mountPath: /etc/senlin/senlin.conf
-                  subPath: senlin.conf
-                  readOnly: true
-                {{- if .Values.conf.senlin.DEFAULT.log_config_append }}
-                - name: senlin-etc
-                  mountPath: {{ .Values.conf.senlin.DEFAULT.log_config_append }}
-                  subPath: {{ base .Values.conf.senlin.DEFAULT.log_config_append }}
-                  readOnly: true
-                {{- end }}
-{{ if $mounts_senlin_engine_cleaner.volumeMounts }}{{ toYaml $mounts_senlin_engine_cleaner.volumeMounts | indent 16 }}{{ end }}
+              - name: pod-tmp
+                mountPath: /tmp
+              - name: senlin-bin
+                mountPath: /tmp/senlin-engine-cleaner.sh
+                subPath: senlin-engine-cleaner.sh
+                readOnly: true
+              - name: etcsenlin
+                mountPath: /etc/senlin
+              - name: senlin-etc
+                mountPath: /etc/senlin/senlin.conf
+                subPath: senlin.conf
+                readOnly: true
+              - name: senlin-etc-snippets
+                mountPath: /etc/senlin/senlin.conf.d/
+                readOnly: true
+              {{ if .Values.conf.senlin.DEFAULT.log_config_append }}
+              - name: senlin-etc
+                mountPath: {{ .Values.conf.senlin.DEFAULT.log_config_append }}
+                subPath: {{ base .Values.conf.senlin.DEFAULT.log_config_append }}
+                readOnly: true
+              {{ end }}
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume_mount" | indent 14 }}
+{{- dict "enabled" $envAll.Values.tls.oslo_db "name" "client-certs" "path" "/etc/mysql/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 14 }}
+{{ if $mounts_senlin_engine_cleaner.volumeMounts }}{{ toYaml $mounts_senlin_engine_cleaner.volumeMounts | indent 14 }}{{ end }}
           volumes:
             - name: pod-tmp
               emptyDir: {}
@@ -83,6 +112,16 @@ spec:
               secret:
                 secretName: senlin-etc
                 defaultMode: 0444
+            - name: senlin-etc-snippets
+{{- if $etcSources }}
+              projected:
+                sources:
+{{ toYaml $etcSources | indent 18 }}
+{{- else }}
+              emptyDir: {}
+{{ end }}
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 12 }}
+{{- dict "enabled" (or $envAll.Values.tls.oslo_db $envAll.Values.tls.oslo_messaging) "name" "client-certs" "secretName" $envAll.Values.secrets.tls.client.senlin | include "helm-toolkit.snippets.tls_volume" | indent 12 }}
             - name: senlin-bin
               configMap:
                 name: senlin-bin

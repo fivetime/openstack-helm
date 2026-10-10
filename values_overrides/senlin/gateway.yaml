@@ -1,0 +1,28 @@
+---
+endpoints:
+  clustering:
+    host_fqdn_override:
+      public:
+        host: senlin.openstack-helm.org
+extraObjects:
+  senlin_api_route:
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: senlin-api-route
+      namespace: '{{ .Release.Namespace }}'
+    spec:
+      hostnames:
+      - '{{ .Values.endpoints.clustering.host_fqdn_override.public.host }}'
+      parentRefs:
+      - name: gateway-default
+        namespace: envoy-gateway-system
+      rules:
+      - matches:
+        - path:
+            type: PathPrefix
+            value: /
+        backendRefs:
+        - name: senlin-api
+          port: 8778
+...

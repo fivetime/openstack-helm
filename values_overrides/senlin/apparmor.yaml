@@ -1,0 +1,28 @@
+---
+pod:
+  security_context:
+    senlin:
+      container:
+        senlin_api:
+          appArmorProfile:
+            type: RuntimeDefault
+        senlin_conductor:
+          appArmorProfile:
+            type: RuntimeDefault
+        senlin_engine:
+          appArmorProfile:
+            type: RuntimeDefault
+        senlin_health_manager:
+          appArmorProfile:
+            type: RuntimeDefault
+    engine_cleaner:
+      container:
+        senlin_engine_cleaner:
+          appArmorProfile:
+            type: RuntimeDefault
+    kubernetes_entrypoint:
+      container:
+        kubernetes_entrypoint:
+          appArmorProfile:
+            type: RuntimeDefault
+...

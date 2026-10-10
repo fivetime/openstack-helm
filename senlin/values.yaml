@@ -16,6 +16,8 @@
 # name: value
 
 ---
+release_group: null
+
 labels:
   api:
     node_selector_key: openstack-control-plane
@@ -36,25 +38,26 @@ labels:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
 
-release_group: null
-
+# Senlin is retired upstream and has no quay.io/airshipit image; the fork
+# fivetime/openstack-senlin builds it for 2026.2 only (openstack-helm-images
+# build-local.d/senlin.yaml).
 images:
   tags:
-    scripted_test: quay.io/airshipit/heat:2024.1-ubuntu_jammy
-    bootstrap: quay.io/airshipit/heat:2024.1-ubuntu_jammy
-    db_init: quay.io/airshipit/heat:2024.1-ubuntu_jammy
-    senlin_db_sync: docker.io/openstackhelm/senlin:wallaby-ubuntu_focal
-    db_drop: quay.io/airshipit/heat:2024.1-ubuntu_jammy
-    rabbit_init: docker.io/rabbitmq:3.13-management
-    ks_user: quay.io/airshipit/heat:2024.1-ubuntu_jammy
-    ks_service: quay.io/airshipit/heat:2024.1-ubuntu_jammy
-    ks_endpoints: quay.io/airshipit/heat:2024.1-ubuntu_jammy
-    senlin_api: docker.io/openstackhelm/senlin:wallaby-ubuntu_focal
-    senlin_conductor: docker.io/openstackhelm/senlin:wallaby-ubuntu_focal
-    senlin_engine: docker.io/openstackhelm/senlin:wallaby-ubuntu_focal
-    senlin_engine_cleaner: docker.io/openstackhelm/senlin:wallaby-ubuntu_focal
-    senlin_health_manager: docker.io/openstackhelm/senlin:wallaby-ubuntu_focal
-    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_focal
+    test: docker.io/xrally/xrally-openstack:2.0.0
+    bootstrap: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    db_init: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    senlin_db_sync: ghcr.io/fivetime/openstackhelm/senlin:2026.2-ubuntu_resolute
+    db_drop: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    rabbit_init: docker.io/rabbitmq:4.3.5-management
+    ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    senlin_api: ghcr.io/fivetime/openstackhelm/senlin:2026.2-ubuntu_resolute
+    senlin_conductor: ghcr.io/fivetime/openstackhelm/senlin:2026.2-ubuntu_resolute
+    senlin_engine: ghcr.io/fivetime/openstackhelm/senlin:2026.2-ubuntu_resolute
+    senlin_engine_cleaner: ghcr.io/fivetime/openstackhelm/senlin:2026.2-ubuntu_resolute
+    senlin_health_manager: ghcr.io/fivetime/openstackhelm/senlin:2026.2-ubuntu_resolute
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
   local_registry:
@@ -64,8 +67,11 @@ images:
       - image_repo_sync
 
 jobs:
+  # -- senlin-manage service clean: removes the records of dead services and
+  ## fails the actions they left behind, releasing their locks.
   engine_cleaner:
     cron: "*/5 * * * *"
+    starting_deadline: 600
     history:
       success: 3
       failed: 1
@@ -96,12 +102,19 @@ conf:
                 image: df0c1a14-0940-4ae5-be5c-bb06aa407da2
                 networks:
                   - network: public
+    templates: []
   paste:
-    pipeline:senlin-api:
-      pipeline: request_id faultwrap ssl versionnegotiation webhook authtoken context trust apiv1app
+    composite:senlin-api:
+      use: "egg:Paste#urlmap"
+      /: api
+      /healthcheck: healthcheck
+    pipeline:api:
+      pipeline: cors http_proxy_to_wsgi request_id faultwrap versionnegotiation osprofiler webhook authtoken context trust apiv1app
     app:apiv1app:
       paste.app_factory: senlin.api.common.wsgi:app_factory
       senlin.app_factory: senlin.api.openstack.v1.router:API
+    app:healthcheck:
+      paste.app_factory: oslo_middleware:Healthcheck.app_factory
     filter:request_id:
       paste.filter_factory: oslo_middleware.request_id:RequestId.factory
     filter:faultwrap:
@@ -110,8 +123,7 @@ conf:
     filter:context:
       paste.filter_factory: senlin.api.common.wsgi:filter_factory
       senlin.filter_factory: senlin.api.middleware:context_filter
-    filter:ssl:
-      paste.filter_factory: oslo_middleware.ssl:SSLMiddleware.factory
+      oslo_config_project: senlin
     filter:versionnegotiation:
       paste.filter_factory: senlin.api.common.wsgi:filter_factory
       senlin.filter_factory: senlin.api.middleware:version_filter
@@ -121,29 +133,61 @@ conf:
     filter:webhook:
       paste.filter_factory: senlin.api.common.wsgi:filter_factory
       senlin.filter_factory: senlin.api.middleware:webhook_filter
+    filter:http_proxy_to_wsgi:
+      paste.filter_factory: oslo_middleware.http_proxy_to_wsgi:HTTPProxyToWSGI.factory
+      oslo_config_project: senlin
     filter:authtoken:
       paste.filter_factory: keystonemiddleware.auth_token:filter_factory
+    filter:osprofiler:
+      paste.filter_factory: osprofiler.web:WsgiMiddleware.factory
+    filter:cors:
+      paste.filter_factory: oslo_middleware.cors:filter_factory
+      oslo_config_project: senlin
   policy: {}
   senlin:
     DEFAULT:
       log_config_append: /etc/senlin/logging.conf
-      transport_url: null
+      # -- Shared by all pods of a service, so that their RPC server queues
+      ## do not multiply with the pods.
       host: senlin
     database:
       max_retries: -1
+      # -- Database connection URI. When empty the URI is auto-generated
+      ## from endpoints.oslo_db. Set to null to disable auto-generation,
+      ## e.g. when using an operator such as mariadb-operator that supplies
+      ## the connection string via a mounted configuration snippet.
+      connection: ""
     authentication:
-      auth_url: null
+      # -- The service credentials senlin uses to create trusts and to call
+      ## the cloud for its clusters; filled in from endpoints.identity.
+      interface: internal
     keystone_authtoken:
       auth_type: password
       auth_version: v3
       memcache_security_strategy: ENCRYPT
       service_type: clustering
-    senlin_api:
-      # NOTE(portdirect): the bind port should not be defined, and is manipulated
-      # via the endpoints section.
-      bind_port: null
+    oslo_messaging_notifications:
+      driver: messagingv2
+    oslo_middleware:
+      enable_proxy_headers_parsing: true
+    oslo_messaging_rabbit:
+      rabbit_ha_queues: false
+      # -- Durable queues are required by RabbitMQ 4.x, which denies
+      ## transient non-exclusive queues by default. Also valid on 3.x.
+      amqp_durable_queues: true
+      # -- Quorum queues, which RabbitMQ 4.x requires: it denies transient
+      ## non-exclusive queues, and oslo.messaging declares its reply and fanout
+      ## queues that way unless the transient ones are quorum too.
+      ## amqp_durable_queues alone only covers the RPC and notification queues.
+      rabbit_quorum_queue: true
+      rabbit_transient_quorum_queue: true
+      use_queue_manager: true
+      rabbit_qos_prefetch_count: 1
+      rabbit_stream_fanout: true
     oslo_policy:
       policy_file: /etc/senlin/policy.yaml
+    oslo_concurrency:
+      lock_path: /var/lock
   logging:
     loggers:
       keys:
@@ -204,6 +248,17 @@ conf:
     formatter_default:
       format: "%(message)s"
       datefmt: "%Y-%m-%d %H:%M:%S"
+  rabbitmq:
+    # NOTE(rk760n): adding rmq policy to set an expiration time on notification queues
+    policies:
+      - vhost: "senlin"
+        name: "ha_ttl_senlin"
+        definition:
+          # 70s
+          message-ttl: 70000
+        priority: 0
+        apply-to: all
+        pattern: '^(?!(amq\.|reply_)).*'
   senlin_api_uwsgi:
     uwsgi:
       add-header: "Connection: close"
@@ -215,21 +270,22 @@ conf:
       lazy-apps: true
       log-x-forwarded-for: true
       master: true
+      need-app: true
+      processes: 1
       procname-prefix-spaced: "senlin-api:"
       route-user-agent: '^kube-probe.* donotlog:'
       thunder-lock: true
       worker-reload-mercy: 80
-      wsgi-file: /var/lib/openstack/bin/senlin-wsgi-api
+      module: senlin.wsgi.api:application
+      stats: 0.0.0.0:1717
+      stats-http: true
 
 network:
   api:
-    ingress:
-      public: true
-      classes:
-        namespace: "nginx"
-        cluster: "nginx-cluster"
-      annotations:
-        nginx.ingress.kubernetes.io/rewrite-target: /
+    # Pod port the Service routes to; null => Kubernetes uses the Service port.
+    # A deployment override sets this (e.g. 443) to point at a TLS sidecar.
+    target_port: null
+    external_policy_local: false
     node_port:
       enabled: false
       port: 30778
@@ -250,29 +306,62 @@ dependencies:
           - endpoint: node
             service: local_image_registry
   static:
-    engine_cleaner:
-      jobs:
-        - senlin-db-sync
-      services:
-        - endpoint: internal
-          service: oslo_db
-        - endpoint: internal
-          service: oslo_messaging
-        - endpoint: internal
-          service: identity
     api:
       jobs:
         - senlin-db-sync
+        - senlin-rabbit-init
         - senlin-ks-user
         - senlin-ks-endpoints
-        - senlin-rabbit-init
       services:
         - endpoint: internal
           service: oslo_db
         - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
           service: identity
+    conductor:
+      jobs:
+        - senlin-db-sync
+        - senlin-rabbit-init
+        - senlin-ks-user
+        - senlin-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
         - endpoint: internal
           service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    engine:
+      jobs:
+        - senlin-db-sync
+        - senlin-rabbit-init
+        - senlin-ks-user
+        - senlin-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    health_manager:
+      jobs:
+        - senlin-db-sync
+        - senlin-rabbit-init
+        - senlin-ks-user
+        - senlin-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    bootstrap:
+      services:
+        - endpoint: internal
+          service: identity
     db_drop:
       services:
         - endpoint: internal
@@ -287,39 +376,12 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_db
-    engine:
+    engine_cleaner:
       jobs:
         - senlin-db-sync
-        - senlin-ks-user
-        - senlin-ks-endpoints
-        - senlin-rabbit-init
       services:
         - endpoint: internal
           service: oslo_db
-        - endpoint: internal
-          service: identity
-    conductor:
-      jobs:
-        - senlin-db-sync
-        - senlin-ks-user
-        - senlin-ks-endpoints
-        - senlin-rabbit-init
-      services:
-        - endpoint: internal
-          service: oslo_db
-        - endpoint: internal
-          service: identity
-    health_manager:
-      jobs:
-        - senlin-db-sync
-        - senlin-ks-user
-        - senlin-ks-endpoints
-        - senlin-rabbit-init
-      services:
-        - endpoint: internal
-          service: oslo_db
-        - endpoint: internal
-          service: identity
     ks_endpoints:
       jobs:
         - senlin-ks-service
@@ -338,22 +400,145 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_messaging
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
     tests:
       services:
         - endpoint: internal
           service: identity
         - endpoint: internal
           service: clustering
-    image_repo_sync:
-      services:
-        - endpoint: internal
-          service: local_image_registry
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
   identity:
     admin: senlin-keystone-admin
     senlin: senlin-keystone-user
+    test: senlin-keystone-test
+  oslo_db:
+    admin: senlin-db-admin
+  oslo_messaging:
+    admin: senlin-rabbitmq-admin
+    senlin: senlin-rabbitmq-user
+  tls:
+    # Client certificate this chart presents for all mTLS backend connections
+    # (MariaDB and RabbitMQ). Separate from the MariaDB and RabbitMQ server certs.
+    client:
+      senlin: senlin-client
+    # CA bundle this chart trusts for OUTBOUND TLS calls (keystone and the
+    # services of the clusters). Null by default -> no CA is mounted and
+    # REQUESTS_CA_BUNDLE is left unset. A deployment override points this at a
+    # cert-manager CA-only secret carrying just ca.crt (no private key); it is
+    # mounted at /etc/ssl/certs/openstack-helm.crt. Assumes every server cert is
+    # signed by this single CA. The chart stays TLS-agnostic -- server certs and
+    # the nginx TLS sidecar live in the override.
+    ca: null
+  oci_image_registry:
+    senlin: senlin-oci-image-registry
+
+# typically overridden by environmental
+identity:
+  openrc:
+    exclude_vars: []
+    extra_vars: []
+
+# values, but should include all endpoints
+# required by this chart
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  oci_image_registry:
+    name: oci-image-registry
+    namespace: oci-image-registry
+    auth:
+      enabled: false
+      senlin:
+        username: senlin
+        password: password
+    hosts:
+      default: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        default: null
+  identity:
+    name: keystone
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      senlin:
+        role: admin
+        region_name: RegionOne
+        username: senlin
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+      test:
+        role: admin
+        region_name: RegionOne
+        username: senlin-test
+        password: password
+        project_name: test
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: keystone
+      internal: keystone-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+  clustering:
+    name: senlin
+    hosts:
+      default: senlin-api
+      public: senlin
+    host_fqdn_override:
+      default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
+    path:
+      default: null
+      healthcheck: /healthcheck
+    scheme:
+      default: 'http'
+      service: 'http'
+    port:
+      api:
+        default: 8778
+        public: 80
+        service: 8778
   oslo_db:
     admin: senlin-db-admin
     senlin: senlin-db-user
@@ -518,11 +703,54 @@ endpoints:
         default: 24224
       metrics:
         default: 24220
+  # NOTE(tp6510): these endpoints allow for things like DNS lookups and ingress
+  # They are using to enable the Egress K8s network policy.
+  kube_dns:
+    namespace: kube-system
+    name: kubernetes-dns
+    hosts:
+      default: kube-dns
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: http
+    port:
+      dns:
+        default: 53
+        protocol: UDP
 
 pod:
-  user:
+  # Extra sidecar containers and volumes to inject into the senlin-api
+  # Deployment, e.g. nginx TLS-terminating sidecars.
+  extraContainers:
+    senlin_api: []
+  extraVolumes:
+    senlin_api: []
+  security_context:
     senlin:
-      uid: 42424
+      pod:
+        runAsUser: 42424
+      container:
+        senlin_api:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        senlin_conductor:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        senlin_engine:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        senlin_health_manager:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+    engine_cleaner:
+      pod:
+        runAsUser: 42424
+      container:
+        senlin_engine_cleaner:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
   affinity:
     anti:
       type:
@@ -531,6 +759,16 @@ pod:
         default: kubernetes.io/hostname
       weight:
         default: 10
+  tolerations:
+    senlin:
+      enabled: false
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
   mounts:
     senlin_api:
       init_container: null
@@ -571,6 +809,16 @@ pod:
       senlin_db_sync:
         volumeMounts:
         volumes:
+  # -- This allows users to add Kubernetes Projected Volumes to be mounted at /etc/senlin/senlin.conf.d/
+  ## This is a list of projected volume source objects for each deployment/statefulset/daemonset/cronjob
+  ## https://kubernetes.io/docs/concepts/storage/projected-volumes/
+  etcSources:
+    senlin_api: []
+    senlin_conductor: []
+    senlin_engine: []
+    senlin_health_manager: []
+    senlin_engine_cleaner: []
+    senlin_db_sync: []
   replicas:
     api: 1
     conductor: 1
@@ -589,6 +837,14 @@ pod:
         min_available: 0
     termination_grace_period:
       api:
+        timeout: 30
+      conductor:
+        timeout: 30
+      # -- A stopping engine fails the actions it still runs and releases
+      ## their locks before it exits.
+      engine:
+        timeout: 30
+      health_manager:
         timeout: 30
   resources:
     enabled: false
@@ -698,6 +954,18 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+  probes:
+    api:
+      senlin_api:
+        liveness:
+          enabled: true
+          port: 1717
+          params:
+            initialDelaySeconds: 10
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
 
 network_policy:
   senlin:
@@ -706,7 +974,36 @@ network_policy:
     egress:
       - {}
 
-helm3_hook: true
+tls:
+  oslo_messaging: false
+  oslo_db: false
+
+rabbitmq_topology:
+  # -- API group of the RabbitMQ topology custom resources this chart renders
+  ## when manifests.rabbitmq_topology is enabled. Either group works: the
+  ## resources are the same, only who reconciles them differs.
+  ##   rabbitmq.osh.openstack.org -- the rabbitmq chart's own topology
+  ##                                 controller
+  ##                                 (manifests.deployment_topology_controller)
+  ##   rabbitmq.com               -- the upstream messaging-topology-operator,
+  ##                                 which must then be deployed separately,
+  ##                                 along with a RabbitmqCluster named after
+  ##                                 endpoints.oslo_messaging.hosts.default for
+  ##                                 rabbitmqClusterReference to resolve to
+  api_group: rabbitmq.osh.openstack.org
+
+mariadb_db:
+  # -- API group of the MariaDB custom resources this chart renders when
+  ## manifests.mariadb_db is enabled. Either group works: the resources are
+  ## the same, only who reconciles them differs.
+  ##   mariadb.osh.openstack.org -- the mariadb chart's own db controller
+  ##                                (manifests.deployment_db_controller)
+  ##   k8s.mariadb.com           -- the upstream mariadb-operator, which must
+  ##                                then be deployed separately
+  ## With k8s.mariadb.com and tls.oslo_db enabled, use mariadb-operator 0.37.0
+  ## or newer. User.spec.require was added in that release, so older operators
+  ## drop it and create accounts without REQUIRE X509.
+  api_group: mariadb.osh.openstack.org
 
 manifests:
   configmap_bin: true
@@ -716,9 +1013,12 @@ manifests:
   deployment_conductor: true
   deployment_engine: true
   deployment_health_manager: true
-  ingress_api: true
   job_bootstrap: true
   job_db_init: true
+  # -- Render the MariaDB Database/User/Grant/Connection custom resources
+  ## reconciled by the mariadb chart's db controller, instead of running the
+  ## db-init job. Mutually exclusive with job_db_init.
+  mariadb_db: false
   job_db_sync: true
   job_db_drop: false
   job_image_repo_sync: true
@@ -727,12 +1027,50 @@ manifests:
   job_ks_user: true
   job_rabbit_init: true
   pdb_api: true
-  pod_test: true
+  pod_rally_test: true
   network_policy: false
+  # -- Declare this chart's messaging vhost, account and permissions
+  ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
+  ## topology controller, instead of running the rabbit_init job. The
+  ## two are mutually exclusive.
+  rabbitmq_topology: false
   secret_db: true
   secret_keystone: true
   secret_rabbitmq: true
   secret_registry: true
-  service_ingress_api: true
   service_api: true
+
+# -- Extra K8s manifests to deploy. Either a list or a map of manifests.
+## Note: Supports use of custom Helm templates
+## Note: Helm replaces (instead of merging) list values when several values
+## files are combined, so if you need to define extraObjects in more than one
+## overrides file, use the map form and make sure the keys are unique across
+## those files. With the list form only the last file takes effect.
+extraObjects: {}
+  # osh_secrets_store:
+  #   apiVersion: secrets-store.csi.x-k8s.io/v1
+  #   kind: SecretProviderClass
+  #   metadata:
+  #     name: osh-secrets-store
+  #   spec:
+  #     provider: aws
+  #     parameters:
+  #       objects: |
+  #         - objectName: "osh"
+  #           objectType: "secretsmanager"
+  #           jmesPath:
+  #               - path: "client_id"
+  #                 objectAlias: "client_id"
+  #               - path: "client_secret"
+  #                 objectAlias: "client_secret"
+  #     secretObjects:
+  #     - data:
+  #       - key: client_id
+  #         objectName: client_id
+  #       - key: client_secret
+  #         objectName: client_secret
+  #       secretName: osh-secrets-store
+  #       type: Opaque
+  #       labels:
+  #         app.kubernetes.io/part-of: osh
 ...

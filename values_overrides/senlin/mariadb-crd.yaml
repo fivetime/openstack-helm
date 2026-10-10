@@ -1,0 +1,29 @@
+---
+manifests:
+  job_db_init: false
+  mariadb_db: true
+conf:
+  senlin:
+    database:
+      connection: null
+pod:
+  etcSources:
+    senlin_api:
+    - secret:
+        name: senlin-db-conn
+    senlin_conductor:
+    - secret:
+        name: senlin-db-conn
+    senlin_db_sync:
+    - secret:
+        name: senlin-db-conn
+    senlin_engine:
+    - secret:
+        name: senlin-db-conn
+    senlin_engine_cleaner:
+    - secret:
+        name: senlin-db-conn
+    senlin_health_manager:
+    - secret:
+        name: senlin-db-conn
+...

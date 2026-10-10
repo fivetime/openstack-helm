@@ -22,7 +22,13 @@ metadata:
 spec:
   ports:
     - name: s-api
-      port: {{ tuple "clustering" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+      port: {{ tuple "clustering" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+      {{- if .Values.network.api.target_port }}
+      # Pod port the Service forwards to. Unset by default (Kubernetes then
+      # uses the Service port); a deployment override points it at a
+      # TLS-terminating sidecar (e.g. 443). The chart stays TLS-agnostic.
+      targetPort: {{ .Values.network.api.target_port }}
+      {{- end }}
     {{ if .Values.network.api.node_port.enabled }}
       nodePort: {{ .Values.network.api.node_port.port }}
     {{ end }}
@@ -30,5 +36,8 @@ spec:
 {{ tuple $envAll "senlin" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
   {{ if .Values.network.api.node_port.enabled }}
   type: NodePort
+  {{ if .Values.network.api.external_policy_local }}
+  externalTrafficPolicy: Local
+  {{ end }}
   {{ end }}
 {{- end }}

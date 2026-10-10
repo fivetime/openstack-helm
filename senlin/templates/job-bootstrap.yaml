@@ -12,7 +12,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
+{{- define "metadata.annotations.job.bootstrap" }}
+helm.sh/hook: post-install,post-upgrade
+{{- end }}
+
 {{- if and .Values.manifests.job_bootstrap .Values.bootstrap.enabled }}
 {{- $bootstrapJob := dict "envAll" . "serviceName" "senlin" "keystoneUser" .Values.bootstrap.ks_user "logConfigFile" .Values.conf.senlin.DEFAULT.log_config_append -}}
+{{- if .Values.secrets.tls.ca -}}
+{{- $_ := set $bootstrapJob "tlsSecret" .Values.secrets.tls.ca -}}
+{{- end -}}
+{{- $_ := set $bootstrapJob "jobAnnotations" (include "metadata.annotations.job.bootstrap" . | fromYaml) }}
+{{- if .Values.pod.tolerations.senlin.enabled -}}
+{{- $_ := set $bootstrapJob "tolerationsEnabled" true -}}
+{{- end -}}
 {{ $bootstrapJob | include "helm-toolkit.manifests.job_bootstrap" }}
 {{- end }}

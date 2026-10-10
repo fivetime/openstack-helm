@@ -18,9 +18,13 @@ helm.sh/hook-weight: "-1"
 {{- end }}
 
 {{- if .Values.manifests.job_ks_user }}
-{{- $ksUserJob := dict "envAll" . "serviceName" "senlin" -}}
-{{- if .Values.helm3_hook }}
+{{- $ksUserJob := dict "envAll" . "serviceName" "senlin" "serviceUsers" (tuple "senlin") -}}
+{{- if .Values.secrets.tls.ca -}}
+{{- $_ := set $ksUserJob "tlsSecret" .Values.secrets.tls.ca -}}
+{{- end -}}
 {{- $_ := set $ksUserJob "jobAnnotations" (include "metadata.annotations.job.ks_user" . | fromYaml) }}
-{{- end }}
+{{- if .Values.pod.tolerations.senlin.enabled -}}
+{{- $_ := set $ksUserJob "tolerationsEnabled" true -}}
+{{- end -}}
 {{ $ksUserJob | include "helm-toolkit.manifests.job_ks_user" }}
 {{- end }}

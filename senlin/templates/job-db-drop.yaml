@@ -14,5 +14,11 @@ limitations under the License.
 
 {{- if .Values.manifests.job_db_drop }}
 {{- $dbDropJob := dict "envAll" . "serviceName" "senlin" -}}
+{{- if .Values.tls.oslo_db -}}
+{{- $_ := set $dbDropJob "dbAdminTlsSecret" .Values.secrets.tls.client.senlin -}}
+{{- end -}}
+{{- if .Values.pod.tolerations.senlin.enabled -}}
+{{- $_ := set $dbDropJob "tolerationsEnabled" true -}}
+{{- end -}}
 {{ $dbDropJob | include "helm-toolkit.manifests.job_db_drop_mysql" }}
 {{- end }}

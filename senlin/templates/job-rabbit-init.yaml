@@ -19,8 +19,12 @@ helm.sh/hook-weight: "-4"
 
 {{- if .Values.manifests.job_rabbit_init }}
 {{- $rmqUserJob := dict "envAll" . "serviceName" "senlin" -}}
-{{- if .Values.helm3_hook }}
+{{- if .Values.tls.oslo_messaging -}}
+{{- $_ := set $rmqUserJob "tlsSecret" .Values.secrets.tls.client.senlin -}}
+{{- end -}}
 {{- $_ := set $rmqUserJob "jobAnnotations" (include "metadata.annotations.job.rabbit_init" . | fromYaml) }}
-{{- end }}
+{{- if .Values.pod.tolerations.senlin.enabled -}}
+{{- $_ := set $rmqUserJob "tolerationsEnabled" true -}}
+{{- end -}}
 {{ $rmqUserJob | include "helm-toolkit.manifests.job_rabbit_init" }}
 {{- end }}

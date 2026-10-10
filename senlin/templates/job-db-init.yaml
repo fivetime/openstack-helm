@@ -19,8 +19,12 @@ helm.sh/hook-weight: "-5"
 
 {{- if .Values.manifests.job_db_init }}
 {{- $dbInitJob := dict "envAll" . "serviceName" "senlin" -}}
-{{- if .Values.helm3_hook }}
+{{- if .Values.tls.oslo_db -}}
+{{- $_ := set $dbInitJob "dbAdminTlsSecret" .Values.secrets.tls.client.senlin -}}
+{{- end -}}
 {{- $_ := set $dbInitJob "jobAnnotations" (include "metadata.annotations.job.db_init" . | fromYaml) }}
-{{- end }}
+{{- if .Values.pod.tolerations.senlin.enabled -}}
+{{- $_ := set $dbInitJob "tolerationsEnabled" true -}}
+{{- end -}}
 {{ $dbInitJob | include "helm-toolkit.manifests.job_db_init_mysql" }}
 {{- end }}

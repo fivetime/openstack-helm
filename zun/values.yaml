@@ -1119,7 +1119,11 @@ endpoints:
         user_domain_name: default
         project_domain_name: default
       zun:
-        role: admin
+        # admin,service like nova/neutron/cinder: neutron's default policy
+        # (2026.2) lets only the service role set a port's binding:profile,
+        # which unbinding a PCI-passthrough port needs. The ks-user job
+        # grants every role listed here.
+        role: admin,service
         region_name: RegionOne
         username: zun
         password: password

@@ -161,6 +161,10 @@ conf:
       # -- The service credentials senlin uses to create trusts and to call
       ## the cloud for its clusters; filled in from endpoints.identity.
       interface: internal
+      # -- Send a token of the service user in X-Service-Token along with
+      ## the trust-scoped token of the user, as nova does; the service user
+      ## needs the service role (endpoints.identity.auth.senlin.role).
+      send_service_user_token: true
     keystone_authtoken:
       auth_type: password
       auth_version: v3
@@ -438,116 +442,11 @@ secrets:
   oci_image_registry:
     senlin: senlin-oci-image-registry
 
-# typically overridden by environmental
 identity:
   openrc:
     exclude_vars: []
     extra_vars: []
 
-# values, but should include all endpoints
-# required by this chart
-endpoints:
-  cluster_domain_suffix: cluster.local
-  local_image_registry:
-    name: docker-registry
-    namespace: docker-registry
-    hosts:
-      default: localhost
-      internal: docker-registry
-      node: localhost
-    host_fqdn_override:
-      default: null
-    port:
-      registry:
-        node: 5000
-  oci_image_registry:
-    name: oci-image-registry
-    namespace: oci-image-registry
-    auth:
-      enabled: false
-      senlin:
-        username: senlin
-        password: password
-    hosts:
-      default: localhost
-    host_fqdn_override:
-      default: null
-    port:
-      registry:
-        default: null
-  identity:
-    name: keystone
-    auth:
-      admin:
-        region_name: RegionOne
-        username: admin
-        password: password
-        project_name: admin
-        user_domain_name: default
-        project_domain_name: default
-      senlin:
-        role: admin
-        region_name: RegionOne
-        username: senlin
-        password: password
-        project_name: service
-        user_domain_name: service
-        project_domain_name: service
-      test:
-        role: admin
-        region_name: RegionOne
-        username: senlin-test
-        password: password
-        project_name: test
-        user_domain_name: service
-        project_domain_name: service
-    hosts:
-      default: keystone
-      internal: keystone-api
-    host_fqdn_override:
-      default: null
-    path:
-      default: /v3
-    scheme:
-      default: http
-    port:
-      api:
-        default: 80
-        internal: 5000
-  clustering:
-    name: senlin
-    hosts:
-      default: senlin-api
-      public: senlin
-    host_fqdn_override:
-      default: null
-      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
-      # endpoints using the following format:
-      # public:
-      #   host: null
-      #   tls:
-      #     crt: null
-      #     key: null
-    path:
-      default: null
-      healthcheck: /healthcheck
-    scheme:
-      default: 'http'
-      service: 'http'
-    port:
-      api:
-        default: 8778
-        public: 80
-        service: 8778
-  oslo_db:
-    admin: senlin-db-admin
-    senlin: senlin-db-user
-  oslo_messaging:
-    admin: senlin-rabbitmq-admin
-    senlin: senlin-rabbitmq-user
-  oci_image_registry:
-    senlin: senlin-oci-image-registry
-
 # typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
@@ -591,7 +490,12 @@ endpoints:
         user_domain_name: default
         project_domain_name: default
       senlin:
-        role: admin
+        # admin,service like nova/neutron/cinder: with [authentication]
+        # send_service_user_token senlin sends a token of this user along
+        # with the user's trust-scoped token, and keystonemiddleware accepts
+        # a service token only from the service role. The ks-user job
+        # grants every role listed here.
+        role: admin,service
         region_name: RegionOne
         username: senlin
         password: password

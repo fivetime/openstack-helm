@@ -34,11 +34,11 @@ images:
 
     # Zun 服务镜像:fivetime loci 版(confluent-kafka/psycopg2/pciutils 内置;
     # 上游 openstack-helm-images 无 zun,构建见 build-local.d/zun.yaml)
-    zun_api: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
-    zun_db_sync: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
-    zun_cni_daemon: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
-    zun_compute: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
-    zun_wsproxy: ghcr.io/fivetime/openstackhelm/zun:2026.1-ubuntu_noble
+    zun_api: ghcr.io/fivetime/openstackhelm/zun:2026.2-ubuntu_resolute
+    zun_db_sync: ghcr.io/fivetime/openstackhelm/zun:2026.2-ubuntu_resolute
+    zun_cni_daemon: ghcr.io/fivetime/openstackhelm/zun:2026.2-ubuntu_resolute
+    zun_compute: ghcr.io/fivetime/openstackhelm/zun:2026.2-ubuntu_resolute
+    zun_wsproxy: ghcr.io/fivetime/openstackhelm/zun:2026.2-ubuntu_resolute
 
     # 依赖服务镜像
     rabbit_init: docker.io/rabbitmq:4.3.5-management                        # RabbitMQ 初始化
@@ -334,6 +334,24 @@ pod:
       zun_tests:
         volumeMounts:
         volumes:
+
+  # ────────────────────────────────────────────────────────────────────
+  # 4.3.1 容器环境变量(按组件,键值对)
+  # ────────────────────────────────────────────────────────────────────
+  # OS_ZUN_DISABLE_EVENTLET_PATCHING=true:zun-compute / zun-wsproxy 跑原生线程,
+  # 不打 eventlet 补丁(fork master 6019b112 起支持,见 zun/monkey_patch.py)。
+  # 设 "false" 或删掉即回到 eventlet,无需换镜像。zun-api 由 uWSGI 运行(见
+  # conf.zun_api_uwsgi),cni-daemon 从不打补丁,两者都不看这个变量。
+  env:
+    # uWSGI 内嵌解释器不做 PEP 538 的 locale 矫正,容器里 LANG 为空时 open() 按
+    # ASCII 读,配置里一个非 ASCII 字节就只让 API 500(cloudkitty 踩过)。
+    zun_api:
+      PYTHONUTF8: "1"
+    zun_compute:
+      OS_ZUN_DISABLE_EVENTLET_PATCHING: "true"
+    zun_wsproxy:
+      OS_ZUN_DISABLE_EVENTLET_PATCHING: "true"
+    zun_cni_daemon: {}
 
   # ────────────────────────────────────────────────────────────────────
   # 4.4 副本数配置
@@ -805,6 +823,34 @@ conf:
       rabbit_quorum_queue: true
       rabbit_transient_quorum_queue: true
       use_queue_manager: true
+
+  # ────────────────────────────────────────────────────────────────────
+  # 5.3.1 zun-api 的 uWSGI 配置(渲染为 /etc/zun/zun-api-uwsgi.ini)
+  # ────────────────────────────────────────────────────────────────────
+  # zun-api 命令用的是 oslo.service 的 WSGI 服务器,它是 eventlet 的,在原生线程下
+  # 拒绝启动,所以 API 一律走 zun-api-wsgi。参数照 watcher chart。http-socket
+  # 留空时由 configmap-etc 按 endpoints 的 api 端口填。lazy-apps 必须为 true:
+  # 每个 worker 各自加载应用,也各自起一个用量监听器(同一消费者组)。
+  zun_api_uwsgi:
+    uwsgi:
+      add-header: "Connection: close"
+      buffer-size: 65535
+      die-on-term: true
+      enable-threads: true
+      exit-on-reload: false
+      hook-master-start: unix_signal:15 gracefully_kill_them_all
+      lazy-apps: true
+      log-x-forwarded-for: true
+      master: true
+      need-app: true
+      procname-prefix-spaced: "zun-api:"
+      route-user-agent: '^kube-probe.* donotlog:'
+      thunder-lock: true
+      worker-reload-mercy: 80
+      wsgi-file: /var/lib/openstack/bin/zun-api-wsgi
+      processes: 2
+      stats: 0.0.0.0:1717
+      stats-http: true
 
   # ────────────────────────────────────────────────────────────────────
   # 5.4 日志配置

@@ -119,6 +119,9 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+{{- if .Values.pod.env.zun_cni_daemon }}
+{{ include "helm-toolkit.utils.to_k8s_env_vars" .Values.pod.env.zun_cni_daemon | indent 12 }}
+{{- end }}
           command:
             - /tmp/zun-cni-daemon.sh
           volumeMounts:

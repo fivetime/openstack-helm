@@ -12,10 +12,10 @@
 
 ---
 apiVersion: v2
-appVersion: v2025.1.0
+appVersion: v2026.2.0
 description: OpenStack-Helm Zun Container Service
 name: zun
-version: 2025.1.0
+version: 2026.1.0
 home: https://docs.openstack.org/zun/latest/
 sources:
   - https://opendev.org/openstack/zun

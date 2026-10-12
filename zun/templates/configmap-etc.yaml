@@ -194,6 +194,12 @@ limitations under the License.
 {{- end -}}
 
 {{/* Workers configuration */}}
+{{- if empty (index .Values.conf.zun_api_uwsgi.uwsgi "http-socket") -}}
+{{- $http_socket_port := tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | toString }}
+{{- $http_socket := printf "0.0.0.0:%s" $http_socket_port }}
+{{- $_ := set .Values.conf.zun_api_uwsgi.uwsgi "http-socket" $http_socket -}}
+{{- end -}}
+
 {{- if eq .Values.conf.zun.api.workers nil -}}
 {{- $_ := unset .Values.conf.zun.api "workers" -}}
 {{- end -}}
@@ -209,6 +215,7 @@ data:
   zun.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.zun | b64enc }}
   logging.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.logging | b64enc }}
   api-paste.ini: {{ include "helm-toolkit.utils.to_ini" .Values.conf.paste | b64enc }}
+  zun-api-uwsgi.ini: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.zun_api_uwsgi | b64enc }}
   policy.yaml: {{ toYaml .Values.conf.policy | b64enc }}
   api_audit_map.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.api_audit_map | b64enc }}
   rootwrap.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.rootwrap | b64enc }}

@@ -65,6 +65,10 @@ spec:
           securityContext:
             runAsUser: 0
             readOnlyRootFilesystem: false
+{{- if .Values.pod.env.zun_wsproxy }}
+          env:
+{{ include "helm-toolkit.utils.to_k8s_env_vars" .Values.pod.env.zun_wsproxy | indent 12 }}
+{{- end }}
           command:
             - /tmp/zun-wsproxy.sh
           ports:

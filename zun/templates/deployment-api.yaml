@@ -65,15 +65,18 @@ spec:
           securityContext:
             runAsUser: 0
             readOnlyRootFilesystem: false
+          # uWSGI, not the zun-api command: that one serves through
+          # oslo.service's eventlet WSGI server, which refuses to run on
+          # native threads. SIGTERM is a graceful stop (die-on-term plus
+          # the master-start hook in conf.zun_api_uwsgi).
           command:
-            - /tmp/zun-api.sh
-            - start
-          lifecycle:
-            preStop:
-              exec:
-                command:
-                  - /tmp/zun-api.sh
-                  - stop
+            - uwsgi
+            - --ini
+            - /etc/zun/zun-api-uwsgi.ini
+{{- if .Values.pod.env.zun_api }}
+          env:
+{{ include "helm-toolkit.utils.to_k8s_env_vars" .Values.pod.env.zun_api | indent 12 }}
+{{- end }}
           ports:
             - name: z-api
               containerPort: {{ tuple "container" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
@@ -109,6 +112,10 @@ spec:
             - name: zun-etc
               mountPath: /etc/zun/api-paste.ini
               subPath: api-paste.ini
+              readOnly: true
+            - name: zun-etc
+              mountPath: /etc/zun/zun-api-uwsgi.ini
+              subPath: zun-api-uwsgi.ini
               readOnly: true
             {{- if .Values.conf.zun.DEFAULT.log_config_append }}
             - name: zun-etc

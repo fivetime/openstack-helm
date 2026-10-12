@@ -75,6 +75,9 @@ spec:
             - name: DOCKER_HOST
               value: "unix://{{ .Values.container_runtime.docker.socket_path }}"
             {{- end }}
+{{- if .Values.pod.env.zun_compute }}
+{{ include "helm-toolkit.utils.to_k8s_env_vars" .Values.pod.env.zun_compute | indent 12 }}
+{{- end }}
           command:
             - /tmp/zun-compute.sh
           volumeMounts:

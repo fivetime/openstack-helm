@@ -65,6 +65,10 @@ data:
 {{ include "rabbitmq.utils.to_rabbit_config" $envAll.Values.conf.rabbit_additonal_conf | indent 4 }}
 {{- end }}
 
+{{- range $name, $content := .Values.conf.conf_d }}
+  {{ printf "conf.d-%s" $name }}: |
+{{ $content | indent 4 }}
+{{- end }}
 {{- if .Values.conf.rabbit_advanced_config.enabled }}
   advanced.config: |
     [

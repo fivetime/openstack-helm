@@ -307,6 +307,12 @@ spec:
               mountPath: /etc/rabbitmq/rabbitmq-env.conf
               subPath: rabbitmq-env.conf
               readOnly: true
+{{- range $name, $content := .Values.conf.conf_d }}
+            - name: rabbitmq-etc
+              mountPath: {{ printf "/etc/rabbitmq/conf.d/%s" $name }}
+              subPath: {{ printf "conf.d-%s" $name }}
+              readOnly: true
+{{- end }}
 {{- if .Values.manifests.config_ipv6 }}
             - name: rabbitmq-etc
               mountPath: /etc/rabbitmq/erl_inetrc

@@ -1,0 +1,6 @@
+---
+rabbitmq:
+  - |
+    The default broker image is RabbitMQ 4.3.6, a maintenance release of the
+    4.3 series that upgrades in place, one node at a time.
+...

@@ -1,0 +1,12 @@
+---
+fixes:
+  - |
+    A RabbitMQ pod 0 that starts without data while the other members are
+    running now joins their cluster. The k8s peer discovery backend makes a
+    virgin pod 0 form a cluster of its own, so replacing pod 0's volume (or
+    losing it) left a second one-node cluster beside the running one. Pod 0
+    now looks for a running member first, joins it with its readiness held
+    back, and only forms a new cluster when none answers, as on a fresh
+    install. Quorum queue replicas on the rejoined node still have to be
+    added back with ``rabbitmq-queues grow``.
+...

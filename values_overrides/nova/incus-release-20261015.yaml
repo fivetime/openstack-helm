@@ -1,0 +1,6 @@
+# Nova Incus 866d7e2 (native threading, Python 3.14, Alpine 3.24) on Nova
+# stable/2026.2 8df1922926; SDK eb803e4. openstack-helm-images 9f56dd5,
+# Build All Images run 38680247671. Apply after current overrides.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:bb92c3f32d8f3272678e7ffec968c121cdddd6a3859d9a52cb8e3f57b8590530

@@ -1,0 +1,7 @@
+# Incus b1df0c3d78a34fd30f65bbcc9b4f20e4548fed58 (adds migration_criu_sha256).
+# Build Incus novm image run 38679773945; CRIU cb7c124 binary sha256
+# 7ec7e239f1c0036eef7441294edfb28f55abea0dd7d37507cac674300483c49b.
+# LXCFS remains independently pinned.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:67be2b018f3550affdcda1ebbfcfe9682bbd0e3cd873a56feb355a4ce1ac52a6

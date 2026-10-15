@@ -1,0 +1,6 @@
+# CRIU binary of the Incus novm image b1df0c3d78 (CRIU cb7c124, writable PSI
+# descriptor refusal). Admitted for live migration after the testbed gate.
+conf:
+  nova_incus:
+    incus:
+      live_migration_criu_sha256: 7ec7e239f1c0036eef7441294edfb28f55abea0dd7d37507cac674300483c49b

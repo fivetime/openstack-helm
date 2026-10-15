@@ -1,5 +1,7 @@
-# Nova Incus RPC 1.7 control artifact; CI 37241105099.
+# Nova Incus control image for Nova 2026.2 (Airship nova 2026.2-ubuntu_resolute
+# 8df1922926 + patches 0002/0003/0006/0008/0009 + IncusLiveMigrateData 1.7),
+# driver 866d7e2; openstack-helm-images 9f56dd5, Build All Images run 38680247671.
 images:
   tags:
-    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:eb366287e73b718b6f731ed4481c3a22551c7e338556e5bfb144b94e68faf9b0
-    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:eb366287e73b718b6f731ed4481c3a22551c7e338556e5bfb144b94e68faf9b0
+    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:e5f033810a63664e1d00c2fddbdbec696779b588b7759d764bb7336819a4c5c6
+    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:e5f033810a63664e1d00c2fddbdbec696779b588b7759d764bb7336819a4c5c6

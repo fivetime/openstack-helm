@@ -714,6 +714,9 @@ pod:
     octavia_worker:
       pod: {}
       container:
+        octavia_worker_get_port:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
         octavia_worker_nic_init:
           runAsUser: 0
           capabilities:
@@ -734,6 +737,9 @@ pod:
     octavia_health_manager:
       pod: {}
       container:
+        octavia_health_manager_get_port:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
         octavia_health_manager_nic_init:
           runAsUser: 0
           capabilities:
@@ -829,6 +835,10 @@ pod:
       daemonsets:
         pod_replacement_strategy: RollingUpdate
         health_manager:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+        worker:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1

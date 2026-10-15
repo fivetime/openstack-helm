@@ -807,9 +807,6 @@ pod:
     ironic:
       enabled: false
       tolerations:
-        - key: node-role.kubernetes.io/master
-          operator: Exists
-          effect: NoSchedule
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
@@ -852,6 +849,8 @@ pod:
     novncproxy: 1
   lifecycle:
     upgrades:
+      statefulsets:
+        pod_replacement_strategy: RollingUpdate
       deployments:
         revision_history: 3
         pod_replacement_strategy: RollingUpdate
@@ -935,6 +934,13 @@ pod:
           memory: "1024Mi"
           cpu: "2000m"
       ks_user:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      manage_cleaning_network:
         requests:
           memory: "128Mi"
           cpu: "100m"

@@ -49,6 +49,7 @@ jobs:
 images:
   tags:
     bootstrap: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    test: docker.io/xrally/xrally-openstack:2.0.0
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     db_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     manila_db_sync: quay.io/airshipit/manila:2026.1-ubuntu_noble
@@ -120,7 +121,7 @@ pod:
     manila:
       enabled: false
       tolerations:
-        - key: node-role.kubernetes.io/master
+        - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
   mounts:

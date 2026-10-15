@@ -84,9 +84,7 @@ endpoints:
     host_fqdn_override:
       default: null
     path: /skyline
-    scheme:
-      default: mysql+pymysql
-      skyline: mysql+pymysql
+    scheme: mysql+pymysql
     port:
       mysql:
         default: 3306
@@ -169,6 +167,8 @@ pod:
       container:
         skyline:
           readOnlyRootFilesystem: false
+        db_sync:
+          readOnlyRootFilesystem: true
   mounts:
     skyline:
       init_container: null
@@ -179,9 +179,6 @@ pod:
     skyline:
       enabled: false
       tolerations:
-      - key: node-role.kubernetes.io/master
-        operator: Exists
-        effect: NoSchedule
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule

@@ -100,6 +100,14 @@ spec:
               subPath: cyborg.conf
               readOnly: true
             - name: cyborg-etc
+              mountPath: /etc/cyborg/cyborg-api-uwsgi.ini
+              subPath: cyborg-api-uwsgi.ini
+              readOnly: true
+            - name: cyborg-etc
+              mountPath: {{ .Values.conf.cyborg.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.cyborg.DEFAULT.log_config_append }}
+              readOnly: true
+            - name: cyborg-etc
               mountPath: /etc/cyborg/api-paste.ini
               subPath: api-paste.ini
               readOnly: true

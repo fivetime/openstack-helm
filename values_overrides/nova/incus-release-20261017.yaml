@@ -1,0 +1,7 @@
+# Nova Incus bb3265c (compute manager loaded after config parsing, so
+# osprofiler traces it) on Nova stable/2026.2 8df1922926 with the deferred
+# osprofiler tracing patch (review 1010918); SDK 7cf9852. openstack-helm-images
+# 626d2e4, Build All Images run 38970002792. Apply after current overrides.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:2382f200d22238b4d01c3a0d08695e2a43839c4ad38aae3d95a1f294f2deddaa

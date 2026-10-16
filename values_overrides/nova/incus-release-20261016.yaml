@@ -1,0 +1,7 @@
+# Nova Incus 866d7e2 (native threading, Python 3.14, Alpine 3.24) on Nova
+# stable/2026.2 8df1922926; SDK eb803e4; plus osprofiler, the OpenTelemetry
+# exporter and the osprofiler-otlp patches for tracing. openstack-helm-images
+# cf504a8, Build All Images run 38899522861. Apply after current overrides.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:6d2e0eace3a7798efc930b671e633641413b83120111bd0386d7a85fd9807320

@@ -12,8 +12,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
+{{/*
+On an upgrade the migration runs before the deployments change: as a
+post-upgrade hook it ran after them, and the new pods, whose init
+container only asks whether a job of this name has completed, found the
+previous release's job and started on the old schema. A failed migration
+now fails the upgrade with the old pods still serving. The job then reads
+the trove.conf of the previous release (the secret is updated after it):
+a change of the database connection and a migration go in two upgrades.
+On an install the secret does not exist yet: post-install as before.
+*/}}
 {{- define "metadata.annotations.job.db_sync" }}
-helm.sh/hook: post-install,post-upgrade
+helm.sh/hook: post-install,pre-upgrade
 helm.sh/hook-weight: "-4"
 {{- end }}
 

@@ -40,6 +40,8 @@ images:
     scripted_test: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     db_init: quay.io/airshipit/heat:2026.1-ubuntu_noble
     trove_db_sync: quay.io/airshipit/trove:2026.1-ubuntu_noble
+    # Runs trove's own code (bootstrap.structured.datastores): the trove image.
+    bootstrap: quay.io/airshipit/trove:2026.1-ubuntu_noble
     db_drop: quay.io/airshipit/heat:2026.1-ubuntu_noble
     rabbit_init: docker.io/rabbitmq:4.3.5-management
     ks_user: quay.io/airshipit/heat:2026.1-ubuntu_noble
@@ -282,6 +284,35 @@ network:
     node_port:
       enabled: false
       port: 30878
+
+bootstrap:
+  # Also needs manifests.job_bootstrap. The Job runs after the db sync on
+  # every install and upgrade.
+  enabled: false
+  structured:
+    # Datastores and versions to register, each version with the
+    # configuration group parameters of its manager. What is listed is
+    # written in full on every run (a change made by hand to a listed version
+    # is undone); nothing is ever deleted; a datastore without
+    # default_version keeps the default it has.
+    #  - name: mysql                   # datastore
+    #    default_version: "8.4"        # optional
+    #    versions:
+    #      - name: "8.4"               # version name
+    #        version: "8.4"            # version number, default: name
+    #        manager: mysql            # default: the datastore name
+    #        image: <glance image id>  # this or image_tags
+    #        image_tags: trove         # string or list
+    #        packages: ""
+    #        active: true
+    #        registry_ext: <class>     # default: trove's for the manager
+    #        repl_strategy: <class>    # default: trove's for the manager
+    #        # true: trove/templates/<manager>/validation-rules.json of the
+    #        # image, when there is one; false: none; or a file path.
+    #        config_parameters: true
+    datastores: []
+  # Run after the datastores, with the trove image and trove.conf.
+  script: null
 
 conf:
   paste:
@@ -536,6 +567,12 @@ dependencies:
     db_sync:
       jobs:
         - trove-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+    bootstrap:
+      jobs:
+        - trove-db-sync
       services:
         - endpoint: internal
           service: oslo_db

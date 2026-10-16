@@ -1,8 +1,9 @@
 # Nova Incus control image for Nova 2026.2 (our nova 2026.2-ubuntu_resolute
 # 8df1922926 with osprofiler tracing + patches 0002/0003/0006/0008/0009 +
-# IncusLiveMigrateData 1.7), driver 866d7e2; openstack-helm-images 5fc781c,
-# Build All Images run 38899852103.
+# IncusLiveMigrateData 1.7), driver 866d7e2; openstack-helm-images 20bfb1c,
+# Build All Images run 38928902243. Base nova adds nova/patches/nova/2026.2
+# (osprofiler tracing decided in setup_profiler, review 1010918).
 images:
   tags:
-    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:375f7e5f5e8eb77ae0e51aad3653930ee103aa335d7364a682856e74fb5a382b
-    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:375f7e5f5e8eb77ae0e51aad3653930ee103aa335d7364a682856e74fb5a382b
+    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:e4d69cea426c9aeb5db5dc7d8638acdee85b2696182008022dfb5b65b0e2ba17
+    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:e4d69cea426c9aeb5db5dc7d8638acdee85b2696182008022dfb5b65b0e2ba17

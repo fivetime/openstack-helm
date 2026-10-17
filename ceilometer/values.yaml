@@ -1942,6 +1942,10 @@ pod:
     ceilometer_ipmi: []
     ceilometer_notification: []
     ceilometer_db_sync: []
+  # Extra containers run next to the main one, e.g. an exporter reading the
+  # polling heartbeat socket from a volume added in pod.mounts.
+  sidecars:
+    ceilometer_central: []
   replicas:
     central: 1
     notification: 1

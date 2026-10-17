@@ -104,6 +104,9 @@ spec:
               subPath: polling.yaml
               readOnly: true
 {{ if $mounts_ceilometer_central.volumeMounts }}{{ toYaml $mounts_ceilometer_central.volumeMounts | indent 12 }}{{ end }}
+{{- with .Values.pod.sidecars.ceilometer_central }}
+{{ toYaml . | indent 8 }}
+{{- end }}
       volumes:
         - name: pod-tmp
           emptyDir: {}

@@ -99,6 +99,23 @@ endpoints:
         default: 6666
         admin: 80
         public: 80
+  placement:
+    name: placement
+    hosts:
+      default: placement-api
+      public: placement
+    host_fqdn_override:
+      default: null
+    path:
+      default: /
+    scheme:
+      default: 'http'
+      service: 'http'
+    port:
+      api:
+        default: 8778
+        public: 80
+        service: 8778
   oslo_db:
     auth:
       admin:
@@ -332,8 +349,10 @@ pod:
       container:
         cyborg:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         cyborg_conductor:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
   tolerations:
     cyborg:
       enabled: false
@@ -387,7 +406,7 @@ pod:
           max_surge: 3
       daemonsets:
         pod_replacement_strategy: RollingUpdate
-        cyborg:
+        agent:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
@@ -421,63 +440,54 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_endpoints:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_service:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       rabbit_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       image_repo_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
 
 conf:
   paste:
@@ -580,12 +590,14 @@ conf:
         - default
     logger_root:
       level: WARNING
-      handlers: 'null'
+      handlers:
+        - stdout
     logger_cyborg:
       level: INFO
       handlers:
         - stdout
       qualname: cyborg
+      propagate: 0
     logger_amqp:
       level: WARNING
       handlers: stderr

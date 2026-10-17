@@ -403,8 +403,9 @@ dependencies:
 
 pod:
   ## Extra containers and volumes to inject into the neutron-server
-  ## Deployment. Used e.g. by values_overrides/neutron/api-tls.yaml to add an
-  ## nginx TLS-terminating sidecar. Keyed per component.
+  ## Deployment. Used e.g. by values_overrides/neutron/tls-gateway-and-sidecar.yaml
+  ## to add an nginx TLS-terminating sidecar. Keyed per component.
+  ## The entries are rendered through tpl, so they can reference values.
   extraContainers:
     neutron_server: []
   extraVolumes:
@@ -1020,119 +1021,102 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       l3:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       metadata:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ovn:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ovn_metadata:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ovn_vpn:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ovs:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       sriov:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       l2gw:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       bagpipe_bgp:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       bgp_dragent:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
     server:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     rpc_server:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     periodic_worker:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     ovn_maintenance_worker:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     ironic_agent:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     netns_cleanup_cron:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     jobs:
       bootstrap:
         requests:
@@ -1140,77 +1124,66 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       rabbit_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_drop:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_endpoints:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_service:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ovn_db_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       image_repo_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
 
 conf:
   rally_tests:
@@ -2176,17 +2149,20 @@ conf:
         - default
     logger_root:
       level: WARNING
-      handlers: 'null'
+      handlers:
+        - stdout
     logger_neutron:
       level: INFO
       handlers:
         - stdout
       qualname: neutron
+      propagate: 0
     logger_neutron_taas:
       level: INFO
       handlers:
         - stdout
       qualname: neutron_taas
+      propagate: 0
     logger_amqp:
       level: WARNING
       handlers: stderr

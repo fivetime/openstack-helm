@@ -1911,6 +1911,10 @@ pod:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
+        ipmi:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
   resources:
     enabled: true
     compute:
@@ -1919,28 +1923,24 @@ pod:
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     notification:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     central:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     ipmi:
       requests:
         memory: "124Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     jobs:
       db_sync:
         requests:
@@ -1948,28 +1948,24 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       rabbit_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       image_repo_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
 
 manifests:
   configmap_bin: true

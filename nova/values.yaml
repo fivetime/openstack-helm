@@ -1628,17 +1628,20 @@ conf:
         - default
     logger_root:
       level: WARNING
-      handlers: 'null'
+      handlers:
+        - stdout
     logger_nova:
       level: INFO
       handlers:
         - stdout
       qualname: nova
+      propagate: 0
     logger_os.brick:
       level: INFO
       handlers:
         - stdout
-      qualname: os.brick
+      qualname: os_brick
+      propagate: 0
     logger_amqp:
       level: WARNING
       handlers: stderr
@@ -2231,8 +2234,9 @@ pod:
       lxcfs: /var/lib/lxcfs
       manila_shares: /var/lib/nova-incus/instances/incus-shares
   # -- Extra sidecar containers and volumes to inject into the nova API
-  ## Deployments. Used e.g. by values_overrides/nova/api-tls.yaml to add an
-  ## nginx TLS-terminating sidecar. Keyed per API component.
+  ## Deployments. Used e.g. by values_overrides/nova/tls-gateway-and-sidecar.yaml
+  ## to add an nginx TLS-terminating sidecar. Keyed per API component.
+  ## The entries are rendered through tpl, so they can reference values.
   extraContainers:
     nova_osapi: []
     nova_metadata: []
@@ -2714,77 +2718,66 @@ pod:
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     compute_incus:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     compute_ironic:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     api_metadata:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     api:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     conductor:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     scheduler:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     ssh:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     novncproxy:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     serialproxy:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     spiceproxy:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     jobs:
       bootstrap:
         requests:
@@ -2792,98 +2785,84 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       storage_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       rabbit_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       archive_deleted_rows:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_drop:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_endpoints:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_service:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       cell_setup:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       service_cleaner:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       image_repo_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
 
 network_policy:
   nova:

@@ -86,6 +86,7 @@ pod:
   # -- Extra sidecar containers and volumes to inject into the cinder-api
   ## Deployment. Used e.g. by values_overrides/cinder/tls-gateway-and-sidecar.yaml
   ## to add an nginx TLS-terminating sidecar. Keyed per component.
+  ## The entries are rendered through tpl, so they can reference values.
   extraContainers:
     cinder_api: []
   extraVolumes:
@@ -153,6 +154,7 @@ pod:
           capabilities:
             add:
               - SYS_ADMIN
+              - DAC_READ_SEARCH
           readOnlyRootFilesystem: true
           runAsUser: 0
     cinder_scheduler:
@@ -303,28 +305,24 @@ pod:
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     scheduler:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     volume:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     backup:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     jobs:
       volume_usage_audit:
         requests:
@@ -332,105 +330,90 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       bootstrap:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       rabbit_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_drop:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_purge:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       clean:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       backup_storage_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       storage_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_endpoints:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_service:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       image_repo_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
 
 bootstrap:
   enabled: true
@@ -942,12 +925,14 @@ conf:
         - default
     logger_root:
       level: WARNING
-      handlers: 'null'
+      handlers:
+        - stdout
     logger_cinder:
       level: INFO
       handlers:
         - stdout
       qualname: cinder
+      propagate: 0
     logger_amqp:
       level: WARNING
       handlers: stderr

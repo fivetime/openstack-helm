@@ -161,49 +161,42 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_drop:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_service:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_endpoints:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
   mounts:
     tacker_server:
       init_container: null
@@ -583,12 +576,14 @@ conf:
         - default
     logger_root:
       level: WARNING
-      handlers: 'null'
+      handlers:
+        - stdout
     logger_tacker:
       level: INFO
       handlers:
         - stdout
       qualname: tacker
+      propagate: 0
     logger_amqp:
       level: WARNING
       handlers: stderr

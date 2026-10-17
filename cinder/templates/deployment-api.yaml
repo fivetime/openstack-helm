@@ -78,7 +78,6 @@ spec:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "cinder_api" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
-{{ dict "envAll" $envAll "podName" "cinder-api" "containerNames" (list "cinder-api" "ceph-coordination-volume-perms" "init") | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
     spec:
 {{ tuple "cinder_api" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
 {{ tuple "cinder_api" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
@@ -176,7 +175,7 @@ spec:
 {{- dict "enabled" .Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
 {{ if $mounts_cinder_api.volumeMounts }}{{ toYaml $mounts_cinder_api.volumeMounts | indent 12 }}{{ end }}
 {{- range $extraContainer := $envAll.Values.pod.extraContainers.cinder_api }}
-        - {{ $extraContainer | toYaml | indent 10 | trim }}
+        - {{ tpl (toYaml $extraContainer) $envAll | indent 10 | trim }}
 {{- end }}
       volumes:
         - name: pod-tmp
@@ -209,6 +208,6 @@ spec:
 {{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
 {{ if $mounts_cinder_api.volumes }}{{ toYaml $mounts_cinder_api.volumes | indent 8 }}{{ end }}
 {{- range $extraVolume := $envAll.Values.pod.extraVolumes.cinder_api }}
-        - {{ $extraVolume | toYaml | indent 10 | trim }}
+        - {{ tpl (toYaml $extraVolume) $envAll | indent 10 | trim }}
 {{- end }}
 {{- end }}

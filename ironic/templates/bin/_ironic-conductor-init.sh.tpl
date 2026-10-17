@@ -34,13 +34,6 @@ fi
 
 echo "Using PXE IP: ${PXE_IP} on interface ${PROVISIONER_INTERFACE}"
 
-# ensure the tempdir exists, read it from the config
-ironictmpdir=$(python -c 'from configparser import ConfigParser;cfg = ConfigParser();cfg.read("/etc/ironic/ironic.conf");print(cfg.get("DEFAULT", "tempdir", fallback=""))')
-if [ -n "${ironictmpdir}" -a ! -d "${ironictmpdir}" ]; then
-  mkdir -p "${ironictmpdir}"
-  chmod 1777 "${ironictmpdir}"
-fi
-
 tee /tmp/pod-shared/conductor-local-ip.conf << EOF
 [DEFAULT]
 

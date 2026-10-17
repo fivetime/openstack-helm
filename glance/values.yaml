@@ -256,10 +256,20 @@ conf:
       # NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
-      workers: 1
+      # Also the number of glance-api uWSGI processes, each serving one
+      # request at a time. Image transfers hold a process for as long as
+      # they last, so one process makes every other request wait behind
+      # them.
+      workers: 2
       enable_v1_api: False
     oslo_middleware:
       enable_proxy_headers_parsing: true
+    barbican:
+      # NOTE: auth_endpoint and barbican_region_name are populated from
+      # endpoints.identity when empty
+      auth_endpoint: null
+      barbican_endpoint_type: internal
+      barbican_region_name: null
     keystone_authtoken:
       service_token_roles: service
       service_token_roles_required: true
@@ -352,12 +362,14 @@ conf:
         - default
     logger_root:
       level: WARNING
-      handlers: 'null'
+      handlers:
+        - stdout
     logger_glance:
       level: INFO
       handlers:
         - stdout
       qualname: glance
+      propagate: 0
     logger_amqp:
       level: WARNING
       handlers: stderr
@@ -440,6 +452,8 @@ conf:
     uwsgi:
       add-header: "Connection: close"
       buffer-size: 65535
+      # Must exceed glanceclient's 1 MiB chunks; quoted to avoid 4.194304e+06.
+      chunked-input-limit: "4194304"
       die-on-term: true
       enable-threads: true
       exit-on-reload: false
@@ -852,8 +866,9 @@ endpoints:
 
 pod:
   # -- Extra sidecar containers and volumes to inject into the glance-api
-  ## Deployment. Used e.g. by values_overrides/glance/api-tls.yaml to add an
-  ## nginx TLS-terminating sidecar. Keyed per component.
+  ## Deployment. Used e.g. by values_overrides/glance/tls-gateway-and-sidecar.yaml
+  ## to add an nginx TLS-terminating sidecar. Keyed per component.
+  ## The entries are rendered through tpl, so they can reference values.
   extraContainers:
     glance_api: []
   extraVolumes:
@@ -987,7 +1002,6 @@ pod:
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     jobs:
       storage_init:
         requests:
@@ -995,84 +1009,72 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       metadefs_load:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_drop:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_service:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_endpoints:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       rabbit_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       bootstrap:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       image_repo_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
 
 tls:
   oslo_messaging: false

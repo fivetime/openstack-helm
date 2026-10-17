@@ -175,7 +175,36 @@ pod:
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
+    central:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+    mdns:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+    producer:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+    sink:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+    worker:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
     jobs:
       bootstrap:
         requests:
@@ -183,63 +212,54 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_endpoints:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_service:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       rabbit_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       service_cleaner:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
 
 network:
   api:
@@ -318,12 +338,18 @@ dependencies:
       services:
         - service: oslo_messaging
           endpoint: internal
+    service_cleaner:
+      jobs:
+        - designate-db-sync
+      services:
+        - service: oslo_db
+          endpoint: internal
     api:
       jobs:
         - designate-db-sync
         - designate-ks-user
         - designate-ks-endpoints
-      service:
+      services:
         - service: oslo_db
           endpoint: internal
         - service: identity
@@ -335,7 +361,7 @@ dependencies:
         - designate-db-sync
         - designate-ks-user
         - designate-ks-endpoints
-      service:
+      services:
         - service: oslo_db
           endpoint: internal
         - service: identity
@@ -549,12 +575,14 @@ conf:
         - default
     logger_root:
       level: WARNING
-      handlers: 'null'
+      handlers:
+        - stdout
     logger_designate:
       level: INFO
       handlers:
         - stdout
       qualname: designate
+      propagate: 0
     logger_amqp:
       level: WARNING
       handlers: stderr

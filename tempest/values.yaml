@@ -52,21 +52,18 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       run_tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       image_repo_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
 
 dependencies:
   dynamic:
@@ -165,8 +162,9 @@ conf:
       domain_specific_drivers: true
     image:
       http_image: "http://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img"
+      http_qcow2_image: "http://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img"
       container_formats: bare
-      disk_formats: raw
+      disk_formats: qcow2,raw
     network:
       project_networks_reachable: false
       shared_physical_network: true
@@ -211,6 +209,11 @@ conf:
         - allowed-address-pairs
         - project-id
         - dvr
+    scenario:
+      # The scenario tests upload this file to glance. run-tests.sh downloads
+      # image.http_qcow2_image to it when the file does not exist.
+      img_file: /tmp/cirros-0.6.2-x86_64-disk.img
+      img_disk_format: qcow2
     service_available:
       cinder: true
       glance: true
@@ -227,7 +230,7 @@ conf:
     volume:
       disk_formats: raw
       backend_names: rbd1
-      storage_protocol: rbd
+      storage_protocol: ceph
       catalog_type: volumev3
   cleanup:
     force: false

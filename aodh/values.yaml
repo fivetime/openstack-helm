@@ -77,6 +77,7 @@ pod:
   # -- Extra sidecar containers and volumes to inject into the aodh-api
   ## Deployment. Used e.g. by values_overrides/aodh/tls-gateway-and-sidecar.yaml
   ## to add an nginx TLS-terminating sidecar. Keyed per component.
+  ## The entries are rendered through tpl, so they can reference values.
   extraContainers:
     aodh_api: []
   extraVolumes:
@@ -84,7 +85,7 @@ pod:
   security_context:
     aodh:
       pod:
-        runAsUser: 42402
+        runAsUser: 42424
       container:
         aodh_api:
           runAsUser: 0
@@ -189,28 +190,24 @@ pod:
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     evaluator:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     listener:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     notifier:
       requests:
         memory: "128Mi"
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     jobs:
       bootstrap:
         requests:
@@ -218,77 +215,66 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       rabbit_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_init:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_endpoints:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_service:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       ks_user:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       alarms_cleaner:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_drop:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       image_repo_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
 
 network:
   api:
@@ -358,6 +344,12 @@ dependencies:
         - service: oslo_messaging
           endpoint: internal
     db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    alarms_cleaner:
+      jobs:
+        - aodh-db-sync
       services:
         - endpoint: internal
           service: oslo_db
@@ -511,12 +503,14 @@ conf:
         - default
     logger_root:
       level: WARNING
-      handlers: 'null'
+      handlers:
+        - stdout
     logger_aodh:
       level: INFO
       handlers:
         - stdout
       qualname: aodh
+      propagate: 0
     logger_amqp:
       level: WARNING
       handlers: stderr

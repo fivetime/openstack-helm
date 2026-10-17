@@ -1142,6 +1142,7 @@ pod:
   # -- Extra sidecar containers and volumes to inject into the horizon
   ## Deployment. Used e.g. by values_overrides/horizon/tls-gateway-and-sidecar.yaml
   ## to add an nginx TLS-terminating sidecar in front of the apache app server.
+  ## The entries are rendered through tpl, so they can reference values.
   extraContainers:
     horizon: []
   extraVolumes:
@@ -1230,7 +1231,6 @@ pod:
         cpu: "100m"
       limits:
         memory: "1024Mi"
-        cpu: "2000m"
     jobs:
       db_init:
         requests:
@@ -1238,35 +1238,45 @@ pod:
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       db_drop:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       image_repo_sync:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
       tests:
         requests:
           memory: "128Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"
-          cpu: "2000m"
+  probes:
+    dashboard:
+      horizon:
+        liveness:
+          enabled: True
+          params:
+            initialDelaySeconds: 180
+            periodSeconds: 60
+            timeoutSeconds: 5
+        readiness:
+          enabled: True
+          params:
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:

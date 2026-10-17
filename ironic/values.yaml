@@ -105,11 +105,6 @@ conf:
       # conductor may use hardlinks to images for certain boot modes so the default path needs
       # to be on the same filesystem
       tempdir: /var/lib/openstack-helm/tmp
-      # -- The conductor image ships the iPXE loaders (undionly.kpxe, ipxe.efi,
-      ## snponly.efi) but no pxelinux.0, so plain PXE has nothing to serve.
-      ## Default new nodes to ipxe; a node can still be created with
-      ## --boot-interface pxe once a loader is staged into tftp_root.
-      default_boot_interface: ipxe
     api:
       port: null
     conductor:
@@ -155,9 +150,9 @@ conf:
       auth_type: password
     pxe:
       # -- Only paths are set here. [pxe]ipxe_enabled no longer exists in
-      ## ironic -- iPXE is selected per node through the boot interface (see
-      ## DEFAULT.default_boot_interface) -- and the idiom that went with it has
-      ## to go too: pointing pxe_config_template and pxe_bootfile_name at the
+      ## ironic -- iPXE is selected per node through the boot interface, and
+      ## ipxe is the first of the default enabled_boot_interfaces -- and the
+      ## idiom that went with it has to go too: pointing pxe_config_template and pxe_bootfile_name at the
       ## iPXE template and loader hands an iPXE config to any node booting with
       ## boot_interface=pxe, which cannot parse it. ironic's own defaults are
       ## already right (ipxe_config_template, ipxe_bootfile_name=undionly.kpxe,

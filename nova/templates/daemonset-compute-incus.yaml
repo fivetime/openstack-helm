@@ -299,7 +299,7 @@ spec:
               mountPath: {{ $hostPaths.manila_shares }}
             - name: nova-incus-runtime
               mountPath: /run/nova-incus
-{{- if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
+{{ if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
         - name: nova-compute-incus-storage-init
 {{ tuple $envAll "nova_compute_incus" | include "helm-toolkit.snippets.image" | indent 10 }}
           securityContext:
@@ -380,7 +380,7 @@ spec:
               mountPath: /run/incus-storage/ceph-keys
               readOnly: true
 {{- end }}
-{{- if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
+{{ if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
       containers:
         - name: nova-compute
 {{ tuple $envAll "nova_compute_incus" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -507,7 +507,7 @@ spec:
               mountPropagation: Bidirectional
 {{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
 {{- dict "enabled" .Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
-{{- if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
+{{ if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: pod-tmp
           emptyDir: {}
@@ -618,5 +618,5 @@ spec:
 {{- end }}
 {{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
 {{- dict "enabled" .Values.tls.oslo_messaging "name" "client-certs" "secretName" .Values.secrets.tls.client.nova | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
-{{- if $mounts.volumes }}{{ toYaml $mounts.volumes | indent 8 }}{{ end }}
+{{ if $mounts.volumes }}{{ toYaml $mounts.volumes | indent 8 }}{{ end }}
 {{- end }}

@@ -1,0 +1,9 @@
+# Nova Incus driver 82227ce (cross-cell resize refusal, local-root revert
+# loser fix, ID-map etcd failure reason, vnic_type=direct ports behind
+# [incus] allow_direct_ports, off here) on Nova stable/2026.2 8df1922926;
+# SDK 7cf9852. pip freeze differs from fd89c456 only by certifi.
+# openstack-helm-images 98f7478, Build All Images run 39159376575.
+# Apply after current overrides.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:7a511df681e68dc6bb3f550db172e550923066a7d0b5795cb102fea4db942d8d

@@ -1,0 +1,8 @@
+# Nova Incus image of 20261017 (driver bb3265c, Nova stable/2026.2 8df1922926,
+# SDK 7cf9852) plus confluent-kafka 2.14.2 against Alpine 3.24's librdkafka
+# 2.14.1, for notifications on Redpanda (kafka-notify.yaml). pip freeze differs
+# from 2382f200 only by that line. openstack-helm-images 1f295ed, Build All
+# Images run 39102329845. Apply after current overrides.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:fd89c456ff0aee7c132d43457f26343b14e8af8f9f7aaec39fb684be3eca2b69

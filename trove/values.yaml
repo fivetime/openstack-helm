@@ -176,6 +176,11 @@ pod:
     termination_grace_period:
       api:
         timeout: 30
+      # A task manager that is told to stop finishes the tasks under way
+      # first, for up to [DEFAULT] graceful_shutdown_timeout of trove.conf:
+      # keep this longer than that.
+      taskmanager:
+        timeout: 30
   resources:
     enabled: false
     api:

@@ -1,0 +1,9 @@
+# Nova Incus driver 0b76609 (registry-checked evacuated claim retirement
+# without a false CRITICAL; direct-port takeover of a representor left
+# bound to a port deleted while the host was down) on Nova stable/2026.2
+# 8df1922926; SDK 7cf9852. pip freeze identical to 4763e26f.
+# openstack-helm-images a7fa9ef, Build All Images run 39409987478.
+# Apply after current overrides.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:25531fad5e6e60154cb65cbd60421341754a7bb237a9442d08731f5940a5720a

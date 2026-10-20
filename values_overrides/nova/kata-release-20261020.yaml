@@ -1,0 +1,5 @@
+# nova-kata image of openstack-nova-kata e74a1e0 (driver as gated, with
+# kata.filters [Filters] section; cdrkit for config drives).
+images:
+  tags:
+    nova_compute_kata: ghcr.io/fivetime/openstackhelm/nova-kata@sha256:18acec8fad73cd81e4aa4df43e417add1e906e3c7f431ea40859a732fec5a514

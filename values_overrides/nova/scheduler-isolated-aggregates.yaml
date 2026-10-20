@@ -1,0 +1,8 @@
+# Isolated aggregates (Nova request filter isolate_aggregates): an aggregate
+# with trait:<T>=required metadata takes only requests whose flavor or image
+# requires every such <T>. Used to keep generic flavors off kata-worker1-3
+# (aggregate kata, trait:CUSTOM_KATA_HOST=required), 2026-10-21.
+conf:
+  nova:
+    scheduler:
+      enable_isolated_aggregate_filtering: true

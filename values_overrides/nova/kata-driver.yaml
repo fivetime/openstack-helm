@@ -1,0 +1,23 @@
+# Nova Kata Containers compute on kata-worker1-3 (openstack-nova-kata
+# ADR-056). The host stack is the nova-kata-host release; its paths and
+# these must agree. The image is pinned in kata-release-YYYYMMDD.yaml.
+manifests:
+  daemonset_compute_kata: true
+conf:
+  nova_kata:
+    kata:
+      rbd_cluster_fsids: ceph:349c613e-c2ca-4c8e-bf23-f9ef359c32aa
+      # kata-worker1-3: 16 vCPU, 30 GiB, 1 TiB XFS file root (reserved
+      # host CPUs and memory come off in Nova).
+      resource_vcpus: 16
+      resource_memory_mb: 28672
+      resource_disk_gb: 900
+# Notifications on Redpanda (kafka-notify.yaml): its CA, as every compute.
+pod:
+  mounts:
+    nova_compute_kata:
+      nova_compute_kata:
+        volumeMounts:
+          - {name: redpanda-ca, mountPath: /etc/redpanda-ca, readOnly: true}
+        volumes:
+          - {name: redpanda-ca, secret: {secretName: redpanda-ca}}

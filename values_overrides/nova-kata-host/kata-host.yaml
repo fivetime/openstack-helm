@@ -1,0 +1,18 @@
+# Nova Kata host stack on kata-worker1-3 (openstack-nova-kata ADR-056).
+# The image digest is pinned in kata-host-release-YYYYMMDD.yaml.
+host_env:
+  KATA_RBD_ROOTS_POOL: nova-kata-rootfs-rbd-pool
+  KATA_RBD_ROOTS_CLIENT: nova-kata-rootfs
+ceph:
+  enabled: true
+  conf_configmap: ceph-etc
+  conf_key: ceph.conf
+  keyrings:
+    # os-brick RBD maps of the compute, as the libvirt and Incus computes.
+    - user: csi-rbd-provisioner.1
+      secret: nova-kata-host-ceph
+      key: cinder
+    # The snapshotter shared roots (ADR-053).
+    - user: nova-kata-rootfs
+      secret: nova-kata-host-ceph
+      key: rootfs

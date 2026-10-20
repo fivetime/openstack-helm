@@ -9,7 +9,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-{{- if .Values.manifests.deployment_producer }}
+
+{{/*
+manifests.deployment_producer defaulted to true, so an override that set it
+to false to disable the producer would otherwise be silently ignored after the
+rename and the producer would start.
+*/}}
+{{- if hasKey .Values.manifests "deployment_producer" }}
+{{- fail "manifests.deployment_producer has been renamed to manifests.statefulset_producer" }}
+{{- end }}
+
+{{- if .Values.manifests.statefulset_producer }}
 
 {{- $envAll := . }}
 {{- $mounts_designate_producer := .Values.pod.mounts.designate_producer.designate_producer }}
@@ -20,7 +30,7 @@
 {{ tuple $envAll "producer" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: designate-producer
   annotations:
@@ -28,11 +38,13 @@ metadata:
   labels:
 {{ tuple $envAll "designate" "producer" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
+  serviceName: designate-producer
   replicas: {{ .Values.pod.replicas.producer }}
   selector:
     matchLabels:
 {{ tuple $envAll "designate" "producer" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
-{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  podManagementPolicy: Parallel
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_statefulset" | indent 2 }}
   template:
     metadata:
       labels:
@@ -46,6 +58,7 @@ spec:
 {{ tuple "designate_producer" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
 {{ tuple "designate_producer" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "designate" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       affinity:
 {{ tuple $envAll "designate" "producer" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:

@@ -139,14 +139,6 @@ limitations under the License.
 {{- end -}}
 {{- end -}}
 
-{{/*
-  api_endpoint is not set: nova registers the [ironic] group through
-  keystoneauth (register_ksa_opts), which has no such option; the address
-  comes from the catalog, narrowed with valid_interfaces. The ironic user's
-  credentials are not rendered here either: secret-ks-etc.yaml puts them in
-  nova-ks-etc (nova_ironic.conf), which nova-compute-ironic, the only
-  component that talks to ironic, reads from /etc/nova/nova.conf.d.
-*/}}
 {{- if empty .Values.conf.nova.ironic.auth_url -}}
 {{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.nova.ironic "auth_url" -}}
 {{- end -}}

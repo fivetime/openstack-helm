@@ -9,7 +9,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-{{- if .Values.manifests.deployment_worker }}
+
+{{/*
+manifests.deployment_worker defaulted to true, so an override that set it
+to false to disable the worker would otherwise be silently ignored after the
+rename and the worker would start.
+*/}}
+{{- if hasKey .Values.manifests "deployment_worker" }}
+{{- fail "manifests.deployment_worker has been renamed to manifests.statefulset_worker" }}
+{{- end }}
+
+{{- if .Values.manifests.statefulset_worker }}
 
 {{- $envAll := . }}
 {{- $mounts_designate_worker := .Values.pod.mounts.designate_worker.designate_worker }}
@@ -20,7 +30,7 @@
 {{ tuple $envAll "worker" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: designate-worker
   annotations:
@@ -28,11 +38,13 @@ metadata:
   labels:
 {{ tuple $envAll "designate" "worker" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
+  serviceName: designate-worker
   replicas: {{ .Values.pod.replicas.worker }}
   selector:
     matchLabels:
 {{ tuple $envAll "designate" "worker" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
-{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  podManagementPolicy: Parallel
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_statefulset" | indent 2 }}
   template:
     metadata:
       labels:
@@ -46,6 +58,7 @@ spec:
 {{ tuple "designate_worker" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
 {{ tuple "designate_worker" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "designate" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       affinity:
 {{ tuple $envAll "designate" "worker" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       nodeSelector:
@@ -55,11 +68,14 @@ spec:
         - name: designate-worker-init
 {{ tuple $envAll "designate_worker" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.worker | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "designate" "container" "designate_worker_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
           command:
             - bash
             - -c
             - 'eval "echo \"$(cat /tmp/designate_pools.template)\"" > /etc/designate/pools.yaml && designate-manage pool update'
           volumeMounts:
+            - name: oslo-lock-path
+              mountPath: {{ .Values.conf.designate.oslo_concurrency.lock_path }}
             - name: designate-etc
               mountPath: /tmp/designate_pools.template
               subPath: pools.yaml

@@ -1425,12 +1425,6 @@ conf:
         fp-vdev: CommandFilter, fp-vdev, root
   nova_ironic:
     DEFAULT:
-      # -- [DEFAULT]scheduler_host_manager used to be set to ironic_host_manager
-      ## here. nova removed that option (along with the whole baremetal
-      ## scheduler-filter family: scheduler_use_baremetal_filters,
-      ## baremetal_scheduler_default_filters) once ironic nodes became ordinary
-      ## placement resource providers; leaving it in only earns a "Unknown
-      ## option" warning at start-up.
       compute_driver: ironic.IronicDriver
       # -- Baremetal is always 1:1 -- a node either is or is not allocated.
       ram_allocation_ratio: 1.0
@@ -2906,6 +2900,21 @@ mariadb_db:
   ## or newer. User.spec.require was added in that release, so older operators
   ## drop it and create accounts without REQUIRE X509.
   api_group: mariadb.osh.openstack.org
+  # -- Name of the MariaDB resource the Database, User, Grant and Connection
+  ## attach to through mariaDbRef. When empty it is the oslo_db default host,
+  ## which only works if the MariaDB resource shares its name with the service
+  ## clients connect through. Set it when they differ, such as a MariaDB named
+  ## mariadb served by a mariadb-primary service.
+  mariadb_ref: ""
+  # -- Secret holding the password of the nova database account.
+  ## The User and Connection resources read it from here.
+  password_secret:
+    # -- Render the secret from endpoints.oslo_db.auth.nova.password. Set
+    ## to false to use a secret that already exists, so the password does not
+    ## need to be passed as a Helm value.
+    create: true
+    name: nova-db-password
+    key: password
 
 manifests:
   compute_uuid_self_provisioning: true

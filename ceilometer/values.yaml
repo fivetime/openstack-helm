@@ -691,6 +691,27 @@ conf:
         audit_period_ending:
           type: datetime
           fields: payload.audit_period_ending
+    # A change of the health of a cluster (Trove's task manager); the
+    # project is the tenant of the payload.
+    - event_type: trove.cluster.health
+      traits:
+        resource_id:
+          fields: payload.cluster_id
+        cluster_name:
+          fields: payload.cluster_name
+        datastore_version_id:
+          fields: payload.datastore_version_id
+        status:
+          fields: payload.status
+        previous_status:
+          fields: payload.previous_status
+        reason:
+          fields: payload.reason
+        since:
+          type: datetime
+          fields: payload.since
+        region:
+          fields: payload.region
     - event_type: profiler.*
       traits:
         project:

@@ -1,0 +1,147 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.daemonset }}
+{{- $image := required "images.nova_kata_host is required" .Values.images.nova_kata_host }}
+{{- if .Values.host_env.KATA_EXPERIMENTAL_RBD_ROOTS }}
+{{- $_ := required "host_env.KATA_RBD_ROOTS_POOL is required with shared roots" .Values.host_env.KATA_RBD_ROOTS_POOL }}
+{{- $_ := required "host_env.KATA_RBD_ROOTS_CLIENT is required with shared roots" .Values.host_env.KATA_RBD_ROOTS_CLIENT }}
+{{- end }}
+{{- $staging := .Values.pod.host_staging }}
+{{- $tag := regexReplaceAll "[^A-Za-z0-9._-]" (last (splitList "@" $image)) "-" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nova-kata-host-env
+data:
+  host.env: |
+{{- range $key, $value := .Values.host_env }}
+{{- if not (kindIs "invalid" $value) }}
+    {{ $key }}={{ $value | toString | quote }}
+{{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nova-kata-host
+  labels:
+    application: nova-kata-host
+spec:
+  selector:
+    matchLabels:
+      application: nova-kata-host
+  # A new image is installed when its pod is deleted on a drained node.
+  updateStrategy:
+    type: OnDelete
+  template:
+    metadata:
+      labels:
+        application: nova-kata-host
+      annotations:
+        nova-kata-host-env-hash: {{ toJson .Values.host_env | sha256sum }}
+        nova-kata-host-ceph-hash: {{ toJson .Values.ceph | sha256sum }}
+    spec:
+      hostNetwork: true
+      hostPID: true
+      automountServiceAccountToken: false
+      nodeSelector:
+        {{ .Values.labels.node_selector_key }}: {{ .Values.labels.node_selector_value | quote }}
+      tolerations:
+{{ toYaml .Values.pod.tolerations | indent 8 }}
+      initContainers:
+        - name: install
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.images.pull_policy }}
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              dest=/host{{ $staging }}/{{ $tag }}
+              mkdir -p "$dest"
+              rsync -a --delete /opt/nova-kata-host/ "$dest/"
+              install -m 0644 /run/nova-kata-host-env/host.env "$dest/host.env"
+{{- if .Values.ceph.enabled }}
+              install -d -m 0755 /host/etc/ceph
+              install -m 0644 /run/nova-kata-host-ceph/conf /host/etc/ceph/ceph.conf
+{{- range $i, $k := .Values.ceph.keyrings }}
+              printf '[client.%s]\n    key = %s\n' {{ $k.user | quote }} "$(cat /run/nova-kata-host-ceph/keyring-{{ $i }})" \
+                > /host/etc/ceph/ceph.client.{{ $k.user }}.keyring.new
+              chmod 0640 /host/etc/ceph/ceph.client.{{ $k.user }}.keyring.new
+              chgrp 42424 /host/etc/ceph/ceph.client.{{ $k.user }}.keyring.new
+              mv /host/etc/ceph/ceph.client.{{ $k.user }}.keyring.new /host/etc/ceph/ceph.client.{{ $k.user }}.keyring
+{{- end }}
+{{- end }}
+              exec nsenter --target 1 --mount --uts --ipc --net --pid -- \
+                /bin/bash {{ $staging }}/{{ $tag }}/src/tools/production/nova_kata_host_install.sh \
+                {{ $staging }}/{{ $tag }}/bundle {{ $staging }}/{{ $tag }}/host.env
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+            - name: host-env
+              mountPath: /run/nova-kata-host-env
+              readOnly: true
+{{- if .Values.ceph.enabled }}
+            - name: host-ceph
+              mountPath: /run/nova-kata-host-ceph
+              readOnly: true
+{{- end }}
+      containers:
+        - name: gateway
+          image: {{ $image }}
+          imagePullPolicy: {{ .Values.images.pull_policy }}
+          command: ["sleep", "infinity"]
+          readinessProbe:
+            exec:
+              command: ["test", "-S", "/host/run/nova-kata/runtime.sock"]
+            periodSeconds: 30
+          volumeMounts:
+            - name: host-run
+              mountPath: /host/run
+              readOnly: true
+              mountPropagation: HostToContainer
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory
+        - name: host-run
+          hostPath:
+            path: /run
+            type: Directory
+        - name: host-env
+          configMap:
+            name: nova-kata-host-env
+{{- if .Values.ceph.enabled }}
+        - name: host-ceph
+          projected:
+            sources:
+              - configMap:
+                  name: {{ required "ceph.conf_configmap is required" .Values.ceph.conf_configmap }}
+                  items:
+                    - key: {{ .Values.ceph.conf_key }}
+                      path: conf
+{{- range $i, $k := .Values.ceph.keyrings }}
+              - secret:
+                  name: {{ $k.secret }}
+                  items:
+                    - key: {{ $k.key }}
+                      path: keyring-{{ $i }}
+{{- end }}
+{{- end }}
+{{- end }}

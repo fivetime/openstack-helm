@@ -30,6 +30,9 @@ labels:
         enabled: false
         node_selector_key: openstack-incus-admitted
         node_selector_value: enabled
+    compute_kata:
+      node_selector_key: openstack-kata-compute-node
+      node_selector_value: enabled
     compute_ironic:
       node_selector_key: openstack-compute-node
       node_selector_value: enabled
@@ -78,6 +81,9 @@ images:
     nova_cell_setup_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
     nova_compute: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:126c6b7c6b9ad14255e14e494b01f6f535de421d5ae4adf0a49f6f01f83a2f38
+    # Pinned by digest in the release overrides; required with
+    # manifests.daemonset_compute_kata.
+    nova_compute_kata: null
     nova_compute_ironic: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_compute_ssh: quay.io/airshipit/nova:2026.1-ubuntu_noble
     nova_conductor: quay.io/airshipit/nova:2026.1-ubuntu_noble
@@ -287,6 +293,12 @@ dependencies:
               labels:
                 application: ovn
                 component: ovn-controller
+        compute_kata:
+          pod:
+            - requireSameNode: true
+              labels:
+                application: ovn
+                component: ovn-controller
       openvswitch:
         compute:
           pod:
@@ -297,6 +309,8 @@ dependencies:
         compute_incus:
           # Incus ports are bound through OVN/OVS on the host. They do not use
           # the legacy Neutron OVS agent required by the libvirt compute pod.
+          pod: []
+        compute_kata:
           pod: []
       sriov:
         compute:
@@ -311,6 +325,8 @@ dependencies:
               labels:
                 application: neutron
                 component: neutron-sriov-agent
+        compute_kata:
+          pod: []
   static:
     api:
       jobs:
@@ -398,6 +414,21 @@ dependencies:
         - endpoint: internal
           service: compute_metadata
     compute_incus:
+      jobs:
+        - nova-db-sync
+        - nova-rabbit-init
+      services:
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: image
+        - endpoint: internal
+          service: compute
+        - endpoint: internal
+          service: network
+        - endpoint: internal
+          service: compute_metadata
+    compute_kata:
       jobs:
         - nova-db-sync
         - nova-rabbit-init
@@ -1455,6 +1486,49 @@ conf:
       # different CephFS filesystems.
       manila_cephfs_cluster_fsid: null
       manila_cephfs_filesystem_name: null
+  # Nova configuration of the Kata compute (openstack-nova-kata, ADR-056),
+  # rendered as nova-kata.conf. The paths are the host stack's, which the
+  # nova-kata-host chart installs with the same values; the pod mounts them
+  # at the host's paths.
+  nova_kata:
+    DEFAULT:
+      compute_driver: kata.driver.KataDriver
+      force_config_drive: true
+      instances_path: /var/lib/nova/instances
+      reserved_host_cpus: 2
+      reserved_host_memory_mb: 4096
+      allow_resize_to_same_host: false
+    kata:
+      runtime_socket: /run/nova-kata/runtime.sock
+      containerd_address: /run/containerd/containerd.sock
+      containerd_namespace: openstack
+      runtime_name: io.containerd.kata-dragonball.v2
+      snapshotter: nova-kata-file
+      maximum_sandboxes: 16
+      max_image_archive_bytes: "21474836480"
+      config_drive_dir: /var/lib/nova-kata/config-drives
+      kata_direct_volume_dir: /run/kata-containers/shared/direct-volumes
+      network_state_dir: /var/lib/nova-kata/networks
+      volume_state_dir: /var/lib/nova-kata/volumes
+      snapshot_state_dir: /var/lib/nova-kata/snapshots
+      max_config_drive_bytes: "67108864"
+      pids_limit: 4096
+      console_log_dir: /var/log/nova-kata
+      max_console_log_bytes: "16777216"
+      max_console_output_bytes: 102400
+      # ceph:<fsid> of the cluster Cinder's RBD volumes live in.
+      rbd_cluster_fsids: null
+      experimental_live_volumes: true
+      experimental_volume_growth: true
+      experimental_cinder_bfv: true
+      experimental_rbd_roots: true
+      experimental_image_backed_migration: true
+      experimental_interface_attach: true
+      experimental_pci_passthrough: true
+      experimental_rescue: true
+      experimental_device_tagging: true
+      experimental_evacuation: true
+      experimental_local_root_evacuation: true
   libvirt:
     address_search_enabled: true
     # When "address_search_enabled", get the IP address to be used as the target for live migration
@@ -2227,6 +2301,13 @@ pod:
       runtime: /run/incus
       lxcfs: /var/lib/lxcfs
       manila_shares: /var/lib/nova-incus/instances/incus-shares
+    nova_compute_kata:
+      nova_state: /var/lib/nova
+      state: /var/lib/nova-kata
+      console_log: /var/log/nova-kata
+      gateway_run: /run/nova-kata
+      gateway_socket: /run/nova-kata/runtime.sock
+      snapshotter_run: /run/nova-kata-snapshotter
   # -- Extra sidecar containers and volumes to inject into the nova API
   ## Deployments. Used e.g. by values_overrides/nova/tls-gateway-and-sidecar.yaml
   ## to add an nginx TLS-terminating sidecar. Keyed per API component.
@@ -2284,6 +2365,29 @@ pod:
           # Startup RPC failure is safe to restart: nova-compute has not yet
           # registered or begun consuming instance lifecycle work. Unlike a
           # runtime liveness probe, this cannot interrupt a long migration.
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            failureThreshold: 6
+            periodSeconds: 90
+            timeoutSeconds: 70
+    compute_kata:
+      default:
+        liveness:
+          enabled: false
+          params:
+            initialDelaySeconds: 60
+            failureThreshold: 3
+            periodSeconds: 90
+            timeoutSeconds: 70
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+            failureThreshold: 3
+            periodSeconds: 90
+            timeoutSeconds: 70
+        startup:
           enabled: true
           params:
             initialDelaySeconds: 30
@@ -2409,6 +2513,20 @@ pod:
           runAsUser: 0
           readOnlyRootFilesystem: true
         nova_compute_incus:
+          privileged: true
+          readOnlyRootFilesystem: true
+    nova_kata:
+      pod:
+        runAsUser: 42424
+        runAsGroup: 42424
+        fsGroup: 42424
+        fsGroupChangePolicy: OnRootMismatch
+      container:
+        nova_compute_kata_init:
+          runAsUser: 0
+          readOnlyRootFilesystem: true
+        # os-brick maps RBD volumes with the host's kernel and udev.
+        nova_compute_kata:
           privileged: true
           readOnlyRootFilesystem: true
     nova:
@@ -2566,6 +2684,12 @@ pod:
           operator: Equal
           value: "true"
           effect: NoSchedule
+    compute_kata:
+      enabled: true
+      tolerations:
+        - key: node-role.kubernetes.io/compute
+          operator: Exists
+          effect: NoSchedule
     nova:
       enabled: false
       tolerations:
@@ -2578,6 +2702,7 @@ pod:
   etcSources:
     nova_compute: []
     nova_compute_incus: []
+    nova_compute_kata: []
     nova_compute_ironic: []
     nova_api_metadata: []
     nova_api_osapi: []
@@ -2601,6 +2726,11 @@ pod:
     nova_compute_incus:
       init_container: null
       nova_compute_incus:
+        volumeMounts:
+        volumes:
+    nova_compute_kata:
+      init_container: null
+      nova_compute_kata:
         volumeMounts:
         volumes:
     nova_compute_ironic:
@@ -2688,6 +2818,10 @@ pod:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
+        compute_kata:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
     disruption_budget:
       metadata:
         min_available: 0
@@ -2713,6 +2847,12 @@ pod:
       limits:
         memory: "1024Mi"
     compute_incus:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+    compute_kata:
       requests:
         memory: "128Mi"
         cpu: "100m"
@@ -2925,6 +3065,7 @@ manifests:
   cron_job_archive_deleted_rows: false
   daemonset_compute: true
   daemonset_compute_incus: false
+  daemonset_compute_kata: false
   deployment_api_metadata: true
   deployment_api_osapi: true
   deployment_novncproxy: true

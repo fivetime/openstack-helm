@@ -1,0 +1,322 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+Nova compute of the Kata Containers driver (openstack-nova-kata, ADR-056).
+The driver talks only to the host's Kata gateway, whose socket the host
+stack (the nova-kata-host chart) serves under /run/nova-kata; the gateway's
+peer check names the user this container runs as (42424 on the host).
+*/}}
+
+{{- define "novaComputeKataProbeTemplate" }}
+exec:
+  command:
+    - python
+    - /tmp/health-probe.py
+    - --config-file
+    - /etc/nova/nova.conf
+    - --config-file
+    - /etc/nova/nova-kata.conf
+    - --config-dir
+    - /etc/nova/nova.conf.d
+    - --service-queue-name
+    - compute
+    - --service-process-name
+    - nova-kata-compute
+{{- if .Values.pod.use_fqdn.compute }}
+    - --use-fqdn
+{{- end }}
+{{- end }}
+
+{{- if .Values.manifests.daemonset_compute_kata }}
+{{- $envAll := . }}
+{{- $_ := required "images.tags.nova_compute_kata is required when manifests.daemonset_compute_kata=true" .Values.images.tags.nova_compute_kata }}
+{{- $serviceAccountName := "nova-compute" }}
+{{- $mounts := .Values.pod.mounts.nova_compute_kata.nova_compute_kata }}
+{{- $mountsInit := .Values.pod.mounts.nova_compute_kata.init_container }}
+{{- $etcSources := .Values.pod.etcSources.nova_compute_kata }}
+{{- $hostPaths := .Values.pod.host_paths.nova_compute_kata }}
+{{- $novaKataConf := .Values.conf.nova_kata }}
+{{- if ne (get (default (dict) $novaKataConf.DEFAULT) "compute_driver") "kata.driver.KataDriver" }}
+{{- fail "conf.nova_kata.DEFAULT.compute_driver must be kata.driver.KataDriver" }}
+{{- end }}
+{{- if eq .Values.manifests.secret_ks_etc true }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "nova-ks-etc")) }}
+{{- end }}
+
+{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "compute_kata" -}}
+{{- $_ := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
+
+{{- if and (not .Values.manifests.daemonset_compute) (not .Values.manifests.daemonset_compute_incus) }}
+{{ tuple $envAll "pod_dependency" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nova-compute-kata-etc
+type: Opaque
+data:
+  nova-kata.conf: {{ include "helm-toolkit.utils.to_oslo_conf" $novaKataConf | b64enc }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nova-compute-kata
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll .Chart.Name "compute-kata" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll .Chart.Name "compute-kata" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll "compute_kata" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll .Chart.Name "compute-kata" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        nova-compute-kata-etc-hash: {{ include "helm-toolkit.utils.to_oslo_conf" $novaKataConf | sha256sum }}
+{{ tuple "nova_compute_kata" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+    spec:
+{{ tuple "nova_compute_kata" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "nova_kata" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.agent.compute_kata.node_selector_key }}: {{ .Values.labels.agent.compute_kata.node_selector_value }}
+{{- if .Values.pod.tolerations.compute_kata.enabled }}
+      tolerations:
+{{ toYaml .Values.pod.tolerations.compute_kata.tolerations | indent 8 }}
+{{- end }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      initContainers:
+{{ tuple $envAll "pod_dependency" $mountsInit | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        - name: nova-compute-kata-init
+{{ tuple $envAll "nova_compute_kata" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "nova_kata" "container" "nova_compute_kata_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              mkdir -p /var/lib/nova/instances
+              chown {{ .Values.pod.security_context.nova_kata.pod.runAsUser }}:{{ .Values.pod.security_context.nova_kata.pod.runAsGroup }} \
+                /var/lib/nova /var/lib/nova/instances
+              # The gateway serves before this compute starts.
+              test -S {{ $hostPaths.gateway_socket | quote }}
+{{- if and (empty .Values.conf.nova.DEFAULT.host) (.Values.pod.use_fqdn.compute) }}
+              cat > /run/nova-kata-pod/nova-compute-fqdn.conf <<EOF
+              [DEFAULT]
+              host = $(hostname --fqdn)
+              EOF
+{{- else }}
+              rm -f /run/nova-kata-pod/nova-compute-fqdn.conf
+{{- end }}
+              cat > /run/nova-kata-pod/nova-compute-messaging.conf <<EOF
+              [oslo_messaging_rabbit]
+              # As the Incus compute: oslo.messaging bug 2110957.
+              use_queue_manager = false
+              EOF
+          volumeMounts:
+            - name: varlibnova-kata
+              mountPath: /var/lib/nova
+            - name: nova-kata-gateway
+              mountPath: {{ $hostPaths.gateway_run }}
+              readOnly: true
+              mountPropagation: HostToContainer
+            - name: nova-kata-pod
+              mountPath: /run/nova-kata-pod
+{{ if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
+      containers:
+        - name: nova-compute
+{{ tuple $envAll "nova_compute_kata" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.compute_kata | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "nova_kata" "container" "nova_compute_kata" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          env:
+            - name: RPC_PROBE_TIMEOUT
+              value: "{{ .Values.pod.probes.rpc_timeout }}"
+            - name: RPC_PROBE_RETRIES
+              value: "{{ .Values.pod.probes.rpc_retries }}"
+{{- if .Values.secrets.tls.ca }}
+            - name: REQUESTS_CA_BUNDLE
+              value: /etc/ssl/certs/openstack-helm.crt
+{{- end }}
+          command:
+            - nova-kata-compute
+            - --config-file
+            - /etc/nova/nova.conf
+            - --config-file
+            - /etc/nova/nova-kata.conf
+            - --config-dir
+            - /etc/nova/nova.conf.d
+            - --config-file
+            - /run/nova-kata-pod/nova-compute-messaging.conf
+{{- if and (empty .Values.conf.nova.DEFAULT.host) (.Values.pod.use_fqdn.compute) }}
+            - --config-file
+            - /run/nova-kata-pod/nova-compute-fqdn.conf
+{{- end }}
+{{ dict "envAll" $envAll "component" "compute_kata" "container" "default" "type" "liveness" "probeTemplate" (include "novaComputeKataProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+{{ dict "envAll" $envAll "component" "compute_kata" "container" "default" "type" "readiness" "probeTemplate" (include "novaComputeKataProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+{{ dict "envAll" $envAll "component" "compute_kata" "container" "default" "type" "startup" "probeTemplate" (include "novaComputeKataProbeTemplate" $envAll | fromYaml) | include "helm-toolkit.snippets.kubernetes_probe" | indent 10 }}
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: oslo-lock-path
+              mountPath: {{ .Values.conf.nova.oslo_concurrency.lock_path }}
+            - name: nova-bin
+              mountPath: /tmp/health-probe.py
+              subPath: health-probe.py
+              readOnly: true
+            - name: nova-etc
+              mountPath: /etc/nova/nova.conf
+              subPath: nova-compute.conf
+              readOnly: true
+            - name: nova-etc
+              mountPath: /etc/sudoers.d/kolla_nova_sudoers
+              subPath: nova_sudoers
+              readOnly: true
+            - name: nova-etc
+              mountPath: /etc/nova/rootwrap.conf
+              subPath: rootwrap.conf
+              readOnly: true
+            {{- range $key, $value := $envAll.Values.conf.rootwrap_filters }}
+            {{- if ( has "compute" $value.pods ) }}
+            {{- $filePrefix := replace "_" "-" $key }}
+            {{- $rootwrapFile := printf "/etc/nova/rootwrap.d/%s.filters" $filePrefix }}
+            - name: nova-etc
+              mountPath: {{ $rootwrapFile }}
+              subPath: {{ base $rootwrapFile }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            - name: nova-compute-kata-etc
+              mountPath: /etc/nova/nova-kata.conf
+              subPath: nova-kata.conf
+              readOnly: true
+            - name: nova-kata-pod
+              mountPath: /run/nova-kata-pod
+              readOnly: true
+            - name: nova-etc-snippets
+              mountPath: /etc/nova/nova.conf.d
+              readOnly: true
+            {{- if .Values.conf.nova.DEFAULT.log_config_append }}
+            - name: nova-etc
+              mountPath: {{ .Values.conf.nova.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.nova.DEFAULT.log_config_append }}
+              readOnly: true
+            {{- end }}
+            - name: varlibnova-kata
+              mountPath: /var/lib/nova
+              mountPropagation: Bidirectional
+            # The gateway's socket and the snapshotter's admin socket, and
+            # the host state the driver reads, at the host's own paths: the
+            # driver's [kata] options name them.
+            - name: nova-kata-gateway
+              mountPath: {{ $hostPaths.gateway_run }}
+              mountPropagation: HostToContainer
+            - name: nova-kata-snapshotter
+              mountPath: {{ $hostPaths.snapshotter_run }}
+              mountPropagation: HostToContainer
+            - name: nova-kata-state
+              mountPath: {{ $hostPaths.state }}
+              mountPropagation: HostToContainer
+            - name: nova-kata-console
+              mountPath: {{ $hostPaths.console_log }}
+              readOnly: true
+            - name: host-dev
+              mountPath: /dev
+              mountPropagation: HostToContainer
+            - name: host-udev
+              mountPath: /run/udev
+              readOnly: true
+            - name: libmodules
+              mountPath: /lib/modules
+              readOnly: true
+            - name: host-etc-ceph
+              mountPath: /etc/ceph
+              readOnly: true
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{- dict "enabled" .Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{ if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: oslo-lock-path
+          emptyDir: {}
+        - name: nova-bin
+          configMap:
+            name: nova-bin
+            defaultMode: 0555
+        - name: nova-etc
+          secret:
+            secretName: nova-etc
+            defaultMode: 0444
+        - name: nova-compute-kata-etc
+          secret:
+            secretName: nova-compute-kata-etc
+            defaultMode: 0444
+        - name: nova-kata-pod
+          emptyDir: {}
+        - name: nova-etc-snippets
+{{- if $etcSources }}
+          projected:
+            sources:
+{{ toYaml $etcSources | indent 14 }}
+{{- else }}
+          emptyDir: {}
+{{- end }}
+        - name: varlibnova-kata
+          hostPath:
+            path: {{ $hostPaths.nova_state }}
+            type: DirectoryOrCreate
+        - name: nova-kata-gateway
+          hostPath:
+            path: {{ $hostPaths.gateway_run }}
+            type: Directory
+        - name: nova-kata-snapshotter
+          hostPath:
+            path: {{ $hostPaths.snapshotter_run }}
+            type: Directory
+        - name: nova-kata-state
+          hostPath:
+            path: {{ $hostPaths.state }}
+            type: Directory
+        - name: nova-kata-console
+          hostPath:
+            path: {{ $hostPaths.console_log }}
+            type: Directory
+        - name: host-dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: host-udev
+          hostPath:
+            path: /run/udev
+            type: Directory
+        - name: libmodules
+          hostPath:
+            path: /lib/modules
+            type: Directory
+        - name: host-etc-ceph
+          hostPath:
+            path: /etc/ceph
+            type: Directory
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{- dict "enabled" .Values.tls.oslo_messaging "name" "client-certs" "secretName" .Values.secrets.tls.client.nova | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{ if $mounts.volumes }}{{ toYaml $mounts.volumes | indent 8 }}{{ end }}
+{{- end }}

@@ -1,0 +1,69 @@
+# The Nova Kata host stack (openstack-nova-kata ADR-056). An init container
+# writes the host bundle of the image to the node and runs the driver's
+# tools/production/nova_kata_host_install.sh there, in the host's
+# namespaces: containerd, the snapshotter and the gateway are systemd units
+# of the host, so a sandbox outlives this pod. The main container only
+# reports whether the gateway serves.
+
+images:
+  # Pinned by digest in the release overrides.
+  nova_kata_host: null
+  pull_policy: IfNotPresent
+
+labels:
+  node_selector_key: openstack-kata-compute-node
+  node_selector_value: enabled
+
+pod:
+  tolerations:
+    - key: node-role.kubernetes.io/compute
+      operator: Exists
+      effect: NoSchedule
+  # Where the bundle of each image is staged on the node.
+  host_staging: /var/lib/nova-kata-host
+
+# The KATA_* values of the host (devstack/settings names), rendered as the
+# installer's environment file. The nova chart's conf.nova_kata must agree.
+host_env:
+  KATA_SNAPSHOTTER: nova-kata-file
+  KATA_VMM_PROFILES: "qemu=io.containerd.kata.v2=/etc/nova-kata/runtime-rs/configuration-qemu.toml dragonball=io.containerd.kata-dragonball.v2=/etc/nova-kata/runtime-rs/configuration-dragonball.toml clh=io.containerd.kata-clh.v2=/etc/nova-kata/runtime-rs/configuration-clh.toml"
+  KATA_DEFAULT_VMM: dragonball
+  KATA_MAXIMUM_SANDBOXES: "16"
+  KATA_CONFIG_DRIVE_DIR: /var/lib/nova-kata/config-drives
+  KATA_NETWORK_STATE_DIR: /var/lib/nova-kata/networks
+  KATA_VOLUME_STATE_DIR: /var/lib/nova-kata/volumes
+  KATA_SNAPSHOT_STATE_DIR: /var/lib/nova-kata/snapshots
+  KATA_SHARE_STATE_DIR: /var/lib/nova-kata/share-records
+  KATA_SHARE_MOUNT_DIR: /var/lib/nova-kata/shares
+  KATA_CONSOLE_IO_DIR: /var/lib/nova-kata/console-io
+  KATA_SNAPSHOTTER_STATE_DIR: /var/lib/nova-kata-snapshotter/state
+  KATA_FILE_ROOT: /var/lib/nova-kata-snapshotter/files
+  KATA_FILE_SCRATCH: /var/lib/nova-kata-snapshotter/scratch/scratch.ext4
+  KATA_FILE_MAX_BYTES: "17179869184"
+  KATA_EXPERIMENTAL_LIVE_VOLUMES: "True"
+  KATA_EXPERIMENTAL_VOLUME_GROWTH: "True"
+  KATA_EXPERIMENTAL_VOLUME_QOS: "True"
+  KATA_EXPERIMENTAL_CINDER_BFV: "True"
+  KATA_EXPERIMENTAL_IMAGE_BACKED_MIGRATION: "True"
+  KATA_EXPERIMENTAL_INTERFACE_ATTACH: "True"
+  KATA_EXPERIMENTAL_LIVE_INTERFACES: "True"
+  KATA_EXPERIMENTAL_RESCUE: "True"
+  KATA_EXPERIMENTAL_RBD_ROOTS: "True"
+  KATA_RBD_ROOTS_POOL: null
+  KATA_RBD_ROOTS_CLIENT: null
+  KATA_RBD_ROOTS_CONF: /etc/ceph/ceph.conf
+
+# Ceph client files the host needs: the snapshotter's shared roots and the
+# RBD maps os-brick makes for the compute (the pod mounts the host's
+# /etc/ceph). ceph.conf comes from a ConfigMap, each keyring from a Secret.
+ceph:
+  enabled: true
+  conf_configmap: null
+  conf_key: ceph.conf
+  # - user: cinder
+  #   secret: pvc-ceph-client-key
+  #   key: key
+  keyrings: []
+
+manifests:
+  daemonset: true

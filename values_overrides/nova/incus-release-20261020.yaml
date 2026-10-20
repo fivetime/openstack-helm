@@ -1,0 +1,9 @@
+# Nova Incus driver 4ca67dd (Flavor-granted container nesting via
+# incus:nesting_allowed_projects, CUSTOM_INCUS_NESTING trait required by
+# nesting Flavors, staged final-delete refusal) on Nova stable/2026.2
+# 8df1922926; SDK 7cf9852. pip freeze differs from 7a511df6 only by certifi
+# and setuptools. openstack-helm-images 57a69a7, Build All Images run
+# 39365293868. Apply after current overrides.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:4763e26f4b83c8ce5f38fdaff292fa6248758d311c96ec882919b016c8e8ce03

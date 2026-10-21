@@ -91,6 +91,12 @@ network:
     interface_mtu: null
   worker:
     interface_mtu: null
+  driver_agent:
+    # Declared as the container's `metrics` port when set, so a PodMonitor
+    # can select it by name. The agent only listens there once
+    # [incus_worker] controller_metrics_host binds an address the pod
+    # network reaches; the default is the loopback.
+    metrics_port: null
   # The management network as a secondary pod interface, through Multus and
   # ovs-cni, instead of a host interface the pod has to share a netns with.
   # A pod attached this way can run on any OVN chassis node: the ovs-cni

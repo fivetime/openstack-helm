@@ -138,6 +138,12 @@ spec:
             - /etc/octavia/octavia.conf
             - --config-dir
             - /etc/octavia/octavia.conf.d
+{{- with $envAll.Values.network.driver_agent.metrics_port }}
+          ports:
+            - name: metrics
+              containerPort: {{ . }}
+              protocol: TCP
+{{- end }}
           volumeMounts:
             - name: pod-tmp
               mountPath: /tmp

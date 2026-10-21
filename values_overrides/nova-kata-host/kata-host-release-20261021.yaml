@@ -1,0 +1,4 @@
+# nova-kata-host image of openstack-nova-kata e9aebff, bundle 20261021
+# (sha256 4ae87921...; gateway 3c2c25f7, snapshotter 2322f437).
+images:
+  nova_kata_host: ghcr.io/fivetime/openstackhelm/nova-kata-host@sha256:b5d1eb7f358f556311a423c314f2a6cf41301ad60233a13f36875cfcba6abb98

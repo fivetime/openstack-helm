@@ -1,0 +1,5 @@
+# nova-kata image of openstack-nova-kata e9aebff (ADR-057 accepted:
+# set_admin_password through the guest chpasswd, on by default).
+images:
+  tags:
+    nova_compute_kata: ghcr.io/fivetime/openstackhelm/nova-kata@sha256:0f4bec063646ada067846b17d89df49794fed67f86388abf78f7acfb1a0db0a2

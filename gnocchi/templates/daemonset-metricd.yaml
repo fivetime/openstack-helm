@@ -40,6 +40,7 @@ spec:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "gnocchi_metricd" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
       serviceAccountName: {{ $serviceAccountName }}
       nodeSelector:
@@ -51,6 +52,7 @@ spec:
 {{ tuple $envAll "metricd" $mounts_gnocchi_metricd_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         - name: ceph-keyring-placement
 {{ tuple $envAll "gnocchi_api" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.metricd | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /tmp/ceph-keyring.sh
           volumeMounts:

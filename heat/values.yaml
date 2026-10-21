@@ -38,19 +38,19 @@ labels:
 images:
   tags:
     test: docker.io/xrally/xrally-openstack:2.0.0
-    bootstrap: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    db_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    heat_db_sync: quay.io/airshipit/heat:2026.1-ubuntu_noble
-    db_drop: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    bootstrap: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    db_init: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    heat_db_sync: quay.io/airshipit/heat:2026.2-ubuntu_resolute
+    db_drop: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     rabbit_init: docker.io/rabbitmq:4.3.5-management
-    ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_service: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_endpoints: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    heat_api: quay.io/airshipit/heat:2026.1-ubuntu_noble
-    heat_cfn: quay.io/airshipit/heat:2026.1-ubuntu_noble
-    heat_engine: quay.io/airshipit/heat:2026.1-ubuntu_noble
-    heat_engine_cleaner: quay.io/airshipit/heat:2026.1-ubuntu_noble
-    heat_purge_deleted: quay.io/airshipit/heat:2026.1-ubuntu_noble
+    ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    heat_api: quay.io/airshipit/heat:2026.2-ubuntu_resolute
+    heat_cfn: quay.io/airshipit/heat:2026.2-ubuntu_resolute
+    heat_engine: quay.io/airshipit/heat:2026.2-ubuntu_resolute
+    heat_engine_cleaner: quay.io/airshipit/heat:2026.2-ubuntu_resolute
+    heat_purge_deleted: quay.io/airshipit/heat:2026.2-ubuntu_resolute
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
@@ -1079,6 +1079,8 @@ pod:
     engine: 1
   lifecycle:
     upgrades:
+      statefulsets:
+        pod_replacement_strategy: RollingUpdate
       deployments:
         revision_history: 3
         pod_replacement_strategy: RollingUpdate
@@ -1278,7 +1280,6 @@ manifests:
   cron_job_purge_deleted: true
   deployment_api: true
   deployment_cfn: true
-  deployment_engine: true
   job_bootstrap: true
   job_db_init: true
   # -- Render the MariaDB Database/User/Grant/Connection custom resources
@@ -1316,7 +1317,7 @@ manifests:
   secret_registry: true
   service_api: true
   service_cfn: true
-  statefulset_engine: false
+  statefulset_engine: true
 
 # -- Extra K8s manifests to deploy. Either a list or a map of manifests.
 ## Note: Supports use of custom Helm templates

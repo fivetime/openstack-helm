@@ -14,7 +14,8 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_server }}
 {{- $envAll := . }}
-{{- $mounts := index (index (.Values.pod.mounts | default dict) "tacker_server" | default dict) "tacker_server" | default dict }}
+{{- $mounts_tacker_server := .Values.pod.mounts.tacker_server.tacker_server }}
+{{- $mounts_tacker_server_init := .Values.pod.mounts.tacker_server.init_container }}
 {{- $serviceAccountName := "tacker-server" }}
 {{ tuple $envAll "server" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
@@ -29,10 +30,14 @@ spec:
     matchLabels:
 {{ tuple $envAll "tacker" "server" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
   replicas: {{ .Values.pod.replicas.server }}
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
       labels:
 {{ tuple $envAll "tacker" "server" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+{{ tuple "tacker_server" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
       nodeSelector:
         {{ .Values.labels.server.node_selector_key }}: {{ .Values.labels.server.node_selector_value }}
@@ -45,12 +50,13 @@ spec:
         - name: tacker-server
           image: {{ .Values.images.tags.tacker_server }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll $envAll.Values.pod.resources.server | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /bin/bash
             - -c
             - /tmp/tacker-server.sh
           volumeMounts:
-{{ if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 10 }}{{ end }}
+{{ if $mounts_tacker_server.volumeMounts }}{{ toYaml $mounts_tacker_server.volumeMounts | indent 10 }}{{ end }}
           - name: localtime
             mountPath: "/etc/localtime"
             readOnly: yes
@@ -85,9 +91,9 @@ spec:
           - name: t-api
             containerPort: 9890
       initContainers:
-{{ tuple $envAll "server" tuple | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "server" $mounts_tacker_server_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       volumes:
-{{ if $mounts.volumes }}{{ toYaml $mounts.volumes | indent 8 }}{{ end }}
+{{ if $mounts_tacker_server.volumes }}{{ toYaml $mounts_tacker_server.volumes | indent 8 }}{{ end }}
         - name: localtime
           hostPath:
             path: "/etc/localtime"

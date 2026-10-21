@@ -83,11 +83,9 @@ function start () {
     # if there are extra panels and the image has support for it, compile the translations
     {{- range .Values.conf.horizon.extra_panels }}
     PANEL_DIR="${SITE_PACKAGES_ROOT}/{{ . }}"
-    # Only run compilemessages when the panel actually ships .po files;
-    # some plugins (e.g. blazar_dashboard, tacker_horizon in kolla images)
-    # have no locale tree, and Django would error out with
-    # "This script should be run from the Django Git checkout..." aborting startup.
-    if [ -d ${PANEL_DIR} ] && ls ${PANEL_DIR}/locale/*/LC_MESSAGES/*.po >/dev/null 2>&1; then
+    # compilemessages fails when it finds no locale directory, which
+    # would abort the start-up for panels that ship no translations.
+    if [ -n "$(find ${PANEL_DIR} -type d -name locale 2>/dev/null)" ]; then
       cd ${PANEL_DIR}; /tmp/manage.py compilemessages
     fi
     {{- end }}

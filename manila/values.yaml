@@ -48,20 +48,20 @@ jobs:
 
 images:
   tags:
-    bootstrap: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    bootstrap: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     test: docker.io/xrally/xrally-openstack:2.0.0
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
-    db_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    manila_db_sync: quay.io/airshipit/manila:2026.1-ubuntu_noble
-    db_drop: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_service: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_endpoints: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    manila_api: quay.io/airshipit/manila:2026.1-ubuntu_noble
-    manila_data: quay.io/airshipit/manila:2026.1-ubuntu_noble
-    manila_scheduler: quay.io/airshipit/manila:2026.1-ubuntu_noble
-    manila_share: quay.io/airshipit/manila:2026.1-ubuntu_noble
-    manila_db_purge: quay.io/airshipit/manila:2026.1-ubuntu_noble
+    db_init: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    manila_db_sync: quay.io/airshipit/manila:2026.2-ubuntu_resolute
+    db_drop: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    manila_api: quay.io/airshipit/manila:2026.2-ubuntu_resolute
+    manila_data: quay.io/airshipit/manila:2026.2-ubuntu_resolute
+    manila_scheduler: quay.io/airshipit/manila:2026.2-ubuntu_resolute
+    manila_share: quay.io/airshipit/manila:2026.2-ubuntu_resolute
+    manila_db_purge: quay.io/airshipit/manila:2026.2-ubuntu_resolute
     rabbit_init: docker.io/rabbitmq:4.3.5-management
     image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
@@ -89,6 +89,9 @@ pod:
         manila_share:
           readOnlyRootFilesystem: true
           privileged: true
+        ceph_keyring_placement:
+          runAsUser: 0
+          readOnlyRootFilesystem: true
     db_purge:
       pod:
         runAsUser: 42424
@@ -100,6 +103,9 @@ pod:
       pod:
         runAsUser: 42424
       container:
+        manila_test_ks_user:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         manila_test:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -190,6 +196,8 @@ pod:
     share: 1
   lifecycle:
     upgrades:
+      statefulsets:
+        pod_replacement_strategy: RollingUpdate
       deployments:
         revision_history: 3
         pod_replacement_strategy: RollingUpdate
@@ -307,11 +315,11 @@ network:
       enabled: false
       port: 30486
   share:
-    # Mount the host's /run/openvswitch (OVS db.sock) into manila-share. Only drivers
-    # that plug into OVS themselves need it (generic driver / OVSInterfaceDriver with
-    # driver_handles_share_servers=true). CephFS-native, NFS/CIFS-native and other
-    # DHSS=false backends do not; with the hostPath (type: Directory) enabled the pod is
-    # unschedulable on any node that does not run openvswitch.
+    # -- Mount the host's /run/openvswitch into manila-share. Only drivers
+    ## that plug share servers into OVS themselves need it (the generic
+    ## driver with driver_handles_share_servers=true). CephFS, NFS and the
+    ## other DHSS=false backends do not, and the hostPath (type Directory)
+    ## makes the pod unschedulable on nodes that do not run Open vSwitch.
     openvswitch: true
 
 network_policy:
@@ -456,6 +464,12 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_messaging
+    tests:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: sharev2
 
 conf:
   paste:

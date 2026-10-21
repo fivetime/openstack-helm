@@ -12,27 +12,46 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.deployment_conductor }}
+{{/*
+manifests.deployment_conductor defaulted to true, so an override that set it
+to false to disable the conductor would otherwise be silently ignored after
+the rename and the conductor would start.
+*/}}
+{{- if hasKey .Values.manifests "deployment_conductor" }}
+{{- fail "manifests.deployment_conductor has been renamed to manifests.statefulset_conductor" }}
+{{- end }}
+
+{{- if .Values.manifests.statefulset_conductor }}
 {{- $envAll := . }}
-{{- $mounts := index (index (.Values.pod.mounts | default dict) "tacker_conductor" | default dict) "tacker_conductor" | default dict }}
+{{- $mounts_tacker_conductor := .Values.pod.mounts.tacker_conductor.tacker_conductor }}
+{{- $mounts_tacker_conductor_init := .Values.pod.mounts.tacker_conductor.init_container }}
 {{- $serviceAccountName := "tacker-conductor" }}
 {{ tuple $envAll "conductor" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: tacker-conductor
   labels:
 {{ tuple $envAll "tacker" "conductor" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
+  # Not tacker-conductor, as neutron's naming would have it: the chart used to
+  # render a ClusterIP service of that name, and a service's clusterIP cannot
+  # be changed to None in place, so reusing the name would fail the upgrade.
+  serviceName: tacker-conductor-headless
   selector:
     matchLabels:
 {{ tuple $envAll "tacker" "conductor" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
   replicas: {{ .Values.pod.replicas.conductor }}
+  podManagementPolicy: Parallel
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_statefulset" | indent 2 }}
   template:
     metadata:
       labels:
 {{ tuple $envAll "tacker" "conductor" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+{{ tuple "tacker_conductor" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
       nodeSelector:
         {{ .Values.labels.conductor.node_selector_key }}: {{ .Values.labels.conductor.node_selector_value }}
@@ -45,12 +64,13 @@ spec:
         - name: tacker-conductor
           image: {{ .Values.images.tags.tacker_conductor }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll $envAll.Values.pod.resources.conductor | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /bin/bash
             - -c
             - /tmp/tacker-conductor.sh
           volumeMounts:
-{{ if $mounts.volumeMounts }}{{ toYaml $mounts.volumeMounts | indent 10 }}{{ end }}
+{{ if $mounts_tacker_conductor.volumeMounts }}{{ toYaml $mounts_tacker_conductor.volumeMounts | indent 10 }}{{ end }}
           - name: localtime
             mountPath: "/etc/localtime"
             readOnly: yes
@@ -81,13 +101,10 @@ spec:
             readOnly: true
           - name: oslo-lock-path
             mountPath: {{ .Values.conf.tacker.oslo_concurrency.lock_path }}
-          ports:
-          - name: conductor
-            containerPort: 5672
       initContainers:
-{{ tuple $envAll "server" tuple | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "conductor" $mounts_tacker_conductor_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       volumes:
-{{ if $mounts.volumes }}{{ toYaml $mounts.volumes | indent 8 }}{{ end }}
+{{ if $mounts_tacker_conductor.volumes }}{{ toYaml $mounts_tacker_conductor.volumes | indent 8 }}{{ end }}
         - name: localtime
           hostPath:
             path: "/etc/localtime"

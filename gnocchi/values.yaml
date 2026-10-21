@@ -43,9 +43,9 @@ images:
     # an indexer
     db_init: quay.io/attcomdev/ubuntu-source-gnocchi-api:3.0.3
     db_sync: quay.io/attcomdev/ubuntu-source-gnocchi-api:3.0.3
-    ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_service: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_endpoints: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     gnocchi_api: quay.io/attcomdev/ubuntu-source-gnocchi-api:3.0.3
     gnocchi_statsd: quay.io/attcomdev/ubuntu-source-gnocchi-statsd:3.0.3
     gnocchi_metricd: quay.io/attcomdev/ubuntu-source-gnocchi-metricd:3.0.3
@@ -103,8 +103,18 @@ dependencies:
           service: identity
         - endpoint: internal
           service: oslo_db
+    bootstrap:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: metric
     clean:
       services: null
+    db_drop:
+      services:
+        - endpoint: internal
+          service: oslo_db
     db_init:
       services:
         - endpoint: internal
@@ -281,6 +291,12 @@ pod:
       limits:
         memory: "1024Mi"
     jobs:
+      bootstrap:
+        requests:
+          memory: "124Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
       clean:
         requests:
           memory: "124Mi"
@@ -288,6 +304,18 @@ pod:
         limits:
           memory: "1024Mi"
       db_init:
+        requests:
+          memory: "124Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+      db_init_indexer:
+        requests:
+          memory: "124Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+      db_drop:
         requests:
           memory: "124Mi"
           cpu: "100m"
@@ -320,6 +348,12 @@ pod:
       resources_cleaner:
         requests:
           memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+      storage_init:
+        requests:
+          memory: "124Mi"
           cpu: "100m"
         limits:
           memory: "1024Mi"

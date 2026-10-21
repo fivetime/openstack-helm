@@ -34,22 +34,22 @@ labels:
 
 images:
   tags:
-    ironic_manage_cleaning_network: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ironic_retrive_swift_config: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    ironic_manage_cleaning_network: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ironic_retrive_swift_config: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     # Bootstrap image requires curl
-    bootstrap: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    db_drop: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    db_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ironic_db_sync: quay.io/airshipit/ironic:2026.1-ubuntu_noble
-    ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_service: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_endpoints: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    bootstrap: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    db_drop: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    db_init: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ironic_db_sync: quay.io/airshipit/ironic:2026.2-ubuntu_resolute
+    ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     rabbit_init: docker.io/rabbitmq:4.3.5-management
-    ironic_api: quay.io/airshipit/ironic:2026.1-ubuntu_noble
-    ironic_conductor: quay.io/airshipit/ironic:2026.1-ubuntu_noble
-    ironic_novncproxy: quay.io/airshipit/ironic:2026.1-ubuntu_noble
-    ironic_pxe: quay.io/airshipit/ironic:2026.1-ubuntu_noble
-    ironic_pxe_init: quay.io/airshipit/ironic:2026.1-ubuntu_noble
+    ironic_api: quay.io/airshipit/ironic:2026.2-ubuntu_resolute
+    ironic_conductor: quay.io/airshipit/ironic:2026.2-ubuntu_resolute
+    ironic_novncproxy: quay.io/airshipit/ironic:2026.2-ubuntu_resolute
+    ironic_pxe: quay.io/airshipit/ironic:2026.2-ubuntu_resolute
+    ironic_pxe_init: quay.io/airshipit/ironic:2026.2-ubuntu_resolute
     ironic_pxe_http: docker.io/nginx:1.29.8
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     image_repo_sync: docker.io/docker:17.07.0
@@ -149,18 +149,7 @@ conf:
     neutron:
       auth_type: password
     pxe:
-      # -- Only paths are set here. [pxe]ipxe_enabled no longer exists in
-      ## ironic -- iPXE is selected per node through the boot interface, and
-      ## ipxe is the first of the default enabled_boot_interfaces -- and the
-      ## idiom that went with it has to go too: pointing pxe_config_template and pxe_bootfile_name at the
-      ## iPXE template and loader hands an iPXE config to any node booting with
-      ## boot_interface=pxe, which cannot parse it. ironic's own defaults are
-      ## already right (ipxe_config_template, ipxe_bootfile_name=undionly.kpxe,
-      ## uefi_ipxe_bootfile_name=snponly.efi), and the pxe-init script stages
-      ## exactly those loaders into tftp_root.
-      ## pxe_append_params was renamed kernel_append_params; ipa-debug is
-      ## dropped because ironic appends it itself whenever debug is on.
-      kernel_append_params: "nofb nomodeset vga=normal"
+      kernel_append_params: "nofb nomodeset vga=normal ipa-debug=1"
       images_path: /var/lib/openstack-helm/ironic/images
       instance_master_path: /var/lib/openstack-helm/ironic/master_images
       tftp_root: /var/lib/openstack-helm/tftpboot
@@ -392,18 +381,14 @@ bootstrap:
       enabled: true
       ks_user: ironic
     # NOTE: if source_base is null the source will be used as is
-    # -- tinyipa is retired: 2025.1 is the last build upstream ever published,
-    ## so a 2026.1 chart pinned to it ships a ramdisk a release behind the
-    ## conductor with no further updates. The diskimage-builder ramdisks are the
-    ## maintained line and are published per stable branch.
     source_base: https://tarballs.opendev.org/openstack/ironic-python-agent/dib/files
     structured:
       ironic-agent.initramfs:
-        source: ipa-centos9-stable-2026.1.initramfs
+        source: ipa-debian-stable-2026.1.initramfs
         disk_format: ari
         container_format: ari
       ironic-agent.kernel:
-        source: ipa-centos9-stable-2026.1.kernel
+        source: ipa-debian-stable-2026.1.kernel
         disk_format: aki
         container_format: aki
   object_store:

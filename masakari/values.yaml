@@ -13,23 +13,23 @@
 ---
 images:
   tags:
-    db_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    db_sync: quay.io/airshipit/masakari:2026.1-ubuntu_noble
-    db_drop: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_endpoints: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_service: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    masakari_api: quay.io/airshipit/masakari:2026.1-ubuntu_noble
-    masakari_engine: quay.io/airshipit/masakari:2026.1-ubuntu_noble
-    masakari_host_monitor: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
-    masakari_process_monitor: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
-    masakari_instance_monitor: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
-    masakari_introspective_instance_monitor: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
+    db_init: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    db_sync: quay.io/airshipit/masakari:2026.2-ubuntu_resolute
+    db_drop: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    masakari_api: quay.io/airshipit/masakari:2026.2-ubuntu_resolute
+    masakari_engine: quay.io/airshipit/masakari:2026.2-ubuntu_resolute
+    masakari_host_monitor: quay.io/airshipit/masakari-monitors:2026.2-ubuntu_resolute
+    masakari_process_monitor: quay.io/airshipit/masakari-monitors:2026.2-ubuntu_resolute
+    masakari_instance_monitor: quay.io/airshipit/masakari-monitors:2026.2-ubuntu_resolute
+    masakari_introspective_instance_monitor: quay.io/airshipit/masakari-monitors:2026.2-ubuntu_resolute
     # The Incus monitor needs an image built from a masakari-monitors tree
     # that carries the masakari-incus-exporter and masakari-incus-notifier
     # commands.
-    masakari_incus_exporter: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
-    masakari_incus_notifier: quay.io/airshipit/masakari-monitors:2026.1-ubuntu_noble
+    masakari_incus_exporter: quay.io/airshipit/masakari-monitors:2026.2-ubuntu_resolute
+    masakari_incus_notifier: quay.io/airshipit/masakari-monitors:2026.2-ubuntu_resolute
     rabbit_init: docker.io/rabbitmq:4.3.5-management
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
   pull_policy: "IfNotPresent"
@@ -267,6 +267,36 @@ dependencies:
       services:
         - endpoint: internal
           service: identity
+    masakari_instance_monitor:
+      jobs:
+        - masakari-ks-user
+        - masakari-ks-endpoints
+        - masakari-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: instance_ha
+    masakari_introspective_instance_monitor:
+      jobs:
+        - masakari-ks-user
+        - masakari-ks-endpoints
+        - masakari-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: instance_ha
+    masakari_process_monitor:
+      jobs:
+        - masakari-ks-user
+        - masakari-ks-endpoints
+        - masakari-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: instance_ha
     db_init:
       services:
         - endpoint: internal
@@ -387,6 +417,7 @@ pod:
   replicas:
     masakari_api: 1
     masakari_engine: 1
+    masakari_host_monitor: 1
   lifecycle:
     upgrades:
       deployments:
@@ -401,10 +432,24 @@ pod:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
+        masakari_instance_monitor:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+        masakari_introspective_instance_monitor:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+        masakari_process_monitor:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
         incus_monitor:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
+      statefulsets:
+        pod_replacement_strategy: RollingUpdate
     disruption_budget:
       masakari_api:
         min_available: 0
@@ -725,7 +770,15 @@ manifests:
   job_ks_endpoints: true
   job_ks_service: true
   deployment_api: true
-  deployment_engine: true
+  # NOTE: The engine runs as a StatefulSet because masakari's RPC service
+  # consumes from a per-server `<topic>.<host>` queue named after its host,
+  # which defaults to the hostname. Under a Deployment that is the pod name,
+  # so it changed on every rollout, and quorum queues cannot be declared
+  # `auto_delete`, which left the previous queues behind each time. The
+  # StatefulSet gives each pod a stable hostname (masakari-engine-0,
+  # masakari-engine-1, ...) that is reused across restarts. This also renders
+  # the headless service those DNS names are published through.
+  statefulset_engine: true
   configmap_bin: true
   configmap_etc: true
   secret_db: true

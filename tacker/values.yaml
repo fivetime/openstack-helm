@@ -32,15 +32,15 @@ labels:
 images:
   pull_policy: IfNotPresent
   tags:
-    tacker_server: quay.io/airshipit/tacker:2026.1-ubuntu_noble
-    tacker_conductor: quay.io/airshipit/tacker:2026.1-ubuntu_noble
-    scripted_test: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    db_init: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    db_drop: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    tacker_db_sync: quay.io/airshipit/tacker:2026.1-ubuntu_noble
-    ks_endpoints: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_service: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
-    ks_user: quay.io/airshipit/openstack-client:2026.1-ubuntu_noble
+    tacker_server: quay.io/airshipit/tacker:2026.2-ubuntu_resolute
+    tacker_conductor: quay.io/airshipit/tacker:2026.2-ubuntu_resolute
+    scripted_test: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    db_init: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    db_drop: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    tacker_db_sync: quay.io/airshipit/tacker:2026.2-ubuntu_resolute
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     rabbit_init: docker.io/rabbitmq:4.3.5-management
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
   local_registry:
@@ -129,6 +129,15 @@ pod:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
   lifecycle:
+    upgrades:
+      statefulsets:
+        pod_replacement_strategy: RollingUpdate
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 1
+          max_surge: 3
     termination_grace_period:
       server:
         timeout: 30
@@ -154,6 +163,18 @@ pod:
         effect: NoSchedule
   resources:
     enabled: false
+    server:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+    conductor:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
     jobs:
       db_sync:
         requests:
@@ -201,13 +222,13 @@ pod:
     tacker_server:
       init_container: null
       tacker_server:
-        volumeMounts: null
-        volumes: null
+        volumeMounts:
+        volumes:
     tacker_conductor:
       init_container: null
       tacker_conductor:
-        volumeMounts: null
-        volumes: null
+        volumeMounts:
+        volumes:
     tacker_db_sync:
       tacker_db_sync:
         volumeMounts:
@@ -240,11 +261,6 @@ network:
     node_port:
       enabled: false
       port: 30900
-  conductor:
-    external_policy_local: false
-    node_port:
-      enabled: false
-      port: 30901
 
 secrets:
   identity:
@@ -361,7 +377,6 @@ endpoints:
     name: tacker
     hosts:
       default: tacker-api
-      conductor: tacker-conductor
       public: tacker
     host_fqdn_override:
       default: null
@@ -373,8 +388,6 @@ endpoints:
       api:
         default: 9890
         public: 80
-      conductor:
-        default: 5672
   key_manager:
     name: barbican
     hosts:
@@ -633,7 +646,6 @@ manifests:
   configmap_etc: true
   configmap_bin: true
   deployment_server: true
-  deployment_conductor: true
   job_db_init: true
   job_db_drop: false
   job_db_sync: true
@@ -647,7 +659,7 @@ manifests:
   secret_keystone: true
   secret_rabbitmq: true
   service_api: true
-  service_conductor: true
+  statefulset_conductor: true
 
 # -- Extra K8s manifests to deploy. Either a list or a map of manifests.
 ## Note: Supports use of custom Helm templates

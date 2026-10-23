@@ -22,6 +22,9 @@ labels:
   compute:
     node_selector_key: openstack-compute-node
     node_selector_value: enabled
+  compute_kata:
+    node_selector_key: openstack-kata-compute-node
+    node_selector_value: enabled
   central:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
@@ -41,6 +44,9 @@ images:
     ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     ceilometer_central: quay.io/airshipit/ceilometer:2026.2-ubuntu_resolute
     ceilometer_compute: quay.io/airshipit/ceilometer:2026.2-ubuntu_resolute
+    # A Ceilometer image with the Kata inspector (ceilometer/compute/virt/
+    # kata); required with manifests.daemonset_compute_kata.
+    ceilometer_compute_kata: null
     ceilometer_ipmi: quay.io/airshipit/ceilometer:2026.2-ubuntu_resolute
     ceilometer_notification: quay.io/airshipit/ceilometer:2026.2-ubuntu_resolute
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
@@ -1670,6 +1676,38 @@ conf:
         interval: 600
         meters:
           - "*"
+  # The Kata compute's polling agent (manifests.daemonset_compute_kata):
+  # ceilometer-kata.conf follows ceilometer.conf.
+  ceilometer_compute_kata:
+    DEFAULT:
+      hypervisor_inspector: kata
+      kata_runtime_socket: /run/nova-kata/runtime.sock
+    polling:
+      cfg_file: /etc/ceilometer/polling-kata.yaml
+  # What the Kata gateway counts for an instance: no disk latency,
+  # capacity, allocation or usage, no memory residency or swap.
+  polling_kata:
+    sources:
+      - name: kata_cpu
+        interval: 60
+        meters:
+          - cpu
+      - name: kata_instance
+        interval: 300
+        meters:
+          - memory.usage
+          - network.incoming.bytes
+          - network.incoming.packets
+          - network.outgoing.bytes
+          - network.outgoing.packets
+          - network.incoming.packets.drop
+          - network.incoming.packets.error
+          - network.outgoing.packets.drop
+          - network.outgoing.packets.error
+          - disk.device.read.bytes
+          - disk.device.read.requests
+          - disk.device.write.bytes
+          - disk.device.write.requests
   pipeline:
     sinks:
       - name: meter_sink
@@ -1935,6 +1973,11 @@ pod:
       ceilometer_compute:
         volumeMounts:
         volumes:
+    ceilometer_compute_kata:
+      init_container: null
+      ceilometer_compute_kata:
+        volumeMounts:
+        volumes:
     ceilometer_central:
       init_container: null
       ceilometer_central:
@@ -1959,6 +2002,7 @@ pod:
   ## https://kubernetes.io/docs/concepts/storage/projected-volumes/
   etcSources:
     ceilometer_compute: []
+    ceilometer_compute_kata: []
     ceilometer_central: []
     ceilometer_ipmi: []
     ceilometer_notification: []
@@ -2046,6 +2090,7 @@ manifests:
   configmap_etc: true
   deployment_central: true
   daemonset_compute: true
+  daemonset_compute_kata: false
   daemonset_ipmi: false
   deployment_notification: true
   job_bootstrap: true

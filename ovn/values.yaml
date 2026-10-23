@@ -321,12 +321,28 @@ pod:
   tolerations:
     ovn_ovsdb_nb:
       enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
     ovn_ovsdb_sb:
       enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
     ovn_northd:
       enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
     ovn_controller:
       enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
     ovn_bgp_agent:
       enabled: false
       tolerations:
@@ -411,7 +427,17 @@ pod:
     ovn_northd: 1
   lifecycle:
     upgrades:
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 0
+          max_surge: 1
+      statefulsets:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
       daemonsets:
+        revision_history: 3
         pod_replacement_strategy: RollingUpdate
         ovn_ovsdb_nb:
           enabled: true

@@ -25,6 +25,9 @@ labels:
   compute_kata:
     node_selector_key: openstack-kata-compute-node
     node_selector_value: enabled
+  compute_incus:
+    node_selector_key: openstack-incus-compute-node
+    node_selector_value: enabled
   central:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
@@ -47,6 +50,9 @@ images:
     # A Ceilometer image with the Kata inspector (ceilometer/compute/virt/
     # kata); required with manifests.daemonset_compute_kata.
     ceilometer_compute_kata: null
+    # A Ceilometer image with the Incus inspector (ceilometer/compute/virt/
+    # incus); required with manifests.daemonset_compute_incus.
+    ceilometer_compute_incus: null
     ceilometer_ipmi: quay.io/airshipit/ceilometer:2026.2-ubuntu_resolute
     ceilometer_notification: quay.io/airshipit/ceilometer:2026.2-ubuntu_resolute
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
@@ -1712,6 +1718,49 @@ conf:
           - disk.device.read.requests
           - disk.device.write.bytes
           - disk.device.write.requests
+  # The Incus compute's polling agent (manifests.daemonset_compute_incus):
+  # ceilometer-incus.conf follows ceilometer.conf. The inspector reads the
+  # local Incus server's /1.0/metrics with a certificate Incus trusts as
+  # type "metrics" (the incus chart's incus.metrics.additional_certificates);
+  # metrics_url expands $host, the node's FQDN, which the Incus server
+  # certificate must name.
+  ceilometer_compute_incus:
+    DEFAULT:
+      hypervisor_inspector: incus
+    compute:
+      instance_discovery_method: naive
+    incus:
+      metrics_url: https://$host:8443
+      project: default
+      client_cert: /etc/ceilometer/incus-metrics/tls.crt
+      client_key: /etc/ceilometer/incus-metrics/tls.key
+      server_cert: /etc/ceilometer/incus-metrics/ca.crt
+    polling:
+      cfg_file: /etc/ceilometer/polling-incus.yaml
+  # What Incus counts for a running instance, and the Flavor sizes rating
+  # uses (vcpus, memory, disk.root.size); no disk I/O yet.
+  polling_incus:
+    sources:
+      - name: incus_compute
+        interval: 300
+        meters:
+          - cpu
+          - power.state
+          - vcpus
+          - disk.root.size
+          - disk.ephemeral.size
+          - memory
+          - memory.available
+          - memory.usage
+          - memory.resident
+          - network.incoming.bytes
+          - network.incoming.packets
+          - network.incoming.packets.drop
+          - network.incoming.packets.error
+          - network.outgoing.bytes
+          - network.outgoing.packets
+          - network.outgoing.packets.drop
+          - network.outgoing.packets.error
   pipeline:
     sinks:
       - name: meter_sink
@@ -1724,6 +1773,14 @@ conf:
         name: meter_source
         sinks:
           - meter_sink
+
+# The Secret the daemonset_compute_incus agent reads Incus metrics with,
+# made by the deployment PKI workflow: tls.crt and tls.key, the client pair
+# Incus trusts as type "metrics", and ca.crt, which verifies the Incus
+# server certificate.
+ceilometer_incus:
+  metrics:
+    secret_name: ceilometer-incus-metrics
 
 dependencies:
   dynamic:
@@ -1976,6 +2033,9 @@ pod:
     # Kata gateway serves an instance's counters only to it.
     ceilometer_compute_kata:
       uid: 42424
+    # The Incus agent needs no host access; it runs as ceilometer.
+    ceilometer_compute_incus:
+      uid: 42424
   mounts:
     ceilometer_compute:
       init_container: null
@@ -1985,6 +2045,11 @@ pod:
     ceilometer_compute_kata:
       init_container: null
       ceilometer_compute_kata:
+        volumeMounts:
+        volumes:
+    ceilometer_compute_incus:
+      init_container: null
+      ceilometer_compute_incus:
         volumeMounts:
         volumes:
     ceilometer_central:
@@ -2012,6 +2077,7 @@ pod:
   etcSources:
     ceilometer_compute: []
     ceilometer_compute_kata: []
+    ceilometer_compute_incus: []
     ceilometer_central: []
     ceilometer_ipmi: []
     ceilometer_notification: []
@@ -2100,6 +2166,7 @@ manifests:
   deployment_central: true
   daemonset_compute: true
   daemonset_compute_kata: false
+  daemonset_compute_incus: false
   daemonset_ipmi: false
   deployment_notification: true
   job_bootstrap: true

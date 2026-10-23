@@ -1,0 +1,180 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+The polling agent of the Incus system container compute (nova-incus-driver)
+on nodes labelled for it: Ceilometer's Incus inspector reads every running
+instance's counters from the local Incus server's /1.0/metrics, with a client
+certificate Incus trusts as type "metrics", which reaches that endpoint and
+nothing else. It needs no host path, Incus socket or Nova. Its host is the
+node's, as nova-compute-incus's is; ceilometer-incus.conf and the polling file
+of conf.polling_incus follow ceilometer.conf.
+*/}}
+
+{{- if .Values.manifests.daemonset_compute_incus }}
+{{- $envAll := . }}
+
+{{- $mounts_ceilometer_compute_incus := .Values.pod.mounts.ceilometer_compute_incus.ceilometer_compute_incus }}
+{{- $mounts_ceilometer_compute_incus_init := .Values.pod.mounts.ceilometer_compute_incus.init_container }}
+
+{{- $serviceAccountName := "ceilometer-compute-incus" }}
+{{ tuple $envAll "compute" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+
+{{- $etcSources := .Values.pod.etcSources.ceilometer_compute_incus }}
+{{- $metricsDir := .Values.conf.ceilometer_compute_incus.incus.client_cert | dir }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ceilometer-compute-incus-etc
+type: Opaque
+data:
+  ceilometer-incus.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.ceilometer_compute_incus | b64enc }}
+  polling-incus.yaml: {{ toYaml .Values.conf.polling_incus | b64enc }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ceilometer-compute-incus
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "ceilometer" "compute-incus" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll "ceilometer" "compute-incus" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll "compute" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "ceilometer" "compute-incus" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        incus-etc-hash: {{ list .Values.conf.ceilometer_compute_incus .Values.conf.polling_incus | toJson | sha256sum }}
+{{ tuple "ceilometer_compute_incus" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+    spec:
+      serviceAccountName: {{ $serviceAccountName }}
+      securityContext:
+        # Lets the agent's user read the metrics key.
+        fsGroup: {{ .Values.pod.user.ceilometer_compute_incus.uid }}
+      affinity:
+{{ tuple $envAll "ceilometer" "compute-incus" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      # The node's FQDN is the agent's host, as it is nova-compute-incus's,
+      # and what [incus] metrics_url expands $host to.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        {{ .Values.labels.compute_incus.node_selector_key }}: {{ .Values.labels.compute_incus.node_selector_value }}
+{{ if $envAll.Values.pod.tolerations.ceilometer.enabled }}
+{{ tuple $envAll "ceilometer" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
+      initContainers:
+{{ tuple $envAll "compute" $mounts_ceilometer_compute_incus_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{- $heartbeat := dig "polling" "heartbeat_socket_dir" "" .Values.conf.ceilometer }}
+{{- if $heartbeat }}
+        # The polling heartbeat's directory is the agent user's.
+        - name: heartbeat-dir-owner
+{{ tuple $envAll "ceilometer_compute_incus" | include "helm-toolkit.snippets.image" | indent 10 }}
+          securityContext:
+            runAsUser: 0
+          command:
+            - chown
+            - "{{ .Values.pod.user.ceilometer_compute_incus.uid }}:{{ .Values.pod.user.ceilometer_compute_incus.uid }}"
+            - {{ $heartbeat }}
+{{ if $mounts_ceilometer_compute_incus.volumeMounts }}          volumeMounts:
+{{ toYaml $mounts_ceilometer_compute_incus.volumeMounts | indent 12 }}{{ end }}
+{{- end }}
+      containers:
+        - name: ceilometer-compute-incus
+{{ tuple $envAll "ceilometer_compute_incus" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.compute | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+          securityContext:
+            runAsUser: {{ .Values.pod.user.ceilometer_compute_incus.uid }}
+            runAsGroup: {{ .Values.pod.user.ceilometer_compute_incus.uid }}
+          command:
+            - ceilometer-polling
+            - --polling-namespaces
+            - compute
+            - --config-file
+            - /etc/ceilometer/ceilometer.conf
+            - --config-file
+            - /etc/ceilometer/ceilometer-incus.conf
+            - --config-dir
+            - /etc/ceilometer/ceilometer.conf.d
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: oslo-lock-path
+              mountPath: {{ .Values.conf.ceilometer.oslo_concurrency.lock_path }}
+            - name: pod-etc-ceilometer
+              mountPath: /etc/ceilometer
+            - name: ceilometer-etc
+              mountPath: /etc/ceilometer/ceilometer.conf
+              subPath: ceilometer.conf
+              readOnly: true
+            - name: ceilometer-compute-incus-etc
+              mountPath: /etc/ceilometer/ceilometer-incus.conf
+              subPath: ceilometer-incus.conf
+              readOnly: true
+            - name: ceilometer-compute-incus-etc
+              mountPath: /etc/ceilometer/polling-incus.yaml
+              subPath: polling-incus.yaml
+              readOnly: true
+            - name: ceilometer-etc-snippets
+              mountPath: /etc/ceilometer/ceilometer.conf.d/
+              readOnly: true
+            - name: ceilometer-etc
+              mountPath: /etc/ceilometer/pipeline.yaml
+              subPath: pipeline.yaml
+              readOnly: true
+            - name: ceilometer-etc
+              mountPath: /etc/ceilometer/gnocchi_resources.yaml
+              subPath: gnocchi_resources.yaml
+              readOnly: true
+            - name: incus-metrics
+              mountPath: {{ $metricsDir }}
+              readOnly: true
+{{ if $mounts_ceilometer_compute_incus.volumeMounts }}{{ toYaml $mounts_ceilometer_compute_incus.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: oslo-lock-path
+          emptyDir: {}
+        - name: pod-etc-ceilometer
+          emptyDir: {}
+        - name: ceilometer-etc
+          secret:
+            secretName: ceilometer-etc
+            defaultMode: 0444
+        - name: ceilometer-compute-incus-etc
+          secret:
+            secretName: ceilometer-compute-incus-etc
+            defaultMode: 0444
+        - name: ceilometer-etc-snippets
+{{- if $etcSources }}
+          projected:
+            sources:
+{{ toYaml $etcSources | indent 14 }}
+{{- else }}
+          emptyDir: {}
+{{ end }}
+        - name: incus-metrics
+          secret:
+            secretName: {{ .Values.ceilometer_incus.metrics.secret_name }}
+            defaultMode: 0440
+{{ if $mounts_ceilometer_compute_incus.volumes }}{{ toYaml $mounts_ceilometer_compute_incus.volumes | indent 8 }}{{ end }}
+{{- end }}

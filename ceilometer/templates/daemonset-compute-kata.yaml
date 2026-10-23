@@ -77,10 +77,29 @@ spec:
 {{ end }}
       initContainers:
 {{ tuple $envAll "compute" $mounts_ceilometer_compute_kata_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{- $heartbeat := dig "polling" "heartbeat_socket_dir" "" .Values.conf.ceilometer }}
+{{- if $heartbeat }}
+        # The polling heartbeat's directory is the agent user's.
+        - name: heartbeat-dir-owner
+{{ tuple $envAll "ceilometer_compute_kata" | include "helm-toolkit.snippets.image" | indent 10 }}
+          securityContext:
+            runAsUser: 0
+          command:
+            - chown
+            - "{{ .Values.pod.user.ceilometer_compute_kata.uid }}:{{ .Values.pod.user.ceilometer_compute_kata.uid }}"
+            - {{ $heartbeat }}
+{{ if $mounts_ceilometer_compute_kata.volumeMounts }}          volumeMounts:
+{{ toYaml $mounts_ceilometer_compute_kata.volumeMounts | indent 12 }}{{ end }}
+{{- end }}
       containers:
         - name: ceilometer-compute-kata
 {{ tuple $envAll "ceilometer_compute_kata" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.compute | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+          # The Kata gateway serves an instance's counters only to
+          # nova-compute-kata's user.
+          securityContext:
+            runAsUser: {{ .Values.pod.user.ceilometer_compute_kata.uid }}
+            runAsGroup: {{ .Values.pod.user.ceilometer_compute_kata.uid }}
           command:
             - ceilometer-polling
             - --polling-namespaces

@@ -1682,6 +1682,10 @@ conf:
     DEFAULT:
       hypervisor_inspector: kata
       kata_runtime_socket: /run/nova-kata/runtime.sock
+    # The node has no libvirt: the instances on this host come from
+    # Nova's API.
+    compute:
+      instance_discovery_method: naive
     polling:
       cfg_file: /etc/ceilometer/polling-kata.yaml
   # What the Kata gateway counts for an instance: no disk latency,
@@ -1967,6 +1971,11 @@ pod:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
+  user:
+    # nova-compute-kata's user (the nova chart's pod.user.nova.uid): the
+    # Kata gateway serves an instance's counters only to it.
+    ceilometer_compute_kata:
+      uid: 42424
   mounts:
     ceilometer_compute:
       init_container: null

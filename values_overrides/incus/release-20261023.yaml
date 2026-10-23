@@ -1,0 +1,7 @@
+# Incus 4917b4fbb2e552145914ef617aa27e0b83c7783c (CRIU fork e2f6a2e9: upstream
+# criu-dev through c9f3f04c9, ramfs dump/restore). CRIU binary sha256
+# 452e29f49fa059968ee707707578ac8fb1b38e9fd691e15b6f0ec5e83b8e37b4; change
+# nova incus-criu-admission.yaml together. LXCFS remains independently pinned.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:b06e6b7fda5fd2838d62ba7d86804ce4aa9c27652b4fc257d4b7a8baa7ee2afc

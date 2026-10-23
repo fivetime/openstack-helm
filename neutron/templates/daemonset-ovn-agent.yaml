@@ -207,6 +207,10 @@ spec:
               mountPath: /run/netns
               mountPropagation: Bidirectional
             {{- end }}
+            {{- if .Values.manifests.daemonset_ovn_evpn_frr }}
+            - name: ovn-evpn-frr-run
+              mountPath: {{ .Values.conf.ovn_evpn_frr.vty_socket_dir }}
+            {{- end }}
 {{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
 {{- dict "enabled" $envAll.Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
 {{ if $mounts_neutron_ovn_agent.volumeMounts }}{{ toYaml $mounts_neutron_ovn_agent.volumeMounts | indent 12 }}{{ end }}
@@ -246,6 +250,12 @@ spec:
           hostPath:
             path: /run/netns
         {{- end }}
+        {{- if .Values.manifests.daemonset_ovn_evpn_frr }}
+        - name: ovn-evpn-frr-run
+          hostPath:
+            path: {{ .Values.conf.ovn_evpn_frr.vty_socket_dir }}
+            type: DirectoryOrCreate
+        {{- end }}
 {{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
 {{- dict "enabled" (or $envAll.Values.tls.oslo_db $envAll.Values.tls.oslo_messaging) "name" "client-certs" "secretName" $envAll.Values.secrets.tls.client.neutron | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
 {{ if $mounts_neutron_ovn_agent.volumes }}{{ toYaml $mounts_neutron_ovn_agent.volumes | indent 8 }}{{ end }}
@@ -261,6 +271,19 @@ spec:
 {{- $_ := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
 {{ tuple $envAll "pod_dependency" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 {{- $daemonset_yaml := list $daemonset $configMapName $serviceAccountName . | include "neutron.ovn_agent.daemonset" | toString | fromYaml }}
+{{- /* Only the OVN agents on the nodes that run the ovn-evpn-frr daemonset
+       get the ovn-evpn extension, which brings up the EVPN bridge and
+       configures FRR: add a label override for those nodes, so they get
+       their own daemonset and configuration (see configmap-etc). */ -}}
+{{- if .Values.manifests.daemonset_ovn_evpn_frr }}
+{{- $overrides := default dict $envAll.Values.conf.overrides }}
+{{- $agentOverrides := default dict (index $overrides (printf "%s_%s" $envAll.Chart.Name $daemonset)) }}
+{{- $frrLabel := dict "key" $envAll.Values.labels.agent.ovn_evpn_frr.node_selector_key "values" (list $envAll.Values.labels.agent.ovn_evpn_frr.node_selector_value) }}
+{{- $frrOverride := dict "label" $frrLabel "conf" (dict "ovn_evpn_frr" (dict "__agent_extension" true)) }}
+{{- $_ := set $agentOverrides "labels" (append (default list $agentOverrides.labels) $frrOverride) }}
+{{- $_ := set $overrides (printf "%s_%s" $envAll.Chart.Name $daemonset) $agentOverrides }}
+{{- $_ := set $envAll.Values.conf "overrides" $overrides }}
+{{- end }}
 {{- $configmap_yaml := "neutron.configmap.etc" }}
 {{-  list $daemonset $daemonset_yaml $configmap_yaml $configMapName . | include "helm-toolkit.utils.daemonset_overrides" }}
 {{- end }}

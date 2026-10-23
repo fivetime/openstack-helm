@@ -209,6 +209,31 @@ limitations under the License.
 {{- end }}
 {{- end -}}
 
+{{- /* The OVN agent's ovn-evpn extension drives the FRR of the
+       ovn-evpn-frr daemonset through vtysh. Derive its settings from the
+       same values the daemonset renders, so the two cannot disagree: the
+       agent only reuses a BGP instance whose AS is [ovn_evpn] bgp_as, and
+       reaches FRR through the shared vty socket directory. Values set
+       explicitly under conf.ovn_agent.ovn_evpn take precedence.
+       The extension is only enabled for the OVN agents on the nodes that
+       run FRR: the ovn-agent daemonset adds a label override for them
+       that sets conf.ovn_evpn_frr.__agent_extension. */ -}}
+{{- if $envAll.Values.manifests.daemonset_ovn_evpn_frr }}
+{{- if empty $envAll.Values.conf.ovn_evpn_frr.asn }}
+{{- fail "conf.ovn_evpn_frr.asn is required when manifests.daemonset_ovn_evpn_frr is enabled" }}
+{{- end }}
+{{- end }}
+{{- if and $envAll.Values.manifests.daemonset_ovn_evpn_frr (index $envAll.Values.conf.ovn_evpn_frr "__agent_extension") }}
+{{- $agentSection := default dict $envAll.Values.conf.ovn_agent.agent }}
+{{- $extensions := splitList "," (default "" $agentSection.extensions | toString) | compact }}
+{{- if not (has "ovn-evpn" $extensions) }}
+{{- $_ := set $agentSection "extensions" (append $extensions "ovn-evpn" | join ",") }}
+{{- end }}
+{{- $_ := set $envAll.Values.conf.ovn_agent "agent" $agentSection }}
+{{- $evpnDefaults := dict "bgp_as" (printf "%d" ($envAll.Values.conf.ovn_evpn_frr.asn | int64)) "frr_vty_socket" $envAll.Values.conf.ovn_evpn_frr.vty_socket_dir }}
+{{- $_ := set $envAll.Values.conf.ovn_agent "ovn_evpn" (merge (default dict $envAll.Values.conf.ovn_agent.ovn_evpn) $evpnDefaults) }}
+{{- end -}}
+
 ---
 apiVersion: v1
 kind: Secret

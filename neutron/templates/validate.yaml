@@ -29,6 +29,7 @@ pod.mandatory_access_control, fail rather than silently dropping them.
   "neutron-netns-cleanup-cron-default"
   "neutron-ovn-agent-default"
   "neutron-ovn-db-sync"
+  "neutron-ovn-evpn-frr"
   "neutron-ovn-maintenance-worker"
   "neutron-ovn-metadata-agent-default"
   "neutron-ovn-vpn-agent-default"

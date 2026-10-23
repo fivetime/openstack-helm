@@ -1,0 +1,146 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- /*
+FRR for the OVN agent's ovn-evpn extension. The agent creates the per-router
+VRF and VXLAN devices in the host network namespace and configures the
+matching VRF/VNI sections of this FRR through vtysh; this daemonset provides
+the FRR daemons and the default BGP instance (conf.ovn_evpn_frr) that those
+sections attach to. It runs in the host network namespace for the same
+reason: zebra has to see the devices the agent and ovn-controller use.
+*/}}
+
+{{- if .Values.manifests.daemonset_ovn_evpn_frr }}
+{{- $envAll := . }}
+{{- $serviceAccountName := "neutron-ovn-evpn-frr" }}
+{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "ovn_evpn_frr" -}}
+{{- $_ := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
+{{ tuple $envAll "pod_dependency" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- $mounts_ovn_evpn_frr := .Values.pod.mounts.neutron_ovn_evpn_frr.neutron_ovn_evpn_frr }}
+{{- $mounts_ovn_evpn_frr_init := .Values.pod.mounts.neutron_ovn_evpn_frr.init_container }}
+{{- $upgrade := index .Values.pod.lifecycle.upgrades.daemonsets "ovn_evpn_frr" }}
+{{- $strategy := default .Values.pod.lifecycle.upgrades.daemonsets.pod_replacement_strategy $upgrade.pod_replacement_strategy }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: neutron-ovn-evpn-frr
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "neutron" "ovn-evpn-frr" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll "neutron" "ovn-evpn-frr" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{- if $upgrade.enabled }}
+  minReadySeconds: {{ $upgrade.min_ready_seconds }}
+  updateStrategy:
+    type: {{ $strategy }}
+{{- if eq $strategy "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ $upgrade.max_unavailable }}
+{{- end }}
+{{- end }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "neutron" "ovn-evpn-frr" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-ovn-evpn-frr.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-ovn-evpn-frr.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "neutron_ovn_evpn_frr" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+    spec:
+{{ dict "envAll" $envAll "application" "neutron_ovn_evpn_frr" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+{{ tuple "neutron_ovn_evpn_frr" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "neutron_ovn_evpn_frr" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
+      serviceAccountName: {{ $serviceAccountName }}
+{{ if $envAll.Values.pod.tolerations.neutron.enabled }}
+{{ tuple $envAll "neutron" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
+      nodeSelector:
+        {{ .Values.labels.agent.ovn_evpn_frr.node_selector_key }}: {{ .Values.labels.agent.ovn_evpn_frr.node_selector_value }}
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      initContainers:
+{{ tuple $envAll "pod_dependency" $mounts_ovn_evpn_frr_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+        - name: neutron-ovn-evpn-frr-init
+{{ tuple $envAll "neutron_ovn_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.agent.ovn_evpn_frr | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "neutron_ovn_evpn_frr" "container" "neutron_ovn_evpn_frr_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/neutron-ovn-evpn-frr-init.sh
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: run-openvswitch
+              mountPath: /run/openvswitch
+            - name: frr-etc
+              mountPath: /etc/frr
+            - name: neutron-ovn-evpn-frr-bin
+              mountPath: /tmp/neutron-ovn-evpn-frr-init.sh
+              subPath: neutron-ovn-evpn-frr-init.sh
+              readOnly: true
+            - name: neutron-ovn-evpn-frr-etc
+              mountPath: /tmp/ovn-evpn-frr.conf.in
+              subPath: ovn-evpn-frr.conf
+              readOnly: true
+            - name: neutron-ovn-evpn-frr-etc
+              mountPath: /tmp/ovn-evpn-frr-daemons
+              subPath: ovn-evpn-frr-daemons
+              readOnly: true
+            - name: neutron-ovn-evpn-frr-etc
+              mountPath: /tmp/ovn-evpn-frr-vtysh.conf
+              subPath: ovn-evpn-frr-vtysh.conf
+              readOnly: true
+      containers:
+        - name: neutron-ovn-evpn-frr
+{{ tuple $envAll "neutron_ovn_evpn_frr" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.agent.ovn_evpn_frr | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "neutron_ovn_evpn_frr" "container" "neutron_ovn_evpn_frr" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/neutron-ovn-evpn-frr.sh
+          volumeMounts:
+            - name: frr-etc
+              mountPath: /etc/frr
+            - name: frr-run
+              mountPath: /var/run/frr
+            - name: neutron-ovn-evpn-frr-bin
+              mountPath: /tmp/neutron-ovn-evpn-frr.sh
+              subPath: neutron-ovn-evpn-frr.sh
+              readOnly: true
+{{ if $mounts_ovn_evpn_frr.volumeMounts }}{{ toYaml $mounts_ovn_evpn_frr.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: frr-etc
+          emptyDir: {}
+        - name: frr-run
+          hostPath:
+            path: {{ .Values.conf.ovn_evpn_frr.vty_socket_dir }}
+            type: DirectoryOrCreate
+        - name: run-openvswitch
+          hostPath:
+            path: /run/openvswitch
+        - name: neutron-ovn-evpn-frr-bin
+          configMap:
+            name: neutron-ovn-evpn-frr-bin
+            defaultMode: 0555
+        - name: neutron-ovn-evpn-frr-etc
+          secret:
+            secretName: neutron-ovn-evpn-frr-etc
+            defaultMode: 0444
+{{ if $mounts_ovn_evpn_frr.volumes }}{{ toYaml $mounts_ovn_evpn_frr.volumes | indent 8 }}{{ end }}
+{{- end }}

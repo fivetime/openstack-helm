@@ -37,6 +37,8 @@ images:
     neutron_dhcp: quay.io/airshipit/neutron:2026.2-ubuntu_resolute
     neutron_metadata: quay.io/airshipit/neutron:2026.2-ubuntu_resolute
     neutron_ovn_agent: quay.io/airshipit/neutron:2026.2-ubuntu_resolute
+    # FRR for the OVN agent's ovn-evpn extension (manifests.daemonset_ovn_evpn_frr).
+    neutron_ovn_evpn_frr: quay.io/frrouting/frr:10.7.1
     neutron_ovn_metadata: quay.io/airshipit/neutron:2026.2-ubuntu_resolute
     neutron_ovn_db_sync: quay.io/airshipit/neutron:2026.2-ubuntu_resolute
     neutron_ovn_vpn: quay.io/airshipit/neutron:2026.2-ubuntu_resolute
@@ -69,6 +71,11 @@ labels:
       node_selector_value: enabled
     metadata:
       node_selector_key: openstack-control-plane
+      node_selector_value: enabled
+    # Nodes that run the FRR used by the OVN agent's ovn-evpn extension:
+    # the chassis that can host EVPN router ports (gateway chassis).
+    ovn_evpn_frr:
+      node_selector_key: openstack-ovn-evpn-frr
       node_selector_value: enabled
     l2gw:
       node_selector_key: openstack-control-plane
@@ -280,6 +287,14 @@ dependencies:
           service: compute_metadata
         - endpoint: internal
           service: network
+    ovn_evpn_frr:
+      # The router-id is read from the chassis' ovn-evpn-local-ip, which
+      # the local ovn-controller sets.
+      pod:
+        - requireSameNode: true
+          labels:
+            application: ovn
+            component: ovn-controller
     ovn_metadata:
       pod:
         - requireSameNode: true
@@ -670,6 +685,16 @@ pod:
         neutron_ovn_agent_init:
           runAsUser: 0
           readOnlyRootFilesystem: true
+    neutron_ovn_evpn_frr:
+      pod:
+        runAsUser: 0
+      container:
+        neutron_ovn_evpn_frr_init:
+          runAsUser: 0
+          readOnlyRootFilesystem: true
+        neutron_ovn_evpn_frr:
+          runAsUser: 0
+          privileged: true
     neutron_ovn_metadata_agent:
       pod:
         runAsUser: 42424
@@ -844,6 +869,11 @@ pod:
       neutron_ovn_agent:
         volumeMounts:
         volumes:
+    neutron_ovn_evpn_frr:
+      init_container: null
+      neutron_ovn_evpn_frr:
+        volumeMounts:
+        volumes:
     neutron_ovn_metadata_agent:
       init_container: null
       neutron_ovn_metadata_agent:
@@ -966,6 +996,14 @@ pod:
           enabled: true
           min_ready_seconds: 0
           max_unavailable: 1
+        ovn_evpn_frr:
+          enabled: true
+          min_ready_seconds: 0
+          max_unavailable: 1
+          # Replacing FRR withdraws this chassis' EVPN routes until it is back,
+          # so it is only replaced when an operator deletes the pod. Overrides
+          # pod_replacement_strategy for this daemonset only.
+          pod_replacement_strategy: OnDelete
         ovn_metadata_agent:
           enabled: true
           min_ready_seconds: 0
@@ -1034,6 +1072,12 @@ pod:
         limits:
           memory: "1024Mi"
       ovn:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+      ovn_evpn_frr:
         requests:
           memory: "128Mi"
           cpu: "100m"
@@ -2314,6 +2358,186 @@ conf:
     # endpoints.ovn_ovsdb_nb/sb as the per-pod RAFT member list (see
     # configmap-etc.yaml) unless set explicitly here.
     ovn: {}
+  # FRR used by the OVN agent's ovn-evpn extension
+  # (manifests.daemonset_ovn_evpn_frr). The agent configures the per-router
+  # VRF/VNI sections through vtysh; this FRR only provides the default BGP
+  # instance and its peers. When enabled, ovn_agent.ini gets the ovn-evpn
+  # extension and an [ovn_evpn] section derived from these values.
+  ovn_evpn_frr:
+    # BGP AS of the default instance; also used as [ovn_evpn] bgp_as.
+    # Required when the daemonset is enabled.
+    asn: null
+    # Directory holding the FRR vty sockets, shared with the OVN agent
+    # through a hostPath ([ovn_evpn] frr_vty_socket).
+    vty_socket_dir: /run/frr
+    # BGP peers of the default instance. The agent reuses this instance only
+    # if at least one peer is activated for l2vpn evpn; with no peer it
+    # creates its own instance.
+    #   - peer: 192.0.2.1           # address, or an interface name; or
+    #                               # ${GW6:<if>} / ${GW4:<if>}: the IPv6/IPv4
+    #                               # gateway of interface <if> on each node
+    #                               # (its default route, else its first
+    #                               # route with a next hop)
+    #     interface: false          # true: unnumbered peering on "peer"
+    #     remote_as: 65001          # or "internal" / "external"
+    #     description: leaf-1
+    #     password: null
+    #     ebgp_multihop: null       # true (no hop count) or a hop count
+    #     timers: null              # "<keepalive> <holdtime>", e.g. "3 9"
+    #     connect_timer: null       # seconds
+    #     update_source: null       # interface name or address to source
+    #                               # the session from, e.g. the underlay NIC
+    #     bfd: false
+    #     capability_extended_nexthop: false  # IPv4 routes over IPv6 peering
+    #     route_map_in: null        # l2vpn evpn, when address_families
+    #     route_map_out: null       # is not set
+    #     # Address families to activate the peer in, each with optional
+    #     # route-maps. Default: l2vpn_evpn only, with route_map_in/out above.
+    #     address_families:
+    #       ipv4_unicast: {route_map_in: null, route_map_out: null}
+    #       ipv6_unicast: {route_map_in: null, route_map_out: null}
+    #       l2vpn_evpn: {route_map_in: null, route_map_out: null}
+    neighbors: []
+    # Announce this chassis' router-id (its ovn-evpn-local-ip, the VTEP) as
+    # a /32 in ipv4 unicast to the peers, for underlays that learn VTEPs
+    # over BGP.
+    advertise_vtep_ip: false
+    # Raw FRR configuration appended after the generated BGP instance
+    # (prefix-lists, route-maps, ...).
+    extra_config: ""
+    # zebra keeps the routes it installed when it exits (-r) and FRR uses
+    # BGP graceful restart, so restarting FRR does not withdraw routes.
+    daemons: |
+      zebra=yes
+      bgpd=yes
+      staticd=yes
+      bfdd=yes
+      ospfd=no
+      ospf6d=no
+      ripd=no
+      ripngd=no
+      isisd=no
+      pimd=no
+      ldpd=no
+      nhrpd=no
+      eigrpd=no
+      babeld=no
+      sharpd=no
+      pbrd=no
+      fabricd=no
+      vrrpd=no
+      pathd=no
+      vtysh_enable=yes
+      zebra_options="  -A 127.0.0.1 -s 90000000 -r -K 120"
+      bgpd_options="   -A 127.0.0.1"
+      staticd_options="-A 127.0.0.1"
+      bfdd_options="   -A 127.0.0.1"
+    # ${ROUTER_ID} and ${HOSTNAME} are replaced on each node: ROUTER_ID is
+    # the chassis' ovn-evpn-local-ip, which the OVN agent also uses as the
+    # router-id when it looks for an existing BGP instance.
+    frr.conf: |
+      frr defaults datacenter
+      hostname ${HOSTNAME}
+      log stdout informational
+      service integrated-vtysh-config
+      !
+      router bgp {{ .Values.conf.ovn_evpn_frr.asn | int64 }}
+       bgp router-id ${ROUTER_ID}
+       bgp graceful-restart
+       no bgp ebgp-requires-policy
+       no bgp default ipv4-unicast
+      {{- range $n := .Values.conf.ovn_evpn_frr.neighbors }}
+      {{- if $n.interface }}
+       neighbor {{ $n.peer }} interface remote-as {{ if kindIs "string" $n.remote_as }}{{ $n.remote_as }}{{ else }}{{ $n.remote_as | int64 }}{{ end }}
+      {{- else }}
+       neighbor {{ $n.peer }} remote-as {{ if kindIs "string" $n.remote_as }}{{ $n.remote_as }}{{ else }}{{ $n.remote_as | int64 }}{{ end }}
+      {{- end }}
+      {{- if $n.description }}
+       neighbor {{ $n.peer }} description {{ $n.description }}
+      {{- end }}
+      {{- if $n.password }}
+       neighbor {{ $n.peer }} password {{ $n.password }}
+      {{- end }}
+      {{- if $n.ebgp_multihop }}
+       neighbor {{ $n.peer }} ebgp-multihop{{ if not (kindIs "bool" $n.ebgp_multihop) }} {{ $n.ebgp_multihop | int64 }}{{ end }}
+      {{- end }}
+      {{- if $n.timers }}
+       neighbor {{ $n.peer }} timers {{ $n.timers }}
+      {{- end }}
+      {{- if $n.connect_timer }}
+       neighbor {{ $n.peer }} timers connect {{ $n.connect_timer | int64 }}
+      {{- end }}
+      {{- if $n.update_source }}
+       neighbor {{ $n.peer }} update-source {{ $n.update_source }}
+      {{- end }}
+      {{- if $n.bfd }}
+       neighbor {{ $n.peer }} bfd
+      {{- end }}
+      {{- if $n.capability_extended_nexthop }}
+       neighbor {{ $n.peer }} capability extended-nexthop
+      {{- end }}
+      {{- end }}
+       !
+       address-family ipv4 unicast
+      {{- if .Values.conf.ovn_evpn_frr.advertise_vtep_ip }}
+        network ${ROUTER_ID}/32
+      {{- end }}
+      {{- range $n := .Values.conf.ovn_evpn_frr.neighbors }}
+      {{- $afs := default dict $n.address_families }}
+      {{- if or (hasKey $afs "ipv4_unicast") (and (not $n.address_families) $.Values.conf.ovn_evpn_frr.advertise_vtep_ip) }}
+      {{- $af := default dict (index $afs "ipv4_unicast") }}
+        neighbor {{ $n.peer }} activate
+      {{- if $af.route_map_in }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_in }} in
+      {{- end }}
+      {{- if $af.route_map_out }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_out }} out
+      {{- end }}
+      {{- end }}
+      {{- end }}
+       exit-address-family
+       !
+       address-family ipv6 unicast
+      {{- range $n := .Values.conf.ovn_evpn_frr.neighbors }}
+      {{- $afs := default dict $n.address_families }}
+      {{- if hasKey $afs "ipv6_unicast" }}
+      {{- $af := default dict (index $afs "ipv6_unicast") }}
+        neighbor {{ $n.peer }} activate
+      {{- if $af.route_map_in }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_in }} in
+      {{- end }}
+      {{- if $af.route_map_out }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_out }} out
+      {{- end }}
+      {{- end }}
+      {{- end }}
+       exit-address-family
+       !
+       address-family l2vpn evpn
+      {{- range $n := .Values.conf.ovn_evpn_frr.neighbors }}
+      {{- $afs := default dict $n.address_families }}
+      {{- if or (hasKey $afs "l2vpn_evpn") (not $n.address_families) }}
+      {{- $af := default dict (index $afs "l2vpn_evpn") }}
+      {{- if not $n.address_families }}
+      {{- $af = dict "route_map_in" $n.route_map_in "route_map_out" $n.route_map_out }}
+      {{- end }}
+        neighbor {{ $n.peer }} activate
+      {{- if $af.route_map_in }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_in }} in
+      {{- end }}
+      {{- if $af.route_map_out }}
+        neighbor {{ $n.peer }} route-map {{ $af.route_map_out }} out
+      {{- end }}
+      {{- end }}
+      {{- end }}
+        advertise-all-vni
+        advertise-svi-ip
+       exit-address-family
+      exit
+      !
+      {{ .Values.conf.ovn_evpn_frr.extra_config }}
+    vtysh.conf: |
+      service integrated-vtysh-config
   ovn_metadata_agent:
     DEFAULT:
       # we cannot change the proxy socket path as it is declared
@@ -2890,6 +3114,7 @@ manifests:
   daemonset_bgp_dragent: false
   daemonset_netns_cleanup_cron: true
   daemonset_ovn_agent: false
+  daemonset_ovn_evpn_frr: false
   daemonset_ovn_metadata_agent: false
   daemonset_ovn_vpn_agent: false
   # NOTE: The ironic agent runs as a StatefulSet because it names its

@@ -137,6 +137,11 @@ spec:
             - name: metrics-client
               mountPath: {{ .Values.incus.metrics.mount_path }}
               readOnly: true
+{{- range $index, $client := .Values.incus.metrics.additional_certificates }}
+            - name: metrics-client-{{ $index }}
+              mountPath: {{ printf "%s.d/%s" $.Values.incus.metrics.mount_path $client.certificate_name }}
+              readOnly: true
+{{- end }}
 {{- end }}
             - name: state
               mountPath: {{ .Values.incus.state_path }}
@@ -223,6 +228,15 @@ spec:
             items:
               - key: tls.crt
                 path: tls.crt
+{{- range $index, $client := .Values.incus.metrics.additional_certificates }}
+        - name: metrics-client-{{ $index }}
+          secret:
+            secretName: {{ $client.secret_name }}
+            defaultMode: 0400
+            items:
+              - key: tls.crt
+                path: tls.crt
+{{- end }}
 {{- end }}
 {{- if .Values.incus.ceph.enabled }}
         - name: ceph

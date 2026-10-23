@@ -1,0 +1,10 @@
+# Nova Incus driver 19d0053 (hard reboot and power on rebuild the host
+# VIFs, so a guest that moved its NIC into a nested network namespace
+# comes back instead of failing on the missing tin parent; plus the
+# compute-side fixes since 0b76609) on Nova stable/2026.2 8df1922926;
+# SDK 7cf9852. pip freeze differs from 25531fad only in certifi and
+# setuptools. openstack-helm-images 43872cf, Build All Images run
+# 39973405379. Apply after current overrides.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:41f746bd9f5780a09b41de2547a74663b0f2ada9ba019c5c2557d6ab6bef7841

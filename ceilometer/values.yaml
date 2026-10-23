@@ -1971,6 +1971,11 @@ pod:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
+  user:
+    # nova-compute-kata's user (the nova chart's pod.user.nova.uid): the
+    # Kata gateway serves an instance's counters only to it.
+    ceilometer_compute_kata:
+      uid: 42424
   mounts:
     ceilometer_compute:
       init_container: null

@@ -196,6 +196,11 @@ incus:
     secret_name: incus-metrics
     certificate_name: prometheus-metrics
     mount_path: /etc/incus-metrics
+    # Further metrics clients, each {certificate_name, secret_name}. Only the
+    # Secret's tls.crt is mounted, at <mount_path>.d/<certificate_name>.
+    # Removing an entry stops trusting it on new nodes but does not revoke
+    # it where it is already trusted: run incus config trust remove there.
+    additional_certificates: []
 
 monitoring:
   incus:

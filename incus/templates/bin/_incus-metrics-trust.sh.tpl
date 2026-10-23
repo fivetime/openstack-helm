@@ -14,36 +14,47 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-# Trust the client certificate Prometheus reads /1.0/metrics with. A metrics
+# Trust the client certificates that read /1.0/metrics: Prometheus's and those
+# in incus.metrics.additional_certificates, such as Ceilometer's. A metrics
 # certificate reaches nothing but the metrics endpoint.
 
 set -eu
 
 STATE={{ .Values.incus.state_path | quote }}
-CERT={{ printf "%s/tls.crt" .Values.incus.metrics.mount_path | quote }}
-NAME={{ .Values.incus.metrics.certificate_name | quote }}
 
 fail() {
     echo "incus-metrics-trust: $*" >&2
     exit 1
 }
 
-[ -r "$CERT" ] || fail "$CERT is not readable"
+trust() {
+    cert=$1
+    name=$2
 
-# Incus names a certificate by the SHA-256 of its DER encoding.
-fingerprint=$(sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' "$CERT" \
-    | sed '/-----/d' | base64 -d | sha256sum | awk '{ print $1 }')
-[ ${#fingerprint} -eq 64 ] || fail "cannot fingerprint $CERT"
+    [ -r "$cert" ] || fail "$cert is not readable"
+
+    # Incus names a certificate by the SHA-256 of its DER encoding.
+    fingerprint=$(sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' "$cert" \
+        | sed '/-----/d' | base64 -d | sha256sum | awk '{ print $1 }')
+    [ ${#fingerprint} -eq 64 ] || fail "cannot fingerprint $cert"
+
+    if existing=$(INCUS_DIR="$STATE" incus query "/1.0/certificates/$fingerprint" 2>/dev/null); then
+        echo "$existing" | grep -q '"type": "metrics"' \
+            || fail "certificate $fingerprint is trusted, but not as a metrics certificate"
+        echo "incus-metrics-trust: $name ($fingerprint) is already trusted"
+        return 0
+    fi
+
+    INCUS_DIR="$STATE" incus config trust add-certificate "$cert" \
+        --type=metrics --name="$name"
+    echo "incus-metrics-trust: trusted $name ($fingerprint) for metrics"
+}
 
 INCUS_DIR="$STATE" incus admin waitready --timeout=120 >/dev/null
 
-if existing=$(INCUS_DIR="$STATE" incus query "/1.0/certificates/$fingerprint" 2>/dev/null); then
-    echo "$existing" | grep -q '"type": "metrics"' \
-        || fail "certificate $fingerprint is trusted, but not as a metrics certificate"
-    echo "incus-metrics-trust: $NAME ($fingerprint) is already trusted"
-    exit 0
-fi
-
-INCUS_DIR="$STATE" incus config trust add-certificate "$CERT" \
-    --type=metrics --name="$NAME"
-echo "incus-metrics-trust: trusted $NAME ($fingerprint) for metrics"
+trust {{ printf "%s/tls.crt" .Values.incus.metrics.mount_path | quote }} \
+    {{ .Values.incus.metrics.certificate_name | quote }}
+{{- range .Values.incus.metrics.additional_certificates }}
+trust {{ printf "%s.d/%s/tls.crt" $.Values.incus.metrics.mount_path .certificate_name | quote }} \
+    {{ .certificate_name | quote }}
+{{- end }}

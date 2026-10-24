@@ -15,7 +15,7 @@ apiVersion: v2
 appVersion: 2.0.0
 description: OpenStack-Helm Karbor
 name: karbor
-version: 2026.1.0
+version: 2026.2.0
 home: https://github.com/fivetime/openstack-karbor
 icon: https://www.openstack.org/themes/openstack/images/project-mascots/Karbor/OpenStack_Project_Karbor_vertical.png
 sources:

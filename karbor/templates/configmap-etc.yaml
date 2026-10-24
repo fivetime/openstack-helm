@@ -117,6 +117,9 @@ limitations under the License.
 {{- $_ := set $swift "swift_tenant_name" $karborUser.project_name -}}
 {{- $_ := set $swift "swift_user_domain_name" $karborUser.user_domain_name -}}
 {{- $_ := set $swift "swift_project_domain_name" $karborUser.project_domain_name -}}
+{{- if empty $swift.swift_interface -}}
+{{- $_ := set $swift "swift_interface" "internal" -}}
+{{- end -}}
 {{- end -}}
 {{- $_ := set $providers $name $provider -}}
 {{- end -}}

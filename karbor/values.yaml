@@ -89,8 +89,9 @@ conf:
   ## karbor-protection: <file name>: <ini sections>. A provider banking with
   ## karbor-swift-bank-plugin whose [swift_client] names no swift_user gets
   ## the credentials of the karbor service user (endpoints.identity.auth.karbor),
-  ## so that the bank is a container of the service project. Set a provider
-  ## to null to drop it.
+  ## so that the bank is a container of the service project, reached through
+  ## the internal object-store endpoint (swift_interface, karbor 2.0.2 and
+  ## later). Set a provider to null to drop it.
   providers:
     openstack-infra:
       provider:

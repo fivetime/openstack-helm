@@ -17,6 +17,7 @@ OpenStack charts options
     heat
     horizon
     ironic
+    karbor
     keystone
     magnum
     manila

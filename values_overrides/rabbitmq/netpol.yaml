@@ -47,6 +47,9 @@ network_policy:
               application: senlin
         - podSelector:
             matchLabels:
+              application: karbor
+        - podSelector:
+            matchLabels:
               application: placement
         - podSelector:
             matchLabels:

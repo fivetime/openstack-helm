@@ -1,0 +1,9 @@
+# Incus d592ab67ab51a5a6e6b530c47a71a6c6dd69612c (fivetime/incus#12: intercepted
+# FUSE mounts of an instance's own block devices are host-side fuseblk
+# superblocks; extension container_syscall_intercept_mount_fuseblk). CRIU
+# commit unchanged (e2f6a2e9), rebuilt binary sha256
+# ad4ea26bb7f4e89c45ec3c2d7b18aeaa90707e9a869541f6b0964e9df25b3ce2; change
+# nova incus-criu-admission.yaml together. LXCFS remains independently pinned.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:02941476ba2ff897f4e78e182a9d8923c1d002b59b364415ecd91887a78bd2de

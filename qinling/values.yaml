@@ -715,6 +715,12 @@ functions:
   # -- Labels of the namespace, e.g. Pod Security Admission levels.
   namespace_labels:
     pod-security.kubernetes.io/enforce: baseline
+  # -- ResourceQuota hard limits of the namespace, e.g. requests.cpu,
+  ## limits.memory, pods; empty, there is no quota. A pool pod takes
+  ## [resource_limits] max_cpu and max_memory plus 100m and 64Mi for its
+  ## sidecar; an image function's pod the function's cpu and memory. A pod
+  ## the quota refuses leaves a pool short or fails an image execution.
+  resource_quota: {}
   network_policy:
     # -- Ingress: only the engine reaches the workers. Egress: DNS, the
     ## qinling API (the sidecars download function packages), and addresses

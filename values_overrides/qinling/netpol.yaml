@@ -1,0 +1,44 @@
+---
+manifests:
+  network_policy: true
+network_policy:
+  qinling:
+    ingress:
+      - from:
+        - podSelector:
+            matchLabels:
+              application: qinling
+        - podSelector:
+            matchLabels:
+              application: ingress
+        - podSelector:
+            matchLabels:
+              application: horizon
+        # The sidecars of the runtime pools download function packages.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: qinling-functions
+        ports:
+        - protocol: TCP
+          port: 7070
+    egress:
+      - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: etcd
+      # The engine calls the workers of the functions.
+      - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: qinling-functions
+        ports:
+          - protocol: TCP
+            port: 9090
+      # The engine manages the runtime pools through the Kubernetes API.
+      - to:
+        - ipBlock:
+            cidr: %%%REPLACE_API_ADDR%%%/32
+        ports:
+          - protocol: TCP
+            port: %%%REPLACE_API_PORT%%%
+...

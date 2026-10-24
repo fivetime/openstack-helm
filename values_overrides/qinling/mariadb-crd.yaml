@@ -1,0 +1,20 @@
+---
+manifests:
+  job_db_init: false
+  mariadb_db: true
+conf:
+  qinling:
+    database:
+      connection: null
+pod:
+  etcSources:
+    qinling_api:
+    - secret:
+        name: qinling-db-conn
+    qinling_engine:
+    - secret:
+        name: qinling-db-conn
+    qinling_db_sync:
+    - secret:
+        name: qinling-db-conn
+...

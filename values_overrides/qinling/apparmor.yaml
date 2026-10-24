@@ -1,0 +1,17 @@
+---
+pod:
+  security_context:
+    qinling:
+      container:
+        qinling_api:
+          appArmorProfile:
+            type: RuntimeDefault
+        qinling_engine:
+          appArmorProfile:
+            type: RuntimeDefault
+    kubernetes_entrypoint:
+      container:
+        kubernetes_entrypoint:
+          appArmorProfile:
+            type: RuntimeDefault
+...

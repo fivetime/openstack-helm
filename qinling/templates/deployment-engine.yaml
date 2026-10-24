@@ -1,0 +1,145 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.deployment_engine }}
+{{- $envAll := . }}
+
+{{- $mounts_qinling_engine := .Values.pod.mounts.qinling_engine.qinling_engine }}
+{{- $mounts_qinling_engine_init := .Values.pod.mounts.qinling_engine.init_container }}
+
+{{- $serviceAccountName := "qinling-engine" }}
+{{ tuple $envAll "engine" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+
+{{- $etcSources := .Values.pod.etcSources.qinling_engine }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qinling-engine
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "qinling" "engine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  replicas: {{ .Values.pod.replicas.engine }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "qinling" "engine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "qinling" "engine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "qinling_engine" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+{{ dict "envAll" $envAll "podName" "qinling-engine" "containerNames" (list "qinling-engine" "init" ) | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
+    spec:
+{{ tuple "qinling_engine" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "qinling_engine" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "qinling" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      affinity:
+{{- tuple $envAll "qinling" "engine" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      nodeSelector:
+        {{ .Values.labels.engine.node_selector_key }}: {{ .Values.labels.engine.node_selector_value }}
+{{ if $envAll.Values.pod.tolerations.qinling.enabled }}
+{{ tuple $envAll "qinling" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.engine.timeout | default "30" }}
+      initContainers:
+{{ tuple $envAll "engine" $mounts_qinling_engine_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: qinling-engine
+{{ tuple $envAll "qinling_engine" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.engine | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "qinling" "container" "qinling_engine" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          env:
+            # The name of the RPC server of each engine, read by oslo.config
+            # from the environment ([engine] host): one per pod.
+            - name: OS_ENGINE__HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+{{- if .Values.secrets.tls.ca }}
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/ssl/certs/openstack-helm.crt"
+{{- end }}
+          command:
+            - qinling-engine
+            - --config-file
+            - /etc/qinling/qinling.conf
+            - --config-dir
+            - /etc/qinling/qinling.conf.d
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: oslo-lock-path
+              mountPath: {{ .Values.conf.qinling.oslo_concurrency.lock_path }}
+            - name: pod-etc-qinling
+              mountPath: /etc/qinling
+            - name: pod-var-lib-qinling
+              mountPath: /var/lib/qinling
+            - name: qinling-etc
+              mountPath: /etc/qinling/qinling.conf
+              subPath: qinling.conf
+              readOnly: true
+            - name: qinling-etc-snippets
+              mountPath: /etc/qinling/qinling.conf.d/
+              readOnly: true
+            {{ if .Values.conf.qinling.DEFAULT.log_config_append }}
+            - name: qinling-etc
+              mountPath: {{ .Values.conf.qinling.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.qinling.DEFAULT.log_config_append }}
+              readOnly: true
+            {{ end }}
+            - name: qinling-etc
+              mountPath: /etc/qinling/policy.yaml
+              subPath: policy.yaml
+              readOnly: true
+{{- dict "enabled" $envAll.Values.tls.oslo_db "name" "client-certs" "path" "/etc/mysql/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{- dict "enabled" $envAll.Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{ if $mounts_qinling_engine.volumeMounts }}{{ toYaml $mounts_qinling_engine.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: oslo-lock-path
+          emptyDir: {}
+        - name: pod-etc-qinling
+          emptyDir: {}
+        - name: pod-var-lib-qinling
+          emptyDir: {}
+        - name: qinling-bin
+          configMap:
+            name: qinling-bin
+            defaultMode: 0555
+        - name: qinling-etc
+          secret:
+            secretName: qinling-etc
+            defaultMode: 0444
+        - name: qinling-etc-snippets
+{{- if $etcSources }}
+          projected:
+            sources:
+{{ toYaml $etcSources | indent 14 }}
+{{- else }}
+          emptyDir: {}
+{{ end }}
+{{- dict "enabled" (or $envAll.Values.tls.oslo_db $envAll.Values.tls.oslo_messaging) "name" "client-certs" "secretName" $envAll.Values.secrets.tls.client.qinling | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{ if $mounts_qinling_engine.volumes }}{{ toYaml $mounts_qinling_engine.volumes | indent 8 }}{{ end }}
+{{- end }}

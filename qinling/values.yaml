@@ -1,0 +1,837 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for qinling.
+# This is a YAML-formatted file.
+# Declare name/value pairs to be passed into your templates.
+# name: value
+
+---
+release_group: null
+
+labels:
+  api:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  engine:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+# Qinling is retired upstream and has no quay.io/airshipit image; the fork
+# fivetime/openstack-qinling builds it for 2026.2 only (openstack-helm-images
+# build-local.d/qinling.yaml), along with the runtime images.
+images:
+  tags:
+    bootstrap: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    db_init: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    qinling_db_sync: ghcr.io/fivetime/openstackhelm/qinling:2026.2-ubuntu_resolute
+    db_drop: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    rabbit_init: docker.io/rabbitmq:4.3.5-management
+    ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    qinling_api: ghcr.io/fivetime/openstackhelm/qinling:2026.2-ubuntu_resolute
+    qinling_engine: ghcr.io/fivetime/openstackhelm/qinling:2026.2-ubuntu_resolute
+    # -- The sidecar of every runtime pool ([engine] sidecar_image). The
+    ## runtime images themselves are not deployed by the chart: an admin
+    ## registers them as runtimes (openstack runtime create <image>).
+    qinling_sidecar: ghcr.io/fivetime/openstackhelm/qinling-sidecar:2026.2-python3.14
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
+    image_repo_sync: docker.io/docker:17.07.0
+  pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+      - qinling_sidecar
+
+conf:
+  policy: {}
+  qinling:
+    DEFAULT:
+      log_config_append: /etc/qinling/logging.conf
+      # -- The API endpoint the engine and the workers use, for instance to
+      ## download function packages. When empty it is the internal
+      ## function-engine endpoint, which the workers reach in the cluster.
+      qinling_endpoint: ""
+      # -- The API endpoint of the webhook URLs given to users. Unset,
+      ## qinling takes the public function-engine endpoint of the catalog.
+      # webhook_endpoint:
+    pecan:
+      auth_enable: true
+    engine:
+      # -- Each engine pod sets [engine] host, the name of its RPC server,
+      ## from the environment. sidecar_image is filled in from
+      ## images.tags.qinling_sidecar, function_auth_url with the internal
+      ## identity endpoint, which the workers reach in the cluster.
+      function_service_expiration: 3600
+    kubernetes:
+      # -- The engine manages the Kubernetes cluster it runs in, with the
+      ## service account of its pod (templates/rbac-functions.yaml).
+      in_cluster: true
+      # -- The namespace of the runtime pools and function pods. The chart
+      ## creates it (manifests.namespace_functions) and grants the engine
+      ## what it needs in it.
+      namespace: qinling-functions
+      # -- The engine reaches the workers through the cluster IP of their
+      ## service, not a NodePort.
+      service_type: ClusterIP
+      replicas: 3
+      # -- The RuntimeClass of the pods that run tenant code (pools of
+      ## untrusted runtimes and image functions). Set a sandbox such as Kata
+      ## Containers or gVisor; unset, the pods use the nodes' default runtime.
+      # runtime_class:
+      # trusted_runtime_class:
+    etcd:
+      # -- qinling keeps the workers of functions and their service URLs in
+      ## etcd, under key_prefix.
+      host: etcd
+      port: 2379
+      protocol: http
+      key_prefix: /qinling/
+    storage:
+      provider: local
+      # -- Where qinling-api keeps function packages. With more than one API
+      ## pod this must be a volume they share (pod.mounts.qinling_api).
+      file_system_dir: /var/lib/qinling/packages
+    database:
+      max_retries: -1
+      # -- Database connection URI. When empty the URI is auto-generated
+      ## from endpoints.oslo_db. Set to null to disable auto-generation,
+      ## e.g. when using an operator such as mariadb-operator that supplies
+      ## the connection string via a mounted configuration snippet.
+      connection: ""
+    keystone_authtoken:
+      auth_type: password
+      auth_version: v3
+      memcache_security_strategy: ENCRYPT
+      service_type: function-engine
+    oslo_messaging_notifications:
+      # -- qinling sends no notifications of its own worth consuming.
+      driver: noop
+    oslo_middleware:
+      enable_proxy_headers_parsing: true
+    oslo_messaging_rabbit:
+      rabbit_ha_queues: false
+      # -- Durable queues are required by RabbitMQ 4.x, which denies
+      ## transient non-exclusive queues by default. Also valid on 3.x.
+      amqp_durable_queues: true
+      # -- Quorum queues, which RabbitMQ 4.x requires: it denies transient
+      ## non-exclusive queues, and oslo.messaging declares its reply and fanout
+      ## queues that way unless the transient ones are quorum too.
+      ## amqp_durable_queues alone only covers the RPC and notification queues.
+      rabbit_quorum_queue: true
+      rabbit_transient_quorum_queue: true
+      use_queue_manager: true
+      rabbit_qos_prefetch_count: 1
+      rabbit_stream_fanout: true
+    oslo_policy:
+      policy_file: /etc/qinling/policy.yaml
+    oslo_concurrency:
+      lock_path: /var/lock
+  logging:
+    loggers:
+      keys:
+        - root
+        - qinling
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_qinling:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: qinling
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_kubernetes:
+      level: WARNING
+      handlers: stderr
+      qualname: kubernetes
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+      datefmt: "%Y-%m-%d %H:%M:%S"
+    formatter_default:
+      format: "%(message)s"
+      datefmt: "%Y-%m-%d %H:%M:%S"
+  rabbitmq:
+    # NOTE(rk760n): adding rmq policy to set an expiration time on notification queues
+    policies:
+      - vhost: "qinling"
+        name: "ha_ttl_qinling"
+        definition:
+          # 70s
+          message-ttl: 70000
+        priority: 0
+        apply-to: all
+        pattern: '^(?!(amq\.|reply_)).*'
+  qinling_api_uwsgi:
+    uwsgi:
+      add-header: "Connection: close"
+      buffer-size: 65535
+      die-on-term: true
+      enable-threads: true
+      exit-on-reload: false
+      hook-master-start: unix_signal:15 gracefully_kill_them_all
+      lazy-apps: true
+      log-x-forwarded-for: true
+      master: true
+      need-app: true
+      processes: 1
+      procname-prefix-spaced: "qinling-api:"
+      route-user-agent: '^kube-probe.* donotlog:'
+      thunder-lock: true
+      worker-reload-mercy: 80
+      module: qinling.api.wsgi:application
+      stats: 0.0.0.0:1717
+      stats-http: true
+
+network:
+  api:
+    # Pod port the Service routes to; null => Kubernetes uses the Service port.
+    # A deployment override sets this (e.g. 443) to point at a TLS sidecar.
+    target_port: null
+    external_policy_local: false
+    node_port:
+      enabled: false
+      port: 30707
+
+bootstrap:
+  enabled: false
+  ks_user: qinling
+  script: |
+    openstack token issue
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - qinling-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    api:
+      jobs:
+        - qinling-db-sync
+        - qinling-rabbit-init
+        - qinling-ks-user
+        - qinling-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    engine:
+      jobs:
+        - qinling-db-sync
+        - qinling-rabbit-init
+        - qinling-ks-user
+        - qinling-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    bootstrap:
+      services:
+        - endpoint: internal
+          service: identity
+    db_drop:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_sync:
+      jobs:
+        - qinling-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+    ks_endpoints:
+      jobs:
+        - qinling-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+    rabbit_init:
+      services:
+        - endpoint: internal
+          service: oslo_messaging
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+
+# Names of secrets used by bootstrap and environmental checks
+secrets:
+  identity:
+    admin: qinling-keystone-admin
+    qinling: qinling-keystone-user
+  oslo_db:
+    admin: qinling-db-admin
+  oslo_messaging:
+    admin: qinling-rabbitmq-admin
+    qinling: qinling-rabbitmq-user
+  tls:
+    # Client certificate this chart presents for all mTLS backend connections
+    # (MariaDB and RabbitMQ). Separate from the MariaDB and RabbitMQ server certs.
+    client:
+      qinling: qinling-client
+    # CA bundle this chart trusts for OUTBOUND TLS calls (keystone and the
+    # services of the clusters). Null by default -> no CA is mounted and
+    # REQUESTS_CA_BUNDLE is left unset. A deployment override points this at a
+    # cert-manager CA-only secret carrying just ca.crt (no private key); it is
+    # mounted at /etc/ssl/certs/openstack-helm.crt. Assumes every server cert is
+    # signed by this single CA. The chart stays TLS-agnostic -- server certs and
+    # the nginx TLS sidecar live in the override.
+    ca: null
+  oci_image_registry:
+    qinling: qinling-oci-image-registry
+
+identity:
+  openrc:
+    exclude_vars: []
+    extra_vars: []
+
+# typically overridden by environmental
+# values, but should include all endpoints
+# required by this chart
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  oci_image_registry:
+    name: oci-image-registry
+    namespace: oci-image-registry
+    auth:
+      enabled: false
+      qinling:
+        username: qinling
+        password: password
+    hosts:
+      default: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        default: null
+  identity:
+    name: keystone
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      qinling:
+        # service, as for the other service users: qinling validates tokens
+        # and is the trustee of the trusts of functions, through which the
+        # engine runs jobs and webhooks for their owners. It needs no admin.
+        # The ks-user job grants every role listed here.
+        role: service
+        region_name: RegionOne
+        username: qinling
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: keystone
+      internal: keystone-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+  function_engine:
+    name: qinling
+    hosts:
+      default: qinling-api
+      public: qinling
+    host_fqdn_override:
+      default: null
+    path:
+      # The clients add /v1; the root (the API versions) needs no token and
+      # is the readiness probe.
+      default: null
+    scheme:
+      default: http
+    port:
+      api:
+        default: 7070
+        public: 80
+  oslo_db:
+    auth:
+      admin:
+        username: root
+        password: password
+      qinling:
+        username: qinling
+        password: password
+    hosts:
+      default: mariadb
+    host_fqdn_override:
+      default: null
+    path: /qinling
+    scheme: mysql+pymysql
+    port:
+      mysql:
+        default: 3306
+  oslo_cache:
+    auth:
+      # NOTE(portdirect): this is used to define the value for keystone
+      # authtoken cache encryption key, if not set it will be populated
+      # automatically with a random value, but to take advantage of
+      # this feature all services should be set to use the same key,
+      # and memcache service.
+      memcache_secret_key: null
+    hosts:
+      default: memcached
+    host_fqdn_override:
+      default: null
+    port:
+      memcache:
+        default: 11211
+  oslo_messaging:
+    auth:
+      admin:
+        username: rabbitmq
+        password: password
+      qinling:
+        username: qinling
+        password: password
+    statefulset:
+      replicas: 2
+      name: rabbitmq-rabbitmq
+    hosts:
+      default: rabbitmq
+    host_fqdn_override:
+      default: null
+    path: /qinling
+    scheme: rabbit
+    port:
+      amqp:
+        default: 5672
+      http:
+        default: 15672
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
+  # NOTE(tp6510): these endpoints allow for things like DNS lookups and ingress
+  # They are using to enable the Egress K8s network policy.
+  kube_dns:
+    namespace: kube-system
+    name: kubernetes-dns
+    hosts:
+      default: kube-dns
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: http
+    port:
+      dns:
+        default: 53
+        protocol: UDP
+
+pod:
+  # Extra sidecar containers and volumes to inject into the qinling-api
+  # Deployment, e.g. nginx TLS-terminating sidecars.
+  extraContainers:
+    qinling_api: []
+  extraVolumes:
+    qinling_api: []
+  security_context:
+    qinling:
+      pod:
+        runAsUser: 42424
+      container:
+        qinling_api:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        qinling_engine:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+  affinity:
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
+      weight:
+        default: 10
+  tolerations:
+    qinling:
+      enabled: false
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+  mounts:
+    qinling_api:
+      init_container: null
+      qinling_api:
+        volumeMounts:
+        volumes:
+    qinling_engine:
+      init_container: null
+      qinling_engine:
+        volumeMounts:
+        volumes:
+    qinling_bootstrap:
+      init_container: null
+      qinling_bootstrap:
+        volumeMounts:
+        volumes:
+    qinling_db_sync:
+      qinling_db_sync:
+        volumeMounts:
+        volumes:
+  # -- This allows users to add Kubernetes Projected Volumes to be mounted at /etc/qinling/qinling.conf.d/
+  ## This is a list of projected volume source objects for each deployment/statefulset/daemonset/cronjob
+  ## https://kubernetes.io/docs/concepts/storage/projected-volumes/
+  etcSources:
+    qinling_api: []
+    qinling_engine: []
+    qinling_db_sync: []
+  replicas:
+    # -- More than one API pod needs a shared volume for the function
+    ## packages (conf.qinling.storage.file_system_dir).
+    api: 1
+    engine: 1
+  lifecycle:
+    upgrades:
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 1
+          max_surge: 3
+    disruption_budget:
+      api:
+        min_available: 0
+    termination_grace_period:
+      api:
+        timeout: 30
+      # -- Executions the engine is waiting for when it stops are lost.
+      engine:
+        timeout: 60
+  resources:
+    enabled: false
+    api:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    engine:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    jobs:
+      bootstrap:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_drop:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_endpoints:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_service:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_user:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      rabbit_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+  probes:
+    api:
+      qinling_api:
+        liveness:
+          enabled: true
+          port: 1717
+          params:
+            initialDelaySeconds: 10
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+
+# -- The namespace of the runtime pools and function pods
+## (conf.qinling.kubernetes.namespace), where tenant code runs.
+functions:
+  # -- Labels of the namespace, e.g. Pod Security Admission levels.
+  namespace_labels:
+    pod-security.kubernetes.io/enforce: baseline
+  network_policy:
+    # -- Ingress: only the engine reaches the workers. Egress: DNS, the
+    ## qinling API (the sidecars download function packages), and addresses
+    ## outside egress_except, by default the private and link-local ranges,
+    ## which keeps functions away from the cluster, its nodes and the
+    ## control plane networks. extra_egress adds NetworkPolicyEgressRules,
+    ## e.g. for the public endpoints of the cloud when they have private
+    ## addresses.
+    egress_except:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 100.64.0.0/10
+      - 169.254.0.0/16
+    egress_except_v6:
+      - fc00::/7
+      - fe80::/10
+    extra_egress: []
+
+network_policy:
+  qinling:
+    ingress:
+      - {}
+    egress:
+      - {}
+
+tls:
+  oslo_messaging: false
+  oslo_db: false
+
+rabbitmq_topology:
+  # -- API group of the RabbitMQ topology custom resources this chart renders
+  ## when manifests.rabbitmq_topology is enabled. Either group works: the
+  ## resources are the same, only who reconciles them differs.
+  ##   rabbitmq.osh.openstack.org -- the rabbitmq chart's own topology
+  ##                                 controller
+  ##                                 (manifests.deployment_topology_controller)
+  ##   rabbitmq.com               -- the upstream messaging-topology-operator,
+  ##                                 which must then be deployed separately,
+  ##                                 along with a RabbitmqCluster named after
+  ##                                 endpoints.oslo_messaging.hosts.default for
+  ##                                 rabbitmqClusterReference to resolve to
+  api_group: rabbitmq.osh.openstack.org
+
+mariadb_db:
+  # -- API group of the MariaDB custom resources this chart renders when
+  ## manifests.mariadb_db is enabled. Either group works: the resources are
+  ## the same, only who reconciles them differs.
+  ##   mariadb.osh.openstack.org -- the mariadb chart's own db controller
+  ##                                (manifests.deployment_db_controller)
+  ##   k8s.mariadb.com           -- the upstream mariadb-operator, which must
+  ##                                then be deployed separately
+  ## With k8s.mariadb.com and tls.oslo_db enabled, use mariadb-operator 0.37.0
+  ## or newer. User.spec.require was added in that release, so older operators
+  ## drop it and create accounts without REQUIRE X509.
+  api_group: mariadb.osh.openstack.org
+
+manifests:
+  configmap_bin: true
+  configmap_etc: true
+  deployment_api: true
+  deployment_engine: true
+  # -- The namespace of the functions, the engine's RBAC rules in it and its
+  ## network policy (values functions).
+  namespace_functions: true
+  rbac_functions: true
+  network_policy_functions: true
+  job_bootstrap: true
+  job_db_init: true
+  # -- Render the MariaDB Database/User/Grant/Connection custom resources
+  ## reconciled by the mariadb chart's db controller, instead of running the
+  ## db-init job. Mutually exclusive with job_db_init.
+  mariadb_db: false
+  job_db_sync: true
+  job_db_drop: false
+  job_image_repo_sync: true
+  job_ks_endpoints: true
+  job_ks_service: true
+  job_ks_user: true
+  job_rabbit_init: true
+  pdb_api: true
+  network_policy: false
+  # -- Declare this chart's messaging vhost, account and permissions
+  ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
+  ## topology controller, instead of running the rabbit_init job. The
+  ## two are mutually exclusive.
+  rabbitmq_topology: false
+  secret_db: true
+  secret_keystone: true
+  secret_rabbitmq: true
+  secret_registry: true
+  service_api: true
+
+# -- Extra K8s manifests to deploy. Either a list or a map of manifests.
+## Note: Supports use of custom Helm templates
+## Note: Helm replaces (instead of merging) list values when several values
+## files are combined, so if you need to define extraObjects in more than one
+## overrides file, use the map form and make sure the keys are unique across
+## those files. With the list form only the last file takes effect.
+extraObjects: {}
+  # osh_secrets_store:
+  #   apiVersion: secrets-store.csi.x-k8s.io/v1
+  #   kind: SecretProviderClass
+  #   metadata:
+  #     name: osh-secrets-store
+  #   spec:
+  #     provider: aws
+  #     parameters:
+  #       objects: |
+  #         - objectName: "osh"
+  #           objectType: "secretsmanager"
+  #           jmesPath:
+  #               - path: "client_id"
+  #                 objectAlias: "client_id"
+  #               - path: "client_secret"
+  #                 objectAlias: "client_secret"
+  #     secretObjects:
+  #     - data:
+  #       - key: client_id
+  #         objectName: client_id
+  #       - key: client_secret
+  #         objectName: client_secret
+  #       secretName: osh-secrets-store
+  #       type: Opaque
+  #       labels:
+  #         app.kubernetes.io/part-of: osh
+...

@@ -1,0 +1,78 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.network_policy_functions }}
+{{- $envAll := . }}
+{{- $np := .Values.functions.network_policy }}
+---
+# Every pod in the namespace of the functions runs tenant code.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qinling-functions
+  namespace: {{ .Values.conf.qinling.kubernetes.namespace }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only the engine calls the workers (port 9090).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+{{ tuple $envAll "qinling" "engine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9090
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.endpoints.kube_dns.namespace }}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The sidecars download function packages from the API.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+{{ tuple $envAll "qinling" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ tuple "function_engine" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+{{ toYaml $np.egress_except | indent 14 }}
+        - ipBlock:
+            cidr: ::/0
+            except:
+{{ toYaml $np.egress_except_v6 | indent 14 }}
+{{- with $np.extra_egress }}
+{{ toYaml . | indent 4 }}
+{{- end }}
+{{- end }}

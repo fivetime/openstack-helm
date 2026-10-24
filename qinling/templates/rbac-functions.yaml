@@ -1,0 +1,81 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.rbac_functions }}
+{{- $ns := .Values.conf.qinling.kubernetes.namespace }}
+---
+# What qinling-engine does in the namespace of the functions: runtime pools
+# are Deployments, a function takes a pod of the pool (relabelled) behind a
+# Service of its own; image functions are single pods whose log is the
+# result.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: qinling-engine
+  namespace: {{ $ns }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: qinling-engine
+  namespace: {{ $ns }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: qinling-engine
+subjects:
+  - kind: ServiceAccount
+    name: qinling-engine
+    namespace: {{ .Release.Namespace }}
+---
+# The engine checks at start that the namespace exists (listing namespaces)
+# and creates it otherwise; with service_type NodePort it also looks up a
+# node address.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-qinling-engine
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create"]
+{{- if eq .Values.conf.qinling.kubernetes.service_type "NodePort" }}
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["list"]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-qinling-engine
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Namespace }}-qinling-engine
+subjects:
+  - kind: ServiceAccount
+    name: qinling-engine
+    namespace: {{ .Release.Namespace }}
+{{- end }}

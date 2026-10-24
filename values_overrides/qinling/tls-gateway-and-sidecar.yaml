@@ -1,0 +1,145 @@
+---
+network:
+  api:
+    target_port: 443
+secrets:
+  tls:
+    ca: openstack-helm-ca
+endpoints:
+  identity:
+    auth:
+      admin:
+        cacert: /etc/ssl/certs/openstack-helm.crt
+      qinling:
+        cacert: /etc/ssl/certs/openstack-helm.crt
+    scheme:
+      public: https
+      default: https
+      internal: https
+  function_engine:
+    scheme:
+      public: https
+      default: https
+      internal: https
+    port:
+      api:
+        public: 443
+    host_fqdn_override:
+      public:
+        host: qinling.openstack-helm.org
+conf:
+  qinling:
+    keystone_authtoken:
+      cafile: /etc/ssl/certs/openstack-helm.crt
+pod:
+  extraContainers:
+    qinling_api:
+    - name: nginx-tls
+      image: docker.io/nginx:1.27-alpine
+      imagePullPolicy: IfNotPresent
+      securityContext:
+        runAsUser: 0
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+      ports:
+      - name: https
+        containerPort: 443
+      volumeMounts:
+      - name: nginx-tls-certs
+        mountPath: /etc/nginx/certs
+        readOnly: true
+      - name: nginx-tls-conf
+        mountPath: /etc/nginx/conf.d
+        readOnly: true
+  extraVolumes:
+    qinling_api:
+    - name: nginx-tls-certs
+      secret:
+        secretName: qinling-tls-api
+    - name: nginx-tls-conf
+      configMap:
+        name: qinling-nginx-tls-api
+extraObjects:
+  cert_qinling_tls_api:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: qinling-tls-api
+      namespace: '{{ .Release.Namespace }}'
+    spec:
+      secretName: qinling-tls-api
+      issuerRef:
+        name: ca-issuer
+        kind: ClusterIssuer
+      usages:
+      - server auth
+      dnsNames:
+      - qinling-api
+      - qinling-api.{{ .Release.Namespace }}
+      - qinling-api.{{ .Release.Namespace }}.svc.{{ .Values.endpoints.cluster_domain_suffix }}
+  qinling_api_route:
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: qinling-api-route
+      namespace: '{{ .Release.Namespace }}'
+    spec:
+      hostnames:
+      - '{{ .Values.endpoints.function_engine.host_fqdn_override.public.host }}'
+      parentRefs:
+      - name: gateway-default
+        namespace: envoy-gateway-system
+      rules:
+      - matches:
+        - path:
+            type: PathPrefix
+            value: /
+        backendRefs:
+        - name: qinling-api
+          port: 7070
+  cm_qinling_nginx_tls_api:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: qinling-nginx-tls-api
+      namespace: '{{ .Release.Namespace }}'
+    data:
+      default.conf: |
+        server {
+            listen 443 ssl;
+            server_name _;
+
+            ssl_certificate     /etc/nginx/certs/tls.crt;
+            ssl_certificate_key /etc/nginx/certs/tls.key;
+            ssl_protocols       TLSv1.2 TLSv1.3;
+
+            location / {
+                proxy_pass http://127.0.0.1:7070;
+                # $http_host, not $host: it keeps the :port, so the
+                # self-referential URLs the API emits (pagination
+                # "next" links, version documents) point back at the
+                # Service port instead of an implicit 443.
+                proxy_set_header Host {{`$http_host`}};
+                proxy_set_header X-Forwarded-For {{`$proxy_add_x_forwarded_for`}};
+                proxy_set_header X-Forwarded-Proto https;
+            }
+        }
+  qinling_api_backend_tls:
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: BackendTLSPolicy
+    metadata:
+      name: qinling-api-backend-tls
+      namespace: '{{ .Release.Namespace }}'
+    spec:
+      targetRefs:
+      - group: ''
+        kind: Service
+        name: qinling-api
+        sectionName: s-api
+      validation:
+        caCertificateRefs:
+        - group: ''
+          kind: Secret
+          name: qinling-tls-api
+        hostname: qinling-api.{{ .Release.Namespace }}.svc.{{ .Values.endpoints.cluster_domain_suffix }}
+...

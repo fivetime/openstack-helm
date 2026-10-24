@@ -16,4 +16,7 @@ limitations under the License.
 
 set -ex
 
-qinling-manage db sync
+qinling-db-manage \
+  --config-file /etc/qinling/qinling.conf \
+  --config-dir /etc/qinling/qinling.conf.d \
+  upgrade head

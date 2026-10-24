@@ -1544,6 +1544,11 @@ conf:
     # If host_interface is null there is a fallback mechanism to search
     # for interface with routing using host network cidr.
     host_network_cidr: 0/0
+    # An address of the share storage network (the NFS server of Manila's
+    # shares, for one). The Kata compute sets my_shared_fs_storage_ip to its
+    # source address towards it: Nova's NFS access rules name that address.
+    # Null keeps Nova's default, my_ip.
+    shared_fs_storage_peer: null
   # This list is the keys to exclude from the config file ingested by nova-compute
   nova_compute_redactions:
     - database

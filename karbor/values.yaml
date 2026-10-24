@@ -1,0 +1,892 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for karbor.
+# This is a YAML-formatted file.
+# Declare name/value pairs to be passed into your templates.
+# name: value
+
+---
+release_group: null
+
+labels:
+  api:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  protection:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  operationengine:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+# Karbor is retired upstream and has no quay.io/airshipit image; the fork
+# fivetime/openstack-karbor builds it for 2026.2 only (openstack-helm-images
+# build-local.d/karbor.yaml).
+images:
+  tags:
+    bootstrap: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    db_init: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    karbor_db_sync: ghcr.io/fivetime/openstackhelm/karbor:2026.2-ubuntu_resolute
+    db_drop: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    rabbit_init: docker.io/rabbitmq:4.3.5-management
+    ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
+    karbor_api: ghcr.io/fivetime/openstackhelm/karbor:2026.2-ubuntu_resolute
+    karbor_protection: ghcr.io/fivetime/openstackhelm/karbor:2026.2-ubuntu_resolute
+    karbor_operationengine: ghcr.io/fivetime/openstackhelm/karbor:2026.2-ubuntu_resolute
+    dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
+    image_repo_sync: docker.io/docker:17.07.0
+  pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+conf:
+  paste:
+    composite:osapi_karbor:
+      use: "egg:Paste#urlmap"
+      /: apiversions
+      /v1: openstack_karbor_api_v1
+      /healthcheck: healthcheck
+    composite:openstack_karbor_api_v1:
+      use: call:karbor.api.middleware.auth:pipeline_factory
+      noauth: request_id faultwrap noauth apiv1
+      keystone: request_id faultwrap authtoken keystonecontext apiv1
+    filter:request_id:
+      paste.filter_factory: oslo_middleware:RequestId.factory
+    filter:faultwrap:
+      paste.filter_factory: karbor.api.middleware.fault:FaultWrapper.factory
+    filter:noauth:
+      paste.filter_factory: karbor.api.middleware.auth:NoAuthMiddleware.factory
+    filter:keystonecontext:
+      paste.filter_factory: karbor.api.middleware.auth:KarborKeystoneContext.factory
+    filter:authtoken:
+      paste.filter_factory: keystonemiddleware.auth_token:filter_factory
+    app:apiversions:
+      paste.app_factory: karbor.api.versions:Versions.factory
+    app:apiv1:
+      paste.app_factory: karbor.api.v1.router:APIRouter.factory
+    app:healthcheck:
+      paste.app_factory: oslo_middleware:Healthcheck.app_factory
+  policy: {}
+  # -- Protection providers, one file each in /etc/karbor/providers.d of
+  ## karbor-protection: <file name>: <ini sections>. A [swift_client] section
+  ## without swift_user gets the credentials of the karbor service user
+  ## (endpoints.identity.auth.karbor), so that the bank is a container of the
+  ## service project. Set a provider to null to drop it.
+  providers:
+    openstack-infra:
+      provider:
+        name: OS Infra Provider
+        description: This provider uses OpenStack's own services (swift, cinder) as storage
+        id: cf56bd3e-97a7-4078-b6d5-f36246333fd9
+        plugin:
+          type: multistring
+          values:
+            - karbor-volume-protection-plugin
+            - karbor-image-protection-plugin
+            - karbor-server-protection-plugin
+            - karbor-network-protection-plugin
+        bank: karbor-swift-bank-plugin
+        enabled: true
+      swift_client:
+        swift_auth_url: null
+        swift_user: null
+        swift_key: null
+        swift_tenant_name: null
+        swift_user_domain_name: null
+        swift_project_domain_name: null
+  karbor:
+    DEFAULT:
+      log_config_append: /etc/karbor/logging.conf
+      # -- Shared by all pods of a service: their RPC server queues do not
+      ## multiply with the pods, and karbor-operationengine keeps its service
+      ## record across restarts. Scheduled operations belong to the service
+      ## record that registered them, and a new record would orphan them.
+      host: karbor
+      api_paste_config: /etc/karbor/api-paste.ini
+      provider_config_dir: /etc/karbor/providers.d
+      auth_strategy: keystone
+      state_path: /var/lib/karbor
+    database:
+      max_retries: -1
+      # -- Database connection URI. When empty the URI is auto-generated
+      ## from endpoints.oslo_db. Set to null to disable auto-generation,
+      ## e.g. when using an operator such as mariadb-operator that supplies
+      ## the connection string via a mounted configuration snippet.
+      connection: ""
+    # -- The karbor service user, the trustee of the trusts karbor-
+    ## operationengine runs scheduled operations with; filled in from
+    ## endpoints.identity.auth.karbor. It needs a project: an unscoped token
+    ## has no catalog.
+    trustee:
+      auth_type: password
+    clients_keystone:
+      # -- Filled in with the internal identity endpoint.
+      auth_uri: null
+    # -- Endpoints of the services the protection plugins call. The user's
+    ## catalog is consulted first; the keystone lookup (interface) is the
+    ## fallback, used for instance by the trust-scoped requests of
+    ## scheduled operations.
+    karbor_client:
+      service_name: karbor
+      service_type: data-protect
+      version: "1"
+      interface: internal
+    nova_client:
+      nova_catalog_info: compute:nova:internalURL
+    cinder_client:
+      cinder_catalog_info: volumev3:cinderv3:internalURL
+    glance_client:
+      glance_catalog_info: image:glance:internalURL
+    neutron_client:
+      neutron_catalog_info: network:neutron:internalURL
+    manila_client:
+      manila_catalog_info: sharev2:manilav2:internalURL
+    trove_client:
+      trove_catalog_info: database:trove:internalURL
+    freezer_client:
+      freezer_catalog_info: backup:freezer:internalURL
+    keystone_authtoken:
+      auth_type: password
+      auth_version: v3
+      memcache_security_strategy: ENCRYPT
+      service_type: data-protect
+    oslo_messaging_notifications:
+      driver: messagingv2
+    oslo_middleware:
+      enable_proxy_headers_parsing: true
+    oslo_messaging_rabbit:
+      rabbit_ha_queues: false
+      # -- Durable queues are required by RabbitMQ 4.x, which denies
+      ## transient non-exclusive queues by default. Also valid on 3.x.
+      amqp_durable_queues: true
+      # -- Quorum queues, which RabbitMQ 4.x requires: it denies transient
+      ## non-exclusive queues, and oslo.messaging declares its reply and fanout
+      ## queues that way unless the transient ones are quorum too.
+      ## amqp_durable_queues alone only covers the RPC and notification queues.
+      rabbit_quorum_queue: true
+      rabbit_transient_quorum_queue: true
+      use_queue_manager: true
+      rabbit_qos_prefetch_count: 1
+      rabbit_stream_fanout: true
+    oslo_policy:
+      policy_file: /etc/karbor/policy.yaml
+    oslo_concurrency:
+      lock_path: /var/lock
+  logging:
+    loggers:
+      keys:
+        - root
+        - karbor
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_karbor:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: karbor
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+      datefmt: "%Y-%m-%d %H:%M:%S"
+    formatter_default:
+      format: "%(message)s"
+      datefmt: "%Y-%m-%d %H:%M:%S"
+  rabbitmq:
+    # NOTE(rk760n): adding rmq policy to set an expiration time on notification queues
+    policies:
+      - vhost: "karbor"
+        name: "ha_ttl_karbor"
+        definition:
+          # 70s
+          message-ttl: 70000
+        priority: 0
+        apply-to: all
+        pattern: '^(?!(amq\.|reply_)).*'
+  karbor_api_uwsgi:
+    uwsgi:
+      add-header: "Connection: close"
+      buffer-size: 65535
+      die-on-term: true
+      enable-threads: true
+      exit-on-reload: false
+      hook-master-start: unix_signal:15 gracefully_kill_them_all
+      lazy-apps: true
+      log-x-forwarded-for: true
+      master: true
+      need-app: true
+      processes: 1
+      procname-prefix-spaced: "karbor-api:"
+      route-user-agent: '^kube-probe.* donotlog:'
+      thunder-lock: true
+      worker-reload-mercy: 80
+      module: karbor.wsgi.api:application
+      stats: 0.0.0.0:1717
+      stats-http: true
+
+network:
+  api:
+    # Pod port the Service routes to; null => Kubernetes uses the Service port.
+    # A deployment override sets this (e.g. 443) to point at a TLS sidecar.
+    target_port: null
+    external_policy_local: false
+    node_port:
+      enabled: false
+      port: 30799
+
+bootstrap:
+  enabled: false
+  ks_user: karbor
+  script: |
+    openstack token issue
+
+dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - karbor-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
+  static:
+    api:
+      jobs:
+        - karbor-db-sync
+        - karbor-rabbit-init
+        - karbor-ks-user
+        - karbor-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    protection:
+      jobs:
+        - karbor-db-sync
+        - karbor-rabbit-init
+        - karbor-ks-user
+        - karbor-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    operationengine:
+      jobs:
+        - karbor-db-sync
+        - karbor-rabbit-init
+        - karbor-ks-user
+        - karbor-ks-endpoints
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
+    bootstrap:
+      services:
+        - endpoint: internal
+          service: identity
+    db_drop:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_sync:
+      jobs:
+        - karbor-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+    ks_endpoints:
+      jobs:
+        - karbor-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+    rabbit_init:
+      services:
+        - endpoint: internal
+          service: oslo_messaging
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+
+# Names of secrets used by bootstrap and environmental checks
+secrets:
+  identity:
+    admin: karbor-keystone-admin
+    karbor: karbor-keystone-user
+  oslo_db:
+    admin: karbor-db-admin
+  oslo_messaging:
+    admin: karbor-rabbitmq-admin
+    karbor: karbor-rabbitmq-user
+  tls:
+    # Client certificate this chart presents for all mTLS backend connections
+    # (MariaDB and RabbitMQ). Separate from the MariaDB and RabbitMQ server certs.
+    client:
+      karbor: karbor-client
+    # CA bundle this chart trusts for OUTBOUND TLS calls (keystone and the
+    # services of the clusters). Null by default -> no CA is mounted and
+    # REQUESTS_CA_BUNDLE is left unset. A deployment override points this at a
+    # cert-manager CA-only secret carrying just ca.crt (no private key); it is
+    # mounted at /etc/ssl/certs/openstack-helm.crt. Assumes every server cert is
+    # signed by this single CA. The chart stays TLS-agnostic -- server certs and
+    # the nginx TLS sidecar live in the override.
+    ca: null
+  oci_image_registry:
+    karbor: karbor-oci-image-registry
+
+identity:
+  openrc:
+    exclude_vars: []
+    extra_vars: []
+
+# typically overridden by environmental
+# values, but should include all endpoints
+# required by this chart
+endpoints:
+  cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
+  oci_image_registry:
+    name: oci-image-registry
+    namespace: oci-image-registry
+    auth:
+      enabled: false
+      karbor:
+        username: karbor
+        password: password
+    hosts:
+      default: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        default: null
+  identity:
+    name: keystone
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      karbor:
+        # admin: karbor looks its own user up in keystone (the trustee of
+        # scheduled operations), and the protection plugins act across the
+        # projects of the users through their tokens and trusts. service, as
+        # for the other service users. The ks-user job grants every role
+        # listed here.
+        role: admin,service
+        region_name: RegionOne
+        username: karbor
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
+    hosts:
+      default: keystone
+      internal: keystone-api
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      api:
+        default: 80
+        internal: 5000
+  data_protect:
+    name: karbor
+    hosts:
+      default: karbor-api
+      public: karbor
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v1/%(project_id)s
+      # The readiness probe; outside the versioned API and keystone.
+      healthcheck: /healthcheck
+    scheme:
+      default: http
+    port:
+      api:
+        default: 8799
+        public: 80
+  oslo_db:
+    auth:
+      admin:
+        username: root
+        password: password
+      karbor:
+        username: karbor
+        password: password
+    hosts:
+      default: mariadb
+    host_fqdn_override:
+      default: null
+    path: /karbor
+    scheme: mysql+pymysql
+    port:
+      mysql:
+        default: 3306
+  oslo_cache:
+    auth:
+      # NOTE(portdirect): this is used to define the value for keystone
+      # authtoken cache encryption key, if not set it will be populated
+      # automatically with a random value, but to take advantage of
+      # this feature all services should be set to use the same key,
+      # and memcache service.
+      memcache_secret_key: null
+    hosts:
+      default: memcached
+    host_fqdn_override:
+      default: null
+    port:
+      memcache:
+        default: 11211
+  oslo_messaging:
+    auth:
+      admin:
+        username: rabbitmq
+        password: password
+      karbor:
+        username: karbor
+        password: password
+    statefulset:
+      replicas: 2
+      name: rabbitmq-rabbitmq
+    hosts:
+      default: rabbitmq
+    host_fqdn_override:
+      default: null
+    path: /karbor
+    scheme: rabbit
+    port:
+      amqp:
+        default: 5672
+      http:
+        default: 15672
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
+  # NOTE(tp6510): these endpoints allow for things like DNS lookups and ingress
+  # They are using to enable the Egress K8s network policy.
+  kube_dns:
+    namespace: kube-system
+    name: kubernetes-dns
+    hosts:
+      default: kube-dns
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: http
+    port:
+      dns:
+        default: 53
+        protocol: UDP
+
+pod:
+  # Extra sidecar containers and volumes to inject into the karbor-api
+  # Deployment, e.g. nginx TLS-terminating sidecars.
+  extraContainers:
+    karbor_api: []
+  extraVolumes:
+    karbor_api: []
+  security_context:
+    karbor:
+      pod:
+        runAsUser: 42424
+      container:
+        karbor_api:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        karbor_protection:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        karbor_operationengine:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+  affinity:
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
+      weight:
+        default: 10
+  tolerations:
+    karbor:
+      enabled: false
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+  mounts:
+    karbor_api:
+      init_container: null
+      karbor_api:
+        volumeMounts:
+        volumes:
+    karbor_protection:
+      init_container: null
+      karbor_protection:
+        volumeMounts:
+        volumes:
+    karbor_operationengine:
+      init_container: null
+      karbor_operationengine:
+        volumeMounts:
+        volumes:
+    karbor_bootstrap:
+      init_container: null
+      karbor_bootstrap:
+        volumeMounts:
+        volumes:
+    karbor_db_sync:
+      karbor_db_sync:
+        volumeMounts:
+        volumes:
+  # -- This allows users to add Kubernetes Projected Volumes to be mounted at /etc/karbor/karbor.conf.d/
+  ## This is a list of projected volume source objects for each deployment/statefulset/daemonset/cronjob
+  ## https://kubernetes.io/docs/concepts/storage/projected-volumes/
+  etcSources:
+    karbor_api: []
+    karbor_protection: []
+    karbor_operationengine: []
+    karbor_db_sync: []
+  replicas:
+    api: 1
+    protection: 1
+    # -- karbor-operationengine keeps the scheduled operations it runs in
+    ## memory: one registered through one process is unknown to another, and
+    ## each one resumes the operations of the service record at start. Run
+    ## exactly one; its Deployment is replaced with the Recreate strategy.
+    operationengine: 1
+  lifecycle:
+    upgrades:
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 1
+          max_surge: 3
+    disruption_budget:
+      api:
+        min_available: 0
+    termination_grace_period:
+      api:
+        timeout: 30
+      # -- A protection flow still running when the process stops is lost
+      ## and its checkpoint stays in protecting; give them time to finish.
+      protection:
+        timeout: 60
+      operationengine:
+        timeout: 30
+  resources:
+    enabled: false
+    api:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    protection:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    operationengine:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    jobs:
+      bootstrap:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_drop:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_endpoints:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_service:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_user:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      rabbit_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+  probes:
+    api:
+      karbor_api:
+        liveness:
+          enabled: true
+          port: 1717
+          params:
+            initialDelaySeconds: 10
+        readiness:
+          enabled: true
+          params:
+            initialDelaySeconds: 30
+
+network_policy:
+  karbor:
+    ingress:
+      - {}
+    egress:
+      - {}
+
+tls:
+  oslo_messaging: false
+  oslo_db: false
+
+rabbitmq_topology:
+  # -- API group of the RabbitMQ topology custom resources this chart renders
+  ## when manifests.rabbitmq_topology is enabled. Either group works: the
+  ## resources are the same, only who reconciles them differs.
+  ##   rabbitmq.osh.openstack.org -- the rabbitmq chart's own topology
+  ##                                 controller
+  ##                                 (manifests.deployment_topology_controller)
+  ##   rabbitmq.com               -- the upstream messaging-topology-operator,
+  ##                                 which must then be deployed separately,
+  ##                                 along with a RabbitmqCluster named after
+  ##                                 endpoints.oslo_messaging.hosts.default for
+  ##                                 rabbitmqClusterReference to resolve to
+  api_group: rabbitmq.osh.openstack.org
+
+mariadb_db:
+  # -- API group of the MariaDB custom resources this chart renders when
+  ## manifests.mariadb_db is enabled. Either group works: the resources are
+  ## the same, only who reconciles them differs.
+  ##   mariadb.osh.openstack.org -- the mariadb chart's own db controller
+  ##                                (manifests.deployment_db_controller)
+  ##   k8s.mariadb.com           -- the upstream mariadb-operator, which must
+  ##                                then be deployed separately
+  ## With k8s.mariadb.com and tls.oslo_db enabled, use mariadb-operator 0.37.0
+  ## or newer. User.spec.require was added in that release, so older operators
+  ## drop it and create accounts without REQUIRE X509.
+  api_group: mariadb.osh.openstack.org
+
+manifests:
+  configmap_bin: true
+  configmap_etc: true
+  deployment_api: true
+  deployment_protection: true
+  deployment_operationengine: true
+  job_bootstrap: true
+  job_db_init: true
+  # -- Render the MariaDB Database/User/Grant/Connection custom resources
+  ## reconciled by the mariadb chart's db controller, instead of running the
+  ## db-init job. Mutually exclusive with job_db_init.
+  mariadb_db: false
+  job_db_sync: true
+  job_db_drop: false
+  job_image_repo_sync: true
+  job_ks_endpoints: true
+  job_ks_service: true
+  job_ks_user: true
+  job_rabbit_init: true
+  pdb_api: true
+  network_policy: false
+  # -- Declare this chart's messaging vhost, account and permissions
+  ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
+  ## topology controller, instead of running the rabbit_init job. The
+  ## two are mutually exclusive.
+  rabbitmq_topology: false
+  secret_db: true
+  secret_keystone: true
+  secret_rabbitmq: true
+  secret_registry: true
+  service_api: true
+
+# -- Extra K8s manifests to deploy. Either a list or a map of manifests.
+## Note: Supports use of custom Helm templates
+## Note: Helm replaces (instead of merging) list values when several values
+## files are combined, so if you need to define extraObjects in more than one
+## overrides file, use the map form and make sure the keys are unique across
+## those files. With the list form only the last file takes effect.
+extraObjects: {}
+  # osh_secrets_store:
+  #   apiVersion: secrets-store.csi.x-k8s.io/v1
+  #   kind: SecretProviderClass
+  #   metadata:
+  #     name: osh-secrets-store
+  #   spec:
+  #     provider: aws
+  #     parameters:
+  #       objects: |
+  #         - objectName: "osh"
+  #           objectType: "secretsmanager"
+  #           jmesPath:
+  #               - path: "client_id"
+  #                 objectAlias: "client_id"
+  #               - path: "client_secret"
+  #                 objectAlias: "client_secret"
+  #     secretObjects:
+  #     - data:
+  #       - key: client_id
+  #         objectName: client_id
+  #       - key: client_secret
+  #         objectName: client_secret
+  #       secretName: osh-secrets-store
+  #       type: Opaque
+  #       labels:
+  #         app.kubernetes.io/part-of: osh
+...

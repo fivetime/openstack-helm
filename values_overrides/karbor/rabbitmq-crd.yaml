@@ -1,0 +1,5 @@
+---
+manifests:
+  job_rabbit_init: false
+  rabbitmq_topology: true
+...

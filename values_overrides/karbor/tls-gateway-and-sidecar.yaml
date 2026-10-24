@@ -1,0 +1,150 @@
+---
+network:
+  api:
+    target_port: 443
+secrets:
+  tls:
+    ca: openstack-helm-ca
+endpoints:
+  identity:
+    auth:
+      admin:
+        cacert: /etc/ssl/certs/openstack-helm.crt
+      karbor:
+        cacert: /etc/ssl/certs/openstack-helm.crt
+    scheme:
+      public: https
+      default: https
+      internal: https
+  data_protect:
+    scheme:
+      public: https
+      default: https
+      internal: https
+    port:
+      api:
+        public: 443
+    host_fqdn_override:
+      public:
+        host: karbor.openstack-helm.org
+conf:
+  karbor:
+    keystone_authtoken:
+      cafile: /etc/ssl/certs/openstack-helm.crt
+  # The swift bank reads its client options from the provider file.
+  providers:
+    openstack-infra:
+      swift_client:
+        swift_ca_cert_file: /etc/ssl/certs/openstack-helm.crt
+pod:
+  extraContainers:
+    karbor_api:
+    - name: nginx-tls
+      image: docker.io/nginx:1.27-alpine
+      imagePullPolicy: IfNotPresent
+      securityContext:
+        runAsUser: 0
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+      ports:
+      - name: https
+        containerPort: 443
+      volumeMounts:
+      - name: nginx-tls-certs
+        mountPath: /etc/nginx/certs
+        readOnly: true
+      - name: nginx-tls-conf
+        mountPath: /etc/nginx/conf.d
+        readOnly: true
+  extraVolumes:
+    karbor_api:
+    - name: nginx-tls-certs
+      secret:
+        secretName: karbor-tls-api
+    - name: nginx-tls-conf
+      configMap:
+        name: karbor-nginx-tls-api
+extraObjects:
+  cert_karbor_tls_api:
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: karbor-tls-api
+      namespace: '{{ .Release.Namespace }}'
+    spec:
+      secretName: karbor-tls-api
+      issuerRef:
+        name: ca-issuer
+        kind: ClusterIssuer
+      usages:
+      - server auth
+      dnsNames:
+      - karbor-api
+      - karbor-api.{{ .Release.Namespace }}
+      - karbor-api.{{ .Release.Namespace }}.svc.{{ .Values.endpoints.cluster_domain_suffix }}
+  karbor_api_route:
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: karbor-api-route
+      namespace: '{{ .Release.Namespace }}'
+    spec:
+      hostnames:
+      - '{{ .Values.endpoints.data_protect.host_fqdn_override.public.host }}'
+      parentRefs:
+      - name: gateway-default
+        namespace: envoy-gateway-system
+      rules:
+      - matches:
+        - path:
+            type: PathPrefix
+            value: /
+        backendRefs:
+        - name: karbor-api
+          port: 8799
+  cm_karbor_nginx_tls_api:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: karbor-nginx-tls-api
+      namespace: '{{ .Release.Namespace }}'
+    data:
+      default.conf: |
+        server {
+            listen 443 ssl;
+            server_name _;
+
+            ssl_certificate     /etc/nginx/certs/tls.crt;
+            ssl_certificate_key /etc/nginx/certs/tls.key;
+            ssl_protocols       TLSv1.2 TLSv1.3;
+
+            location / {
+                proxy_pass http://127.0.0.1:8799;
+                # $http_host, not $host: it keeps the :port, so the
+                # self-referential URLs the API emits (pagination
+                # "next" links, version documents) point back at the
+                # Service port instead of an implicit 443.
+                proxy_set_header Host {{`$http_host`}};
+                proxy_set_header X-Forwarded-For {{`$proxy_add_x_forwarded_for`}};
+                proxy_set_header X-Forwarded-Proto https;
+            }
+        }
+  karbor_api_backend_tls:
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: BackendTLSPolicy
+    metadata:
+      name: karbor-api-backend-tls
+      namespace: '{{ .Release.Namespace }}'
+    spec:
+      targetRefs:
+      - group: ''
+        kind: Service
+        name: karbor-api
+        sectionName: s-api
+      validation:
+        caCertificateRefs:
+        - group: ''
+          kind: Secret
+          name: karbor-tls-api
+        hostname: karbor-api.{{ .Release.Namespace }}.svc.{{ .Values.endpoints.cluster_domain_suffix }}
+...

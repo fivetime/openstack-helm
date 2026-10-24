@@ -1,0 +1,20 @@
+---
+karbor:
+  - |
+    Added a karbor chart for the fork of Karbor (fivetime/openstack-karbor),
+    which runs on 2026.2 with native threads instead of eventlet; upstream
+    never had a chart for it. It follows the layout of the senlin chart:
+    karbor-api runs ``karbor.wsgi.api:application`` under uWSGI with stats
+    based liveness and ``/healthcheck`` readiness probes, karbor-protection
+    and karbor-operationengine are started directly, no Ingress templates
+    (expose the API through ``extraObjects``, see
+    ``values_overrides/karbor/gateway.yaml``), API TLS terminated by an
+    nginx sidecar, mTLS client certificates for MariaDB and RabbitMQ,
+    declarative MariaDB and RabbitMQ resources, ``etcSources`` for
+    ``/etc/karbor/karbor.conf.d`` and RabbitMQ 4 defaults (quorum queues).
+    The protection providers are ``conf.providers``, one file each in
+    ``/etc/karbor/providers.d``; a ``[swift_client]`` section without a user
+    gets the karbor service user. karbor-operationengine runs as a single
+    replica replaced with the Recreate strategy: it keeps the scheduled
+    operations in memory. The images default to
+    ``ghcr.io/fivetime/openstackhelm/karbor:2026.2-ubuntu_resolute``.

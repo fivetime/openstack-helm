@@ -1,0 +1,146 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.deployment_protection }}
+{{- $envAll := . }}
+
+{{- $mounts_karbor_protection := .Values.pod.mounts.karbor_protection.karbor_protection }}
+{{- $mounts_karbor_protection_init := .Values.pod.mounts.karbor_protection.init_container }}
+
+{{- $serviceAccountName := "karbor-protection" }}
+{{ tuple $envAll "protection" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+
+{{- $etcSources := .Values.pod.etcSources.karbor_protection }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: karbor-protection
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "karbor" "protection" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  replicas: {{ .Values.pod.replicas.protection }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "karbor" "protection" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "karbor" "protection" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "karbor_protection" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+{{ dict "envAll" $envAll "podName" "karbor-protection" "containerNames" (list "karbor-protection" "init" ) | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
+    spec:
+{{ tuple "karbor_protection" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "karbor_protection" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "karbor" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      affinity:
+{{- tuple $envAll "karbor" "protection" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      nodeSelector:
+        {{ .Values.labels.protection.node_selector_key }}: {{ .Values.labels.protection.node_selector_value }}
+{{ if $envAll.Values.pod.tolerations.karbor.enabled }}
+{{ tuple $envAll "karbor" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.protection.timeout | default "30" }}
+      initContainers:
+{{ tuple $envAll "protection" $mounts_karbor_protection_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: karbor-protection
+{{ tuple $envAll "karbor_protection" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.protection | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "karbor" "container" "karbor_protection" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{- if .Values.secrets.tls.ca }}
+          env:
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/ssl/certs/openstack-helm.crt"
+{{- end }}
+          command:
+            - karbor-protection
+            - --config-file
+            - /etc/karbor/karbor.conf
+            - --config-dir
+            - /etc/karbor/karbor.conf.d
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: oslo-lock-path
+              mountPath: {{ .Values.conf.karbor.oslo_concurrency.lock_path }}
+            - name: pod-etc-karbor
+              mountPath: /etc/karbor
+            - name: pod-var-lib-karbor
+              mountPath: {{ .Values.conf.karbor.DEFAULT.state_path }}
+            - name: karbor-etc
+              mountPath: /etc/karbor/karbor.conf
+              subPath: karbor.conf
+              readOnly: true
+            - name: karbor-etc-snippets
+              mountPath: /etc/karbor/karbor.conf.d/
+              readOnly: true
+            {{ if .Values.conf.karbor.DEFAULT.log_config_append }}
+            - name: karbor-etc
+              mountPath: {{ .Values.conf.karbor.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.karbor.DEFAULT.log_config_append }}
+              readOnly: true
+            {{ end }}
+            - name: karbor-etc
+              mountPath: /etc/karbor/policy.yaml
+              subPath: policy.yaml
+              readOnly: true
+            - name: karbor-providers
+              mountPath: {{ .Values.conf.karbor.DEFAULT.provider_config_dir }}
+              readOnly: true
+{{- dict "enabled" $envAll.Values.tls.oslo_db "name" "client-certs" "path" "/etc/mysql/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{- dict "enabled" $envAll.Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{ if $mounts_karbor_protection.volumeMounts }}{{ toYaml $mounts_karbor_protection.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: oslo-lock-path
+          emptyDir: {}
+        - name: pod-etc-karbor
+          emptyDir: {}
+        - name: pod-var-lib-karbor
+          emptyDir: {}
+        - name: karbor-bin
+          configMap:
+            name: karbor-bin
+            defaultMode: 0555
+        - name: karbor-etc
+          secret:
+            secretName: karbor-etc
+            defaultMode: 0444
+        - name: karbor-providers
+          secret:
+            secretName: karbor-providers
+            defaultMode: 0444
+        - name: karbor-etc-snippets
+{{- if $etcSources }}
+          projected:
+            sources:
+{{ toYaml $etcSources | indent 14 }}
+{{- else }}
+          emptyDir: {}
+{{ end }}
+{{- dict "enabled" (or $envAll.Values.tls.oslo_db $envAll.Values.tls.oslo_messaging) "name" "client-certs" "secretName" $envAll.Values.secrets.tls.client.karbor | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{ if $mounts_karbor_protection.volumes }}{{ toYaml $mounts_karbor_protection.volumes | indent 8 }}{{ end }}
+{{- end }}

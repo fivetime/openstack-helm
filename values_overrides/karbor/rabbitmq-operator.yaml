@@ -1,0 +1,7 @@
+---
+rabbitmq_topology:
+  api_group: rabbitmq.com
+endpoints:
+  oslo_messaging:
+    statefulset: null
+...

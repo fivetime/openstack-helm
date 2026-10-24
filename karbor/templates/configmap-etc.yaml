@@ -1,0 +1,157 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if (.Values.global).subchart_release_name }}
+{{- $_ := set . "deployment_name" .Chart.Name }}
+{{- else }}
+{{- $_ := set . "deployment_name" .Release.Name }}
+{{- end }}
+
+{{- if .Values.manifests.configmap_etc }}
+{{- $envAll := . }}
+
+{{- if empty .Values.conf.karbor.keystone_authtoken.auth_uri -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.karbor.keystone_authtoken "auth_uri" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.karbor.keystone_authtoken.auth_url -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.karbor.keystone_authtoken "auth_url" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.karbor.keystone_authtoken.region_name -}}
+{{- $_ := set .Values.conf.karbor.keystone_authtoken "region_name" .Values.endpoints.identity.auth.karbor.region_name -}}
+{{- end -}}
+{{- if empty .Values.conf.karbor.keystone_authtoken.project_name -}}
+{{- $_ := set .Values.conf.karbor.keystone_authtoken "project_name" .Values.endpoints.identity.auth.karbor.project_name -}}
+{{- end -}}
+{{- if empty .Values.conf.karbor.keystone_authtoken.project_domain_name -}}
+{{- $_ := set .Values.conf.karbor.keystone_authtoken "project_domain_name" .Values.endpoints.identity.auth.karbor.project_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.karbor.keystone_authtoken.user_domain_name -}}
+{{- $_ := set .Values.conf.karbor.keystone_authtoken "user_domain_name" .Values.endpoints.identity.auth.karbor.user_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.karbor.keystone_authtoken.username -}}
+{{- $_ := set .Values.conf.karbor.keystone_authtoken "username" .Values.endpoints.identity.auth.karbor.username -}}
+{{- end -}}
+{{- if empty .Values.conf.karbor.keystone_authtoken.password -}}
+{{- $_ := set .Values.conf.karbor.keystone_authtoken "password" .Values.endpoints.identity.auth.karbor.password -}}
+{{- end -}}
+
+{{- if empty .Values.conf.karbor.keystone_authtoken.memcached_servers -}}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set .Values.conf.karbor.keystone_authtoken "memcached_servers" -}}
+{{- end -}}
+{{- if empty .Values.conf.karbor.keystone_authtoken.memcache_secret_key -}}
+{{- $_ := set .Values.conf.karbor.keystone_authtoken "memcache_secret_key" ( default ( randAlphaNum 64 ) .Values.endpoints.oslo_cache.auth.memcache_secret_key ) -}}
+{{- end -}}
+
+{{- if and (hasKey .Values.conf.karbor "cache") (kindIs "map" .Values.conf.karbor.cache) (empty .Values.conf.karbor.cache.memcache_servers) }}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set .Values.conf.karbor.cache "memcache_servers" -}}
+{{- end -}}
+
+{{- if and (not (kindIs "invalid" .Values.conf.karbor.database.connection)) (empty .Values.conf.karbor.database.connection) -}}
+{{- $connection := tuple "oslo_db" "internal" "karbor" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" -}}
+{{- if .Values.tls.oslo_db -}}
+{{- $_ := (printf "%s?charset=utf8&ssl_ca=/etc/mysql/certs/ca.crt&ssl_key=/etc/mysql/certs/tls.key&ssl_cert=/etc/mysql/certs/tls.crt&ssl_verify_cert" $connection ) | set .Values.conf.karbor.database "connection" -}}
+{{- else -}}
+{{- $_ := set .Values.conf.karbor.database "connection" $connection -}}
+{{- end -}}
+{{- end -}}
+
+{{- if empty .Values.conf.karbor.DEFAULT.transport_url -}}
+{{- $_ := tuple "oslo_messaging" "internal" "karbor" "amqp" . | include "helm-toolkit.endpoints.authenticated_transport_endpoint_uri_lookup" | set .Values.conf.karbor.DEFAULT "transport_url" -}}
+{{- end -}}
+
+{{- $trustee := .Values.conf.karbor.trustee -}}
+{{- $karborUser := .Values.endpoints.identity.auth.karbor -}}
+{{- if empty $trustee.auth_url -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set $trustee "auth_url" -}}
+{{- end -}}
+{{- if empty $trustee.username -}}
+{{- $_ := set $trustee "username" $karborUser.username -}}
+{{- end -}}
+{{- if empty $trustee.password -}}
+{{- $_ := set $trustee "password" $karborUser.password -}}
+{{- end -}}
+{{- if empty $trustee.user_domain_name -}}
+{{- $_ := set $trustee "user_domain_name" $karborUser.user_domain_name -}}
+{{- end -}}
+{{- if empty $trustee.project_name -}}
+{{- $_ := set $trustee "project_name" $karborUser.project_name -}}
+{{- end -}}
+{{- if empty $trustee.project_domain_name -}}
+{{- $_ := set $trustee "project_domain_name" $karborUser.project_domain_name -}}
+{{- end -}}
+
+{{- if empty .Values.conf.karbor.clients_keystone.auth_uri -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.karbor.clients_keystone "auth_uri" -}}
+{{- end -}}
+
+{{- $providers := dict -}}
+{{- range $name, $provider := .Values.conf.providers -}}
+{{- if $provider -}}
+{{- $provider = deepCopy $provider -}}
+{{- if and (hasKey $provider "swift_client") (empty $provider.swift_client.swift_user) -}}
+{{- $swift := $provider.swift_client -}}
+{{- $_ := tuple "identity" "internal" "api" $envAll | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set $swift "swift_auth_url" -}}
+{{- $_ := set $swift "swift_user" $karborUser.username -}}
+{{- $_ := set $swift "swift_key" $karborUser.password -}}
+{{- $_ := set $swift "swift_tenant_name" $karborUser.project_name -}}
+{{- $_ := set $swift "swift_user_domain_name" $karborUser.user_domain_name -}}
+{{- $_ := set $swift "swift_project_domain_name" $karborUser.project_domain_name -}}
+{{- end -}}
+{{- $_ := set $providers $name $provider -}}
+{{- end -}}
+{{- end -}}
+
+{{- if empty (index .Values.conf.karbor_api_uwsgi.uwsgi "http-socket") -}}
+{{- $http_socket_port := tuple "data_protect" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | toString }}
+{{- $http_socket := printf "0.0.0.0:%s" $http_socket_port }}
+{{- $_ := set .Values.conf.karbor_api_uwsgi.uwsgi "http-socket" $http_socket -}}
+{{- end -}}
+
+{{- if and (empty .Values.conf.logging.handler_fluent) (has "fluent" .Values.conf.logging.handlers.keys) -}}
+{{- $fluentd_host := tuple "fluentd" "internal" $envAll | include "helm-toolkit.endpoints.hostname_namespaced_endpoint_lookup" }}
+{{- $fluentd_port := tuple "fluentd" "internal" "service" $envAll | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- $fluent_args := printf "('%s.%s', '%s', %s)" .Release.Namespace .deployment_name $fluentd_host $fluentd_port }}
+{{- $handler_fluent := dict "class" "fluent.handler.FluentHandler" "formatter" "fluent" "args" $fluent_args -}}
+{{- $_ := set .Values.conf.logging "handler_fluent" $handler_fluent -}}
+{{- end -}}
+
+{{- if and (empty .Values.conf.logging.formatter_fluent) (has "fluent" .Values.conf.logging.formatters.keys) -}}
+{{- $formatter_fluent := dict "class" "oslo_log.formatters.FluentFormatter" -}}
+{{- $_ := set .Values.conf.logging "formatter_fluent" $formatter_fluent -}}
+{{- end -}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: karbor-etc
+type: Opaque
+data:
+  karbor.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.karbor | b64enc }}
+  karbor-api-uwsgi.ini: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.karbor_api_uwsgi | b64enc }}
+  logging.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.logging | b64enc }}
+  api-paste.ini: {{ include "helm-toolkit.utils.to_ini" .Values.conf.paste | b64enc }}
+  policy.yaml: {{ toYaml .Values.conf.policy | b64enc }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: karbor-providers
+type: Opaque
+data:
+{{- range $name, $provider := $providers }}
+  {{ $name }}.conf: {{ include "helm-toolkit.utils.to_oslo_conf" $provider | b64enc }}
+{{- end }}
+{{- end }}

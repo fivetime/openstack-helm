@@ -1,0 +1,23 @@
+---
+manifests:
+  job_db_init: false
+  mariadb_db: true
+conf:
+  karbor:
+    database:
+      connection: null
+pod:
+  etcSources:
+    karbor_api:
+    - secret:
+        name: karbor-db-conn
+    karbor_protection:
+    - secret:
+        name: karbor-db-conn
+    karbor_db_sync:
+    - secret:
+        name: karbor-db-conn
+    karbor_operationengine:
+    - secret:
+        name: karbor-db-conn
+...

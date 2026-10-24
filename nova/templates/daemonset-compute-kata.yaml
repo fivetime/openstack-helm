@@ -132,6 +132,17 @@ spec:
               # As the Incus compute: oslo.messaging bug 2110957.
               use_queue_manager = false
               EOF
+{{- if .Values.conf.hypervisor.shared_fs_storage_peer }}
+              # Nova's NFS access rules of Manila shares name this host's
+              # my_shared_fs_storage_ip: its source address towards the
+              # share storage network, never a shared 0.0.0.0.
+              storage_ip=$(ip -4 route get {{ .Values.conf.hypervisor.shared_fs_storage_peer }} | awk '{ for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit } }')
+              test -n "$storage_ip"
+              cat > /run/nova-kata-pod/nova-share-storage.conf <<EOF
+              [DEFAULT]
+              my_shared_fs_storage_ip = $storage_ip
+              EOF
+{{- end }}
           volumeMounts:
             - name: varlibnova-kata
               mountPath: /var/lib/nova
@@ -166,6 +177,10 @@ spec:
             - /etc/nova/nova.conf.d
             - --config-file
             - /run/nova-kata-pod/nova-compute-messaging.conf
+{{- if .Values.conf.hypervisor.shared_fs_storage_peer }}
+            - --config-file
+            - /run/nova-kata-pod/nova-share-storage.conf
+{{- end }}
 {{- if and (empty .Values.conf.nova.DEFAULT.host) (.Values.pod.use_fqdn.compute) }}
             - --config-file
             - /run/nova-kata-pod/nova-compute-fqdn.conf

@@ -86,10 +86,11 @@ conf:
       paste.app_factory: oslo_middleware:Healthcheck.app_factory
   policy: {}
   # -- Protection providers, one file each in /etc/karbor/providers.d of
-  ## karbor-protection: <file name>: <ini sections>. A [swift_client] section
-  ## without swift_user gets the credentials of the karbor service user
-  ## (endpoints.identity.auth.karbor), so that the bank is a container of the
-  ## service project. Set a provider to null to drop it.
+  ## karbor-protection: <file name>: <ini sections>. A provider banking with
+  ## karbor-swift-bank-plugin whose [swift_client] names no swift_user gets
+  ## the credentials of the karbor service user (endpoints.identity.auth.karbor),
+  ## so that the bank is a container of the service project. Set a provider
+  ## to null to drop it.
   providers:
     openstack-infra:
       provider:
@@ -105,13 +106,6 @@ conf:
             - karbor-network-protection-plugin
         bank: karbor-swift-bank-plugin
         enabled: true
-      swift_client:
-        swift_auth_url: null
-        swift_user: null
-        swift_key: null
-        swift_tenant_name: null
-        swift_user_domain_name: null
-        swift_project_domain_name: null
   karbor:
     DEFAULT:
       log_config_append: /etc/karbor/logging.conf
@@ -137,9 +131,8 @@ conf:
     ## has no catalog.
     trustee:
       auth_type: password
-    clients_keystone:
-      # -- Filled in with the internal identity endpoint.
-      auth_uri: null
+    # -- [clients_keystone] auth_uri is filled in with the internal identity
+    ## endpoint unless set.
     # -- Endpoints of the services the protection plugins call. The user's
     ## catalog is consulted first; the keystone lookup (interface) is the
     ## fallback, used for instance by the trust-scoped requests of

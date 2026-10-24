@@ -93,6 +93,9 @@ limitations under the License.
 {{- $_ := set $trustee "project_domain_name" $karborUser.project_domain_name -}}
 {{- end -}}
 
+{{- if not (kindIs "map" .Values.conf.karbor.clients_keystone) -}}
+{{- $_ := set .Values.conf.karbor "clients_keystone" dict -}}
+{{- end -}}
 {{- if empty .Values.conf.karbor.clients_keystone.auth_uri -}}
 {{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.karbor.clients_keystone "auth_uri" -}}
 {{- end -}}
@@ -101,7 +104,12 @@ limitations under the License.
 {{- range $name, $provider := .Values.conf.providers -}}
 {{- if $provider -}}
 {{- $provider = deepCopy $provider -}}
-{{- if and (hasKey $provider "swift_client") (empty $provider.swift_client.swift_user) -}}
+{{- if eq (dig "provider" "bank" "" $provider) "karbor-swift-bank-plugin" -}}
+{{- if not (kindIs "map" $provider.swift_client) -}}
+{{- $_ := set $provider "swift_client" dict -}}
+{{- end -}}
+{{- end -}}
+{{- if and (kindIs "map" $provider.swift_client) (empty $provider.swift_client.swift_user) -}}
 {{- $swift := $provider.swift_client -}}
 {{- $_ := tuple "identity" "internal" "api" $envAll | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set $swift "swift_auth_url" -}}
 {{- $_ := set $swift "swift_user" $karborUser.username -}}

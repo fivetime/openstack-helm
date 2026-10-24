@@ -221,7 +221,14 @@ conf:
       log-x-forwarded-for: true
       master: true
       need-app: true
-      processes: 1
+      # -- A synchronous execution holds its request until the function
+      ## returns (up to [resource_limits] max_timeout), and before the first
+      ## execution of a function its sidecar downloads the package from this
+      ## same API. With a single worker the download waits behind the
+      ## execution that needs it until the sidecar gives up. qinling keeps
+      ## its request context and database session per thread.
+      processes: 2
+      threads: 16
       procname-prefix-spaced: "qinling-api:"
       route-user-agent: '^kube-probe.* donotlog:'
       thunder-lock: true

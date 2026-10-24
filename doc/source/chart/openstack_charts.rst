@@ -27,6 +27,7 @@ OpenStack charts options
     nova
     octavia
     placement
+    qinling
     rally
     senlin
     skyline

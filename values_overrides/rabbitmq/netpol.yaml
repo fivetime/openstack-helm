@@ -50,6 +50,9 @@ network_policy:
               application: karbor
         - podSelector:
             matchLabels:
+              application: qinling
+        - podSelector:
+            matchLabels:
               application: placement
         - podSelector:
             matchLabels:

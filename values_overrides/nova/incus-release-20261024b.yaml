@@ -1,0 +1,15 @@
+# Nova Incus driver 527ce60 on Nova stable/2026.2 8df1922926; SDK 7cf9852.
+# Cinder data volumes are mounted with fuse4fs instead of fuse2fs (a database
+# can remove a directory that held a file it still had open: Db2 on Trove);
+# hw_incus_data_volume_fuse must name the helper (fuse4fs), and the former
+# value true is refused. The Incus Ceilometer inspector moved to the
+# Ceilometer fork. openstack-helm-images ea55964 (PRs #3, #4), Build All
+# Images run 40081082913. Requirements unchanged. Apply after current
+# overrides: it also replaces the ext4=fuse2fs of incus-driver.yaml.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:ec7abd82e2ff97e305a34fda228f6d37415d45cce3de9eeea9191a68a51c16b6
+conf:
+  nova_incus:
+    incus:
+      data_volume_mount_fuse: ext4=fuse4fs

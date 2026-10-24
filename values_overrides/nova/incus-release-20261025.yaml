@@ -1,0 +1,10 @@
+# Nova Incus driver 26bdda0 on Nova stable/2026.2 8df1922926; SDK 7cf9852.
+# An interception Flavor (incus:intercept_data_volume_mounts=true) creates its
+# data-volume mounts as host-side fuseblk superblocks, so umount waits for
+# fuse4fs's final flush (nova-incus-driver#70); such a Flavor is refused on a
+# compute whose Incus lacks container_syscall_intercept_mount_fuseblk, so
+# Incus release-20261025.yaml goes first. openstack-helm-images 1ab5d21 (#7),
+# Build All Images run 40140063818. Apply after incus-release-20261024b.yaml.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:52cedd9684260a9ff9018d01f09fbaae17c8ba1f4e3d1140da707ab20ffe4354

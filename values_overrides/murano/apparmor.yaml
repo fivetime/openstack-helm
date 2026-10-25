@@ -1,0 +1,17 @@
+---
+pod:
+  security_context:
+    murano:
+      container:
+        murano_api:
+          appArmorProfile:
+            type: RuntimeDefault
+        murano_engine:
+          appArmorProfile:
+            type: RuntimeDefault
+    kubernetes_entrypoint:
+      container:
+        kubernetes_entrypoint:
+          appArmorProfile:
+            type: RuntimeDefault
+...

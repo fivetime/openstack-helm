@@ -1,0 +1,15 @@
+---
+# Murano has no quay.io/airshipit image (retired upstream); the fork builds
+# ghcr.io/fivetime/openstackhelm/murano for 2026.2 only.
+images:
+  tags:
+    bootstrap: "quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute"
+    db_init: "quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute"
+    db_drop: "quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute"
+    ks_user: "quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute"
+    ks_service: "quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute"
+    ks_endpoints: "quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute"
+    murano_db_sync: "ghcr.io/fivetime/openstackhelm/murano:2026.2-ubuntu_resolute"
+    murano_api: "ghcr.io/fivetime/openstackhelm/murano:2026.2-ubuntu_resolute"
+    murano_engine: "ghcr.io/fivetime/openstackhelm/murano:2026.2-ubuntu_resolute"
+...

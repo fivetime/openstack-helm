@@ -1,0 +1,159 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if (.Values.global).subchart_release_name }}
+{{- $_ := set . "deployment_name" .Chart.Name }}
+{{- else }}
+{{- $_ := set . "deployment_name" .Release.Name }}
+{{- end }}
+
+{{- if .Values.manifests.configmap_etc }}
+{{- $envAll := . }}
+
+{{- if empty .Values.conf.murano.keystone_authtoken.auth_uri -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.murano.keystone_authtoken "auth_uri" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.murano.keystone_authtoken.auth_url -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set .Values.conf.murano.keystone_authtoken "auth_url" -}}
+{{- end -}}
+
+{{- if empty .Values.conf.murano.keystone_authtoken.region_name -}}
+{{- $_ := set .Values.conf.murano.keystone_authtoken "region_name" .Values.endpoints.identity.auth.murano.region_name -}}
+{{- end -}}
+{{- if empty .Values.conf.murano.keystone_authtoken.project_name -}}
+{{- $_ := set .Values.conf.murano.keystone_authtoken "project_name" .Values.endpoints.identity.auth.murano.project_name -}}
+{{- end -}}
+{{- if empty .Values.conf.murano.keystone_authtoken.project_domain_name -}}
+{{- $_ := set .Values.conf.murano.keystone_authtoken "project_domain_name" .Values.endpoints.identity.auth.murano.project_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.murano.keystone_authtoken.user_domain_name -}}
+{{- $_ := set .Values.conf.murano.keystone_authtoken "user_domain_name" .Values.endpoints.identity.auth.murano.user_domain_name -}}
+{{- end -}}
+{{- if empty .Values.conf.murano.keystone_authtoken.username -}}
+{{- $_ := set .Values.conf.murano.keystone_authtoken "username" .Values.endpoints.identity.auth.murano.username -}}
+{{- end -}}
+{{- if empty .Values.conf.murano.keystone_authtoken.password -}}
+{{- $_ := set .Values.conf.murano.keystone_authtoken "password" .Values.endpoints.identity.auth.murano.password -}}
+{{- end -}}
+
+{{- if empty .Values.conf.murano.keystone_authtoken.memcached_servers -}}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set .Values.conf.murano.keystone_authtoken "memcached_servers" -}}
+{{- end -}}
+{{- if empty .Values.conf.murano.keystone_authtoken.memcache_secret_key -}}
+{{- $_ := set .Values.conf.murano.keystone_authtoken "memcache_secret_key" ( default ( randAlphaNum 64 ) .Values.endpoints.oslo_cache.auth.memcache_secret_key ) -}}
+{{- end -}}
+
+{{- if and (hasKey .Values.conf.murano "cache") (kindIs "map" .Values.conf.murano.cache) (empty .Values.conf.murano.cache.memcache_servers) }}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set .Values.conf.murano.cache "memcache_servers" -}}
+{{- end -}}
+
+{{- if and (not (kindIs "invalid" .Values.conf.murano.database.connection)) (empty .Values.conf.murano.database.connection) -}}
+{{- $connection := tuple "oslo_db" "internal" "murano" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" -}}
+{{- if .Values.tls.oslo_db -}}
+{{- $_ := (printf "%s?charset=utf8&ssl_ca=/etc/mysql/certs/ca.crt&ssl_key=/etc/mysql/certs/tls.key&ssl_cert=/etc/mysql/certs/tls.crt&ssl_verify_cert" $connection ) | set .Values.conf.murano.database "connection" -}}
+{{- else -}}
+{{- $_ := set .Values.conf.murano.database "connection" $connection -}}
+{{- end -}}
+{{- end -}}
+
+{{- if empty .Values.conf.murano.DEFAULT.transport_url -}}
+{{- $_ := tuple "oslo_messaging" "internal" "murano" "amqp" . | include "helm-toolkit.endpoints.authenticated_transport_endpoint_uri_lookup" | set .Values.conf.murano.DEFAULT "transport_url" -}}
+{{- end -}}
+
+{{- $muranoUser := .Values.endpoints.identity.auth.murano -}}
+{{- $muranoAuth := .Values.conf.murano.murano_auth -}}
+{{- if empty $muranoAuth.auth_url -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set $muranoAuth "auth_url" -}}
+{{- end -}}
+{{- if empty $muranoAuth.www_authenticate_uri -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set $muranoAuth "www_authenticate_uri" -}}
+{{- end -}}
+{{- if empty $muranoAuth.username -}}
+{{- $_ := set $muranoAuth "username" $muranoUser.username -}}
+{{- end -}}
+{{- if empty $muranoAuth.password -}}
+{{- $_ := set $muranoAuth "password" $muranoUser.password -}}
+{{- end -}}
+{{- if empty $muranoAuth.user_domain_name -}}
+{{- $_ := set $muranoAuth "user_domain_name" $muranoUser.user_domain_name -}}
+{{- end -}}
+{{- if empty $muranoAuth.project_name -}}
+{{- $_ := set $muranoAuth "project_name" $muranoUser.project_name -}}
+{{- end -}}
+{{- if empty $muranoAuth.project_domain_name -}}
+{{- $_ := set $muranoAuth "project_domain_name" $muranoUser.project_domain_name -}}
+{{- end -}}
+
+{{- if empty .Values.conf.murano.murano.url -}}
+{{- $_ := tuple "application_catalog" "internal" "api" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | printf "http://%s" | set .Values.conf.murano.murano "url" -}}
+{{- end -}}
+
+{{- $agentBroker := .Values.endpoints.agent_messaging -}}
+{{- $rabbitmq := .Values.conf.murano.rabbitmq -}}
+{{- if and (empty $rabbitmq.host) $agentBroker.host -}}
+{{- $_ := set $rabbitmq "host" $agentBroker.host -}}
+{{- $_ := set $rabbitmq "port" $agentBroker.port -}}
+{{- $_ := set $rabbitmq "login" $agentBroker.auth.murano_agent.username -}}
+{{- $_ := set $rabbitmq "password" $agentBroker.auth.murano_agent.password -}}
+{{- $_ := set $rabbitmq "virtual_host" $agentBroker.virtual_host -}}
+{{- $_ := set $rabbitmq "ssl" $agentBroker.ssl -}}
+{{- $_ := set $rabbitmq "insecure" $agentBroker.insecure -}}
+{{- end -}}
+
+{{- if and .Values.conf.signing_key (empty .Values.conf.murano.engine.signing_key) -}}
+{{- $_ := set .Values.conf.murano.engine "signing_key" "/etc/murano/signing-key/signing_key" -}}
+{{- end -}}
+
+{{- if empty (index .Values.conf.murano_api_uwsgi.uwsgi "http-socket") -}}
+{{- $http_socket_port := tuple "application_catalog" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | toString }}
+{{- $http_socket := printf "0.0.0.0:%s" $http_socket_port }}
+{{- $_ := set .Values.conf.murano_api_uwsgi.uwsgi "http-socket" $http_socket -}}
+{{- end -}}
+
+{{- if and (empty .Values.conf.logging.handler_fluent) (has "fluent" .Values.conf.logging.handlers.keys) -}}
+{{- $fluentd_host := tuple "fluentd" "internal" $envAll | include "helm-toolkit.endpoints.hostname_namespaced_endpoint_lookup" }}
+{{- $fluentd_port := tuple "fluentd" "internal" "service" $envAll | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- $fluent_args := printf "('%s.%s', '%s', %s)" .Release.Namespace .deployment_name $fluentd_host $fluentd_port }}
+{{- $handler_fluent := dict "class" "fluent.handler.FluentHandler" "formatter" "fluent" "args" $fluent_args -}}
+{{- $_ := set .Values.conf.logging "handler_fluent" $handler_fluent -}}
+{{- end -}}
+
+{{- if and (empty .Values.conf.logging.formatter_fluent) (has "fluent" .Values.conf.logging.formatters.keys) -}}
+{{- $formatter_fluent := dict "class" "oslo_log.formatters.FluentFormatter" -}}
+{{- $_ := set .Values.conf.logging "formatter_fluent" $formatter_fluent -}}
+{{- end -}}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: murano-etc
+type: Opaque
+data:
+  murano.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.murano | b64enc }}
+  murano-api-uwsgi.ini: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.murano_api_uwsgi | b64enc }}
+  logging.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.logging | b64enc }}
+  murano-paste.ini: {{ include "helm-toolkit.utils.to_ini" .Values.conf.paste | b64enc }}
+  policy.yaml: {{ toYaml .Values.conf.policy | b64enc }}
+{{- if .Values.conf.signing_key }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.secrets.signing_key }}
+type: Opaque
+data:
+  signing_key: {{ .Values.conf.signing_key | b64enc }}
+{{- end }}
+{{- end }}

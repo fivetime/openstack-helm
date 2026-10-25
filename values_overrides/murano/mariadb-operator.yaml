@@ -1,0 +1,4 @@
+---
+mariadb_db:
+  api_group: k8s.mariadb.com
+...

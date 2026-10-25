@@ -1,0 +1,20 @@
+---
+manifests:
+  job_db_init: false
+  mariadb_db: true
+conf:
+  murano:
+    database:
+      connection: null
+pod:
+  etcSources:
+    murano_api:
+    - secret:
+        name: murano-db-conn
+    murano_engine:
+    - secret:
+        name: murano-db-conn
+    murano_db_sync:
+    - secret:
+        name: murano-db-conn
+...

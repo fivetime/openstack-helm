@@ -1,0 +1,155 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.deployment_engine }}
+{{- $envAll := . }}
+
+{{- $mounts_murano_engine := .Values.pod.mounts.murano_engine.murano_engine }}
+{{- $mounts_murano_engine_init := .Values.pod.mounts.murano_engine.init_container }}
+
+{{- $serviceAccountName := "murano-engine" }}
+{{ tuple $envAll "engine" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+
+{{- $etcSources := .Values.pod.etcSources.murano_engine }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: murano-engine
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "murano" "engine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
+  replicas: {{ .Values.pod.replicas.engine }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "murano" "engine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "murano" "engine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "murano_engine" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+{{ dict "envAll" $envAll "podName" "murano-engine" "containerNames" (list "murano-engine" "init" ) | include "helm-toolkit.snippets.kubernetes_mandatory_access_control_annotation" | indent 8 }}
+    spec:
+{{ tuple "murano_engine" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "murano_engine" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "murano" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      affinity:
+{{- tuple $envAll "murano" "engine" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
+      nodeSelector:
+        {{ .Values.labels.engine.node_selector_key }}: {{ .Values.labels.engine.node_selector_value }}
+{{ if $envAll.Values.pod.tolerations.murano.enabled }}
+{{ tuple $envAll "murano" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.engine.timeout | default "30" }}
+      initContainers:
+{{ tuple $envAll "engine" $mounts_murano_engine_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+      containers:
+        - name: murano-engine
+{{ tuple $envAll "murano_engine" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.engine | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "murano" "container" "murano_engine" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+{{- if .Values.secrets.tls.ca }}
+          env:
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/ssl/certs/openstack-helm.crt"
+{{- end }}
+          command:
+            - murano-engine
+            - --config-file
+            - /etc/murano/murano.conf
+            - --config-dir
+            - /etc/murano/murano.conf.d
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: oslo-lock-path
+              mountPath: {{ .Values.conf.murano.oslo_concurrency.lock_path }}
+            - name: pod-etc-murano
+              mountPath: /etc/murano
+            - name: pod-var-lib-murano
+              mountPath: {{ .Values.conf.murano.DEFAULT.state_path }}
+            - name: murano-etc
+              mountPath: /etc/murano/murano.conf
+              subPath: murano.conf
+              readOnly: true
+            - name: murano-etc-snippets
+              mountPath: /etc/murano/murano.conf.d/
+              readOnly: true
+            {{ if .Values.conf.murano.DEFAULT.log_config_append }}
+            - name: murano-etc
+              mountPath: {{ .Values.conf.murano.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.murano.DEFAULT.log_config_append }}
+              readOnly: true
+            {{ end }}
+            - name: murano-etc
+              mountPath: /etc/murano/policy.yaml
+              subPath: policy.yaml
+              readOnly: true
+            - name: pod-var-cache-murano
+              mountPath: {{ dir .Values.conf.murano.engine.packages_cache }}
+{{- if .Values.conf.signing_key }}
+            - name: murano-signing-key
+              mountPath: /etc/murano/signing-key
+              readOnly: true
+{{- end }}
+{{- dict "enabled" $envAll.Values.tls.oslo_db "name" "client-certs" "path" "/etc/mysql/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{- dict "enabled" $envAll.Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
+{{ if $mounts_murano_engine.volumeMounts }}{{ toYaml $mounts_murano_engine.volumeMounts | indent 12 }}{{ end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: oslo-lock-path
+          emptyDir: {}
+        - name: pod-etc-murano
+          emptyDir: {}
+        - name: pod-var-lib-murano
+          emptyDir: {}
+        - name: murano-bin
+          configMap:
+            name: murano-bin
+            defaultMode: 0555
+        - name: murano-etc
+          secret:
+            secretName: murano-etc
+            defaultMode: 0444
+        - name: pod-var-cache-murano
+          emptyDir: {}
+{{- if .Values.conf.signing_key }}
+        - name: murano-signing-key
+          secret:
+            secretName: {{ .Values.secrets.signing_key }}
+            # read by the murano user; the container runs nothing else
+            defaultMode: 0444
+{{- end }}
+        - name: murano-etc-snippets
+{{- if $etcSources }}
+          projected:
+            sources:
+{{ toYaml $etcSources | indent 14 }}
+{{- else }}
+          emptyDir: {}
+{{ end }}
+{{- dict "enabled" (or $envAll.Values.tls.oslo_db $envAll.Values.tls.oslo_messaging) "name" "client-certs" "secretName" $envAll.Values.secrets.tls.client.murano | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
+{{ if $mounts_murano_engine.volumes }}{{ toYaml $mounts_murano_engine.volumes | indent 8 }}{{ end }}
+{{- end }}

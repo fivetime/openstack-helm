@@ -58,6 +58,9 @@ network_policy:
               application: qinling
         - podSelector:
             matchLabels:
+              application: murano
+        - podSelector:
+            matchLabels:
               application: placement
         - podSelector:
             matchLabels:

@@ -201,6 +201,12 @@ incus:
     # Removing an entry stops trusting it on new nodes but does not revoke
     # it where it is already trusted: run incus config trust remove there.
     additional_certificates: []
+    # Every metrics certificate is restricted to these Incus projects (the
+    # one Nova uses), and one trusted before is restricted on the next start.
+    # A restricted certificate reads /1.0/metrics as before; it sees only the
+    # instances of these projects.
+    projects:
+      - default
 
 monitoring:
   incus:

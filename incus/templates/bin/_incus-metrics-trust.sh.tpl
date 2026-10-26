@@ -16,16 +16,22 @@ limitations under the License.
 
 # Trust the client certificates that read /1.0/metrics: Prometheus's and those
 # in incus.metrics.additional_certificates, such as Ceilometer's. A metrics
-# certificate reaches nothing but the metrics endpoint.
+# certificate reaches nothing but the metrics endpoint, and is restricted to
+# incus.metrics.projects, so it sees only the instances of those projects.
 
 set -eu
 
 STATE={{ .Values.incus.state_path | quote }}
+PROJECTS={{ join "," .Values.incus.metrics.projects | quote }}
+PROJECTS_JSON={{ .Values.incus.metrics.projects | toJson | squote }}
 
 fail() {
     echo "incus-metrics-trust: $*" >&2
     exit 1
 }
+
+echo "$PROJECTS" | grep -Eq '^[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$' \
+    || fail "incus.metrics.projects must name at least one project"
 
 trust() {
     cert=$1
@@ -41,13 +47,17 @@ trust() {
     if existing=$(INCUS_DIR="$STATE" incus query "/1.0/certificates/$fingerprint" 2>/dev/null); then
         echo "$existing" | grep -q '"type": "metrics"' \
             || fail "certificate $fingerprint is trusted, but not as a metrics certificate"
-        echo "incus-metrics-trust: $name ($fingerprint) is already trusted"
+        # Restrict a certificate trusted before the restriction existed, and
+        # follow a changed project list. PATCH leaves its other fields alone.
+        INCUS_DIR="$STATE" incus query -X PATCH "/1.0/certificates/$fingerprint" \
+            --data "{\"restricted\": true, \"projects\": $PROJECTS_JSON}" >/dev/null
+        echo "incus-metrics-trust: $name ($fingerprint) is trusted, restricted to $PROJECTS"
         return 0
     fi
 
     INCUS_DIR="$STATE" incus config trust add-certificate "$cert" \
-        --type=metrics --name="$name"
-    echo "incus-metrics-trust: trusted $name ($fingerprint) for metrics"
+        --type=metrics --name="$name" --restricted --projects="$PROJECTS"
+    echo "incus-metrics-trust: trusted $name ($fingerprint) for metrics, restricted to $PROJECTS"
 }
 
 INCUS_DIR="$STATE" incus admin waitready --timeout=120 >/dev/null

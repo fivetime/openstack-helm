@@ -196,15 +196,19 @@ incus:
     secret_name: incus-metrics
     certificate_name: prometheus-metrics
     mount_path: /etc/incus-metrics
-    # Further metrics clients, each {certificate_name, secret_name}. Only the
-    # Secret's tls.crt is mounted, at <mount_path>.d/<certificate_name>.
+    # A restricted metrics certificate reads only the instance metrics of
+    # its projects and none of the daemon's own (incus_go_*, operations,
+    # warnings, ...), so Prometheus's certificate is unrestricted.
+    restricted: false
+    # Further metrics clients, each {certificate_name, secret_name} and an
+    # optional restricted (default true). Only the Secret's tls.crt is
+    # mounted, at <mount_path>.d/<certificate_name>.
     # Removing an entry stops trusting it on new nodes but does not revoke
     # it where it is already trusted: run incus config trust remove there.
     additional_certificates: []
-    # Every metrics certificate is restricted to these Incus projects (the
-    # one Nova uses), and one trusted before is restricted on the next start.
-    # A restricted certificate reads /1.0/metrics as before; it sees only the
-    # instances of these projects.
+    # The Incus projects (the one Nova uses) a restricted metrics
+    # certificate reads. Each start applies the restriction to an already
+    # trusted certificate too.
     projects:
       - default
 

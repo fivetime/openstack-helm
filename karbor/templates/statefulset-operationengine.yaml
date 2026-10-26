@@ -12,7 +12,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.deployment_operationengine }}
+{{/*
+manifests.deployment_operationengine defaulted to true, so an override that
+set it to false to disable the engine would otherwise be silently ignored
+after the rename and the engine would start.
+*/}}
+{{- if hasKey .Values.manifests "deployment_operationengine" }}
+{{- fail "manifests.deployment_operationengine has been removed, the operation engine runs as a StatefulSet under manifests.statefulset_operationengine" }}
+{{- end }}
+
+{{- if .Values.manifests.statefulset_operationengine }}
 {{- $envAll := . }}
 
 {{- $mounts_karbor_operationengine := .Values.pod.mounts.karbor_operationengine.karbor_operationengine }}
@@ -24,7 +33,7 @@ limitations under the License.
 {{- $etcSources := .Values.pod.etcSources.karbor_operationengine }}
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: karbor-operationengine
   annotations:
@@ -32,11 +41,14 @@ metadata:
   labels:
 {{ tuple $envAll "karbor" "operationengine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
-  revisionHistoryLimit: {{ .Values.pod.lifecycle.upgrades.deployments.revision_history }}
-  # The scheduled operations live in the memory of one process (see
-  # pod.replicas.operationengine): never run two, not even during a rollout.
-  strategy:
-    type: Recreate
+  # Each engine process is a service of its own, named after its pod: the
+  # StatefulSet keeps the names (karbor-operationengine-0, -1...) across
+  # restarts and rollouts, so the service records and the RPC server queues
+  # of the engines do not pile up. The engines share the scheduled
+  # operations through the database (karbor 2.0.15 and later): any number
+  # may run, and a rollout may replace them one by one.
+  serviceName: karbor-operationengine
+{{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_statefulset" | indent 2 }}
   replicas: {{ .Values.pod.replicas.operationengine }}
   selector:
     matchLabels:
@@ -71,8 +83,13 @@ spec:
 {{ tuple $envAll "karbor_operationengine" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.operationengine | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
 {{ dict "envAll" $envAll "application" "karbor" "container" "karbor_operationengine" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
-{{- if .Values.secrets.tls.ca }}
           env:
+            # [DEFAULT] host, over the one the services share (conf.karbor).
+            - name: OS_DEFAULT__HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+{{- if .Values.secrets.tls.ca }}
             - name: REQUESTS_CA_BUNDLE
               value: "/etc/ssl/certs/openstack-helm.crt"
 {{- end }}

@@ -110,10 +110,10 @@ conf:
   karbor:
     DEFAULT:
       log_config_append: /etc/karbor/logging.conf
-      # -- Shared by all pods of a service: their RPC server queues do not
-      ## multiply with the pods, and karbor-operationengine keeps its service
-      ## record across restarts. Scheduled operations belong to the service
-      ## record that registered them, and a new record would orphan them.
+      # -- Shared by the pods of karbor-api and karbor-protection: their RPC
+      ## server queues and service records do not multiply with the pods.
+      ## karbor-operationengine overrides it with its pod name (a StatefulSet
+      ## keeps it), one service record per engine.
       host: karbor
       api_paste_config: /etc/karbor/api-paste.ini
       provider_config_dir: /etc/karbor/providers.d
@@ -655,13 +655,17 @@ pod:
   replicas:
     api: 1
     protection: 1
-    # -- karbor-operationengine keeps the scheduled operations it runs in
-    ## memory: one registered through one process is unknown to another, and
-    ## each one resumes the operations of the service record at start. Run
-    ## exactly one; its Deployment is replaced with the Recreate strategy.
+    # -- karbor-operationengine shares the scheduled operations through the
+    ## database (karbor 2.0.15 and later, scheduling_strategy multi_node):
+    ## each due trigger and operation runs once whatever the number of
+    ## engines, and an engine takes over the running operations of one that
+    ## stopped. Run two for scheduled operations to survive a node failure.
     operationengine: 1
   lifecycle:
     upgrades:
+      statefulsets:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
       deployments:
         revision_history: 3
         pod_replacement_strategy: RollingUpdate
@@ -823,7 +827,7 @@ manifests:
   configmap_etc: true
   deployment_api: true
   deployment_protection: true
-  deployment_operationengine: true
+  statefulset_operationengine: true
   job_bootstrap: true
   job_db_init: true
   # -- Render the MariaDB Database/User/Grant/Connection custom resources

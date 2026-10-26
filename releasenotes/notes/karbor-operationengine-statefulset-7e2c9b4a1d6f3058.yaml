@@ -1,0 +1,16 @@
+---
+karbor:
+  - |
+    karbor-operationengine runs as a StatefulSet with a headless governing
+    service, updated with the RollingUpdate strategy, instead of a single
+    replica Deployment replaced with Recreate. Each engine takes its pod
+    name as its ``[DEFAULT] host`` (``OS_DEFAULT__HOST`` from the downward
+    API, over the host the other karbor services share), so each has a
+    service record and RPC server queue of its own, kept across restarts by
+    the stable pod names. karbor 2.0.15 and later share the scheduled
+    operations between engines through the database: set
+    ``pod.replicas.operationengine`` to run several. Upgrade the image
+    first, with one engine, so that the migration it needs runs before a
+    second engine starts. ``manifests.deployment_operationengine`` is
+    replaced with ``manifests.statefulset_operationengine``; the chart fails
+    if an override still sets the old key.

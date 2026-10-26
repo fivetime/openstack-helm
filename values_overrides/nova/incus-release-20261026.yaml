@@ -1,0 +1,10 @@
+# Nova Incus driver 644a080 on Nova stable/2026.2 8df1922926; SDK 7cf9852.
+# An interception Flavor (incus:intercept_data_volume_mounts=true) also sets
+# security.syscalls.intercept.ioctl.resize_fs, so the guest grows a mounted
+# data volume online with resize2fs (nova-incus-driver#74); such a Flavor is
+# refused on a compute whose Incus lacks container_syscall_intercept_ioctl_resize_fs,
+# so Incus release-20261026.yaml goes first. openstack-helm-images ddec9a3 (#11),
+# Build All Images run 40259764526. Apply after incus-release-20261025.yaml.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:8a2ad646f7fc5b4d473c34bc62000178a5de1330cc645f0676eeedd7c6dd4af7

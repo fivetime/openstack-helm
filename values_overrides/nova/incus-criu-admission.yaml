@@ -1,8 +1,8 @@
-# CRIU binary of the Incus novm image d592ab67 (CRIU fork e2f6a2e9, upstream
+# CRIU binary of the Incus novm image fa866e32 (CRIU fork e2f6a2e9, upstream
 # criu-dev through c9f3f04c9, ramfs dump/restore; the same commit as 4917b4fb,
 # rebuilt with a new fingerprint). Admitted for live migration after the
-# 2026-10-25 testbed gates; change together with incus release-20261025.yaml.
+# 2026-10-26 testbed gates; change together with incus release-20261026.yaml.
 conf:
   nova_incus:
     incus:
-      live_migration_criu_sha256: ad4ea26bb7f4e89c45ec3c2d7b18aeaa90707e9a869541f6b0964e9df25b3ce2
+      live_migration_criu_sha256: 496fa4cb470856442a87cd3e594fd839ec6c72092beea9c597039606daff3a85

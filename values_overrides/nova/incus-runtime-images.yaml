@@ -1,9 +1,11 @@
 # Nova Incus control image for Nova 2026.2 (our nova 2026.2-ubuntu_resolute
 # 8df1922926 with osprofiler tracing + patches 0002/0003/0006/0008/0009 +
-# IncusLiveMigrateData 1.7), driver 866d7e2; openstack-helm-images 20bfb1c,
-# Build All Images run 38928902243. Base nova adds nova/patches/nova/2026.2
-# (osprofiler tracing decided in setup_profiler, review 1010918).
+# IncusLiveMigrateData 1.7), driver 866d7e2; openstack-helm-images 928ef4c,
+# Build All Images run 40274022739. Base nova (fc02e8b5) adds
+# nova/patches/nova/2026.2: osprofiler tracing decided in setup_profiler
+# (review 1010918), and 409 instead of 500 for an os-start/os-stop that
+# lost the task state race to a concurrent one (2026-10-26).
 images:
   tags:
-    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:e4d69cea426c9aeb5db5dc7d8638acdee85b2696182008022dfb5b65b0e2ba17
-    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:e4d69cea426c9aeb5db5dc7d8638acdee85b2696182008022dfb5b65b0e2ba17
+    nova_api: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:1a69ea3bcb08a5dfdc4670829181c36cedf5bdca0d1eb036a82202e4393e099f
+    nova_conductor: ghcr.io/fivetime/openstackhelm/nova-incus-control@sha256:1a69ea3bcb08a5dfdc4670829181c36cedf5bdca0d1eb036a82202e4393e099f

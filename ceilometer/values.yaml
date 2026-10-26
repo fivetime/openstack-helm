@@ -1694,8 +1694,9 @@ conf:
       instance_discovery_method: naive
     polling:
       cfg_file: /etc/ceilometer/polling-kata.yaml
-  # What the Kata gateway counts for an instance: no disk latency,
-  # capacity, allocation or usage, no memory residency or swap.
+  # What the Kata gateway counts for an instance: the VMM's resident
+  # memory and each disk's capacity; a file root's allocation and usage too
+  # (an RBD root has none). No disk latency, no memory swap.
   polling_kata:
     sources:
       - name: kata_cpu
@@ -1706,6 +1707,7 @@ conf:
         interval: 300
         meters:
           - memory.usage
+          - memory.resident
           - network.incoming.bytes
           - network.incoming.packets
           - network.outgoing.bytes
@@ -1718,6 +1720,9 @@ conf:
           - disk.device.read.requests
           - disk.device.write.bytes
           - disk.device.write.requests
+          - disk.device.capacity
+          - disk.device.allocation
+          - disk.device.usage
   # The Incus compute's polling agent (manifests.daemonset_compute_incus):
   # ceilometer-incus.conf follows ceilometer.conf. The inspector reads the
   # local Incus server's /1.0/metrics with a certificate Incus trusts as

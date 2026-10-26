@@ -1,0 +1,10 @@
+# Incus fa866e32ce73beafad28eaaaa38bbfce88182b56 (fivetime/incus#14: an
+# instance's own resize2fs on an intercepted fuseblk data volume, gated by
+# security.syscalls.intercept.ioctl.resize_fs; extension
+# container_syscall_intercept_ioctl_resize_fs). CRIU commit unchanged
+# (e2f6a2e9), rebuilt binary sha256
+# 496fa4cb470856442a87cd3e594fd839ec6c72092beea9c597039606daff3a85; change
+# nova incus-criu-admission.yaml together. LXCFS remains independently pinned.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:7f2be5f91ee5429b3f5114aeb3899b513ce98d85bf86a5f7afef019b29367f7a

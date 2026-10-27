@@ -1,4 +1,5 @@
-# Copied from fivetime/openstack-zun tools/wsproxy-edge/envoy_config.py at 43c9bd53;
+# Copied from fivetime/openstack-zun tools/wsproxy-edge/envoy_config.py at 43c9bd53,
+# plus use_remote_address off for the trusted (gateway) chain;
 # keep it in step with the zun image's console tokens.
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -70,7 +71,13 @@ def chain(name, max_connections, headers_timeout, per_client_rate, match):
                  'http_connection_manager.v3.HttpConnectionManager',
         'stat_prefix': name,
         'codec_type': 'HTTP1',
-        'use_remote_address': True,
+        # From the gateway, keep the X-Forwarded-Proto it set (the scheme
+        # the client used, which zun-wsproxy checks a browser's Origin
+        # against) and take the client from the address it appended to
+        # X-Forwarded-For; as the edge, Envoy would say https -- its own
+        # downstream -- and every browser session would fail the check.
+        # From anywhere else, this is the edge: trust no header.
+        'use_remote_address': not match,
         'request_headers_timeout': headers_timeout,
         # A session lasts as long as it is connected; a silent command is
         # not an idle one.

@@ -1,0 +1,283 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+zun-wsproxy on every compute node, in the host network. The CRI runtime's
+streaming server (exec/attach of capsules) listens on the node's loopback
+only, so the proxy has to run next to it; the docker path keeps dialing the
+node's dockerd over mTLS. A client reaches the proxy of the capsule's node
+through [websocket_proxy] base_url, which the compute node renders with its
+own host (see network.wsproxy for the per-node routes).
+
+With network.wsproxy.edge the node's port is an Envoy sidecar's instead:
+TLS, the console token's signature checked with the public key, bounded
+header time and upgrade rates, before zun-wsproxy on loopback sees a byte.
+*/}}
+
+{{- if .Values.manifests.daemonset_wsproxy }}
+{{- $envAll := . }}
+
+{{- $mounts_zun_wsproxy := .Values.pod.mounts.zun_wsproxy.zun_wsproxy }}
+{{- $mounts_zun_wsproxy_init := .Values.pod.mounts.zun_wsproxy.init_container }}
+
+{{- $edge := .Values.network.wsproxy.edge }}
+{{- $port := tuple "websocket_proxy" "internal" "wsproxy" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+
+{{- $serviceAccountName := "zun-wsproxy" }}
+{{- if not .Values.manifests.deployment_wsproxy }}
+{{ tuple $envAll "wsproxy" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: zun-wsproxy-node
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "zun" "wsproxy-node" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll "zun" "wsproxy-node" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
+{{ tuple $envAll "wsproxy" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
+  template:
+    metadata:
+      labels:
+{{ tuple $envAll "zun" "wsproxy-node" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
+      annotations:
+{{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
+        configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
+        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{ tuple "zun_wsproxy" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
+    spec:
+{{ tuple "zun_wsproxy" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
+{{ tuple "zun_wsproxy" . | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
+      serviceAccountName: {{ $serviceAccountName }}
+{{ dict "envAll" $envAll "application" "zun_wsproxy_node" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
+      nodeSelector:
+        {{ .Values.labels.compute.node_selector_key }}: {{ .Values.labels.compute.node_selector_value }}
+{{ if $envAll.Values.pod.tolerations.zun.enabled }}
+{{ tuple $envAll "zun" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
+      # The proxy dials the runtime's streaming server on the node's loopback.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.wsproxy.timeout | default "30" }}
+      initContainers:
+{{ tuple $envAll "wsproxy" $mounts_zun_wsproxy_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{- if $edge.enabled }}
+        - name: zun-wsproxy-edge-init
+{{ tuple $envAll "zun_wsproxy" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "zun_wsproxy_node" "container" "zun_wsproxy_edge_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /tmp/zun-wsproxy-edge-init.sh
+          env:
+            - name: LISTEN
+              value: "0.0.0.0"
+            - name: PORT
+              value: {{ $port | quote }}
+            - name: UPSTREAM_PORT
+              value: {{ $edge.upstream_port | quote }}
+            - name: TRUSTED
+              value: {{ required "network.wsproxy.edge.trusted must list the gateway's source addresses" (join "," $edge.trusted) | quote }}
+            - name: TLS_DIR
+              value: /etc/envoy
+            - name: JWKS
+              value: /etc/zun-wsproxy-edge/jwks.json
+            - name: MAX_ALL
+              value: {{ $edge.limits.max_all | quote }}
+            - name: MAX_TRUSTED
+              value: {{ $edge.limits.max_trusted | quote }}
+            - name: MAX_OTHERS
+              value: {{ $edge.limits.max_others | quote }}
+            - name: RATE_TRUSTED
+              value: {{ $edge.limits.rate_trusted | quote }}
+            - name: RATE_OTHERS
+              value: {{ $edge.limits.rate_others | quote }}
+            - name: MAX_SESSIONS
+              value: {{ $edge.limits.max_sessions | quote }}
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: zun-bin
+              mountPath: /tmp/zun-wsproxy-edge-init.sh
+              subPath: zun-wsproxy-edge-init.sh
+              readOnly: true
+            - name: zun-bin
+              mountPath: /tmp/wsproxy-edge-envoy-config.py
+              subPath: wsproxy-edge-envoy-config.py
+              readOnly: true
+            - name: wsproxy-edge
+              mountPath: /etc/zun-wsproxy-edge
+{{ if $mounts_zun_wsproxy.volumeMounts }}{{ toYaml $mounts_zun_wsproxy.volumeMounts | indent 12 }}{{ end }}
+{{- end }}
+      containers:
+        - name: zun-wsproxy
+{{ tuple $envAll "zun_wsproxy" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.wsproxy | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "zun_wsproxy_node" "container" "zun_wsproxy" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          env:
+            - name: HOME
+              value: /var/lib/zun
+{{- if .Values.pod.env.zun_wsproxy }}
+{{ include "helm-toolkit.utils.to_k8s_env_vars" .Values.pod.env.zun_wsproxy | indent 12 }}
+{{- end }}
+          command:
+            - /tmp/zun-wsproxy.sh
+{{- if $edge.enabled }}
+          # Listening on loopback, which a probe from the kubelet cannot reach.
+          {{- if .Values.pod.probes.wsproxy.wsproxy.readiness.enabled }}
+          readinessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - import socket; socket.create_connection(('127.0.0.1', {{ $edge.upstream_port }}), 3).close()
+            initialDelaySeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.initialDelaySeconds }}
+            periodSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.periodSeconds }}
+            timeoutSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.timeoutSeconds }}
+          {{- end }}
+          {{- if .Values.pod.probes.wsproxy.wsproxy.liveness.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - import socket; socket.create_connection(('127.0.0.1', {{ $edge.upstream_port }}), 3).close()
+            initialDelaySeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.initialDelaySeconds }}
+            periodSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.periodSeconds }}
+            timeoutSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.timeoutSeconds }}
+          {{- end }}
+{{- else }}
+          ports:
+            - name: z-wsproxy
+              containerPort: {{ $port }}
+          {{- if .Values.pod.probes.wsproxy.wsproxy.readiness.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: z-wsproxy
+            initialDelaySeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.initialDelaySeconds }}
+            periodSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.periodSeconds }}
+            timeoutSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.timeoutSeconds }}
+          {{- end }}
+          {{- if .Values.pod.probes.wsproxy.wsproxy.liveness.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: z-wsproxy
+            initialDelaySeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.initialDelaySeconds }}
+            periodSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.periodSeconds }}
+            timeoutSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.timeoutSeconds }}
+          {{- end }}
+{{- end }}
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: zun-logs
+              mountPath: /var/log/zun
+            - name: zun-lib
+              mountPath: /var/lib/zun
+            - name: zun-bin
+              mountPath: /tmp/zun-wsproxy.sh
+              subPath: zun-wsproxy.sh
+              readOnly: true
+            - name: zun-etc
+              mountPath: /etc/zun/zun.conf
+              subPath: zun.conf
+              readOnly: true
+            {{- if .Values.conf.zun.DEFAULT.log_config_append }}
+            - name: zun-etc
+              mountPath: {{ .Values.conf.zun.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.zun.DEFAULT.log_config_append }}
+              readOnly: true
+            {{- end }}
+            - name: zun-etc
+              mountPath: /etc/zun/policy.yaml
+              subPath: policy.yaml
+              readOnly: true
+            {{- if $edge.enabled }}
+            - name: zun-etc
+              mountPath: /etc/zun/wsproxy-node.conf
+              subPath: wsproxy-node.conf
+              readOnly: true
+            {{- end }}
+{{ if $mounts_zun_wsproxy.volumeMounts }}{{ toYaml $mounts_zun_wsproxy.volumeMounts | indent 12 }}{{ end }}
+{{- if $edge.enabled }}
+        - name: zun-wsproxy-edge
+{{ tuple $envAll "zun_wsproxy_edge" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ tuple $envAll $envAll.Values.pod.resources.wsproxy_edge | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+{{ dict "envAll" $envAll "application" "zun_wsproxy_node" "container" "zun_wsproxy_edge" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - envoy
+            - -c
+            - /etc/zun-wsproxy-edge/envoy.json
+            # The host network is shared with cilium-envoy, whose shared
+            # memory a hot-restart base id would collide with.
+            - --disable-hot-restart
+            - --concurrency
+            - {{ $edge.concurrency | quote }}
+          ports:
+            - name: z-wsproxy
+              containerPort: {{ $port }}
+          {{- if .Values.pod.probes.wsproxy.wsproxy.readiness.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: z-wsproxy
+            initialDelaySeconds: 5
+            periodSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.periodSeconds }}
+            timeoutSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.readiness.params.timeoutSeconds }}
+          {{- end }}
+          {{- if .Values.pod.probes.wsproxy.wsproxy.liveness.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: z-wsproxy
+            initialDelaySeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.initialDelaySeconds }}
+            periodSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.periodSeconds }}
+            timeoutSeconds: {{ .Values.pod.probes.wsproxy.wsproxy.liveness.params.timeoutSeconds }}
+          {{- end }}
+          volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
+            - name: wsproxy-edge
+              mountPath: /etc/zun-wsproxy-edge
+              readOnly: true
+            - name: wsproxy-edge-tls
+              mountPath: /etc/envoy
+              readOnly: true
+{{- end }}
+      volumes:
+        - name: pod-tmp
+          emptyDir: {}
+        - name: zun-logs
+          emptyDir: {}
+        - name: zun-lib
+          emptyDir: {}
+        - name: zun-bin
+          configMap:
+            name: zun-bin
+            defaultMode: 0555
+        - name: zun-etc
+          secret:
+            secretName: zun-etc
+            defaultMode: 0444
+        {{- if $edge.enabled }}
+        - name: wsproxy-edge
+          emptyDir: {}
+        - name: wsproxy-edge-tls
+          secret:
+            secretName: {{ $edge.tls_secret }}
+            defaultMode: 0440
+        {{- end }}
+{{ if $mounts_zun_wsproxy.volumes }}{{ toYaml $mounts_zun_wsproxy.volumes | indent 8 }}{{ end }}
+{{- end }}

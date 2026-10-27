@@ -39,6 +39,7 @@ images:
     zun_cni_daemon: ghcr.io/fivetime/openstackhelm/zun:2026.2-ubuntu_resolute
     zun_compute: ghcr.io/fivetime/openstackhelm/zun:2026.2-ubuntu_resolute
     zun_wsproxy: ghcr.io/fivetime/openstackhelm/zun:2026.2-ubuntu_resolute
+    zun_wsproxy_edge: docker.io/envoyproxy/envoy@sha256:7765ad61185fca9c9a770c9e2cad640d085d708ae9c22f3741345e88331472a4
 
     # 依赖服务镜像
     rabbit_init: docker.io/rabbitmq:4.3.5-management                        # RabbitMQ 初始化
@@ -178,6 +179,59 @@ network:
         mtu: 1500                             # MTU 大小
         icc: true                             # 容器间连接
 
+  # 计算节点上的 WebSocket 代理(manifests.daemonset_wsproxy)。客户端拿到的
+  # 流地址由胶囊所在节点的 zun-compute 用它自己的 [websocket_proxy] base_url
+  # 拼出,地址必须落到那台节点的代理上。做法:base_url 带上节点的 host,例如
+  #   ws://zun-console.openstack.svc.cluster.local/node/$host/
+  # ($host 由 oslo.config 展开成 [DEFAULT] host),再按下面的节点列表为每个
+  # 节点建一个指向 <ip>:<wsproxy 端口> 的 Service(无 selector,手写
+  # EndpointSlice),并由 route 把 /node/<host>/ 前缀转到该节点、去掉前缀。
+  # host 必须与该节点 zun-compute 的 [DEFAULT] host 一字不差(未设时是节点
+  # 主机名,可能是 FQDN)。
+  wsproxy:
+    nodes: []
+    # - host: zun-worker1.cloud.local
+    #   ip: 10.32.32.167
+    route:
+      # 渲染一个 Gateway API HTTPRoute;没有匹配前缀的请求不转发(404)。
+      enabled: false
+      parentRefs: []
+      hostnames: []
+      # HTTPRoute rules[].timeouts;exec/attach 可能长时间无输出,不要让网关
+      # 的请求超时掐断它,例如 {request: "0s", backendRequest: "0s"}。
+      timeouts: {}
+    # 节点 IP 上的端口交给 Envoy 边车(edge),zun-wsproxy 只听 127.0.0.1:
+    # upstream_port。Envoy 终结 TLS、先用公钥验会话令牌(JWT,要求 zun-api
+    # 配 [websocket_proxy] token_signing_key、wsproxy 配 token_verify_key)、
+    # 限请求头时长和每个来源的升级速率,来源在 trusted 里的(gateway 所在
+    # 节点)走大连接池,其余(直连的租户)共用小池,直连洪水碰不到 gateway
+    # 那条路。配置由 files/wsproxy-edge-envoy-config.py 在 init 容器里生成,
+    # JWKS 由镜像里的 zun.websocket.console_token 从公钥导出。
+    edge:
+      enabled: false
+      upstream_port: 6785
+      # gateway 连到节点时的来源地址(CIDR),一般是全部节点地址。
+      trusted: []
+      # kubernetes.io/tls Secret(tls.crt/tls.key),SAN 要含 backend_tls.hostname。
+      tls_secret: zun-wsproxy-edge-tls
+      concurrency: 2
+      limits:
+        max_all: 8192
+        max_trusted: 4096
+        max_others: 256
+        # 每个来源地址每秒的 websocket 升级请求数
+        rate_trusted: 200
+        rate_others: 10
+        # 同时转给 zun-wsproxy 的会话数
+        max_sessions: 512
+    # gateway 用 TLS 连 Envoy(BackendTLSPolicy,作用于每个节点的 Service)。
+    # ⚠ Cilium 1.20 只校验 CA 链、不校验 SAN(hostname 只作 SNI):ca_configmap
+    # 里的 CA 必须只给 Envoy 签证书,不能是集群通用 CA。
+    backend_tls:
+      enabled: false
+      ca_configmap: zun-wsproxy-edge-ca
+      hostname: zun-wsproxy.openstack.svc
+
 # ────────────────────────────────────────────────────────────────────
 # 3.3 镜像驱动配置
 # ────────────────────────────────────────────────────────────────────
@@ -273,6 +327,36 @@ pod:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
 
+    # 计算节点上的 WebSocket 代理(manifests.daemonset_wsproxy):宿主机网络,
+    # 端口对节点所在网络可见,因此不以 root 运行、不留任何 capability、根文件
+    # 系统只读。UID 专用:进程数上限 pod.wsproxy_max_processes 按 UID 计,
+    # 别的容器(例如同为 42424 的 neutron)不能占用它的名额。
+    zun_wsproxy_node:
+      pod:
+        runAsUser: 42490
+        runAsGroup: 42490
+        fsGroup: 42490
+        runAsNonRoot: true
+      container:
+        zun_wsproxy:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        zun_wsproxy_edge:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        zun_wsproxy_edge_init:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+
   # ────────────────────────────────────────────────────────────────────
   # 4.2 Pod 调度和容忍配置
   # ────────────────────────────────────────────────────────────────────
@@ -360,6 +444,11 @@ pod:
     api: 1                                     # API 服务副本数
     wsproxy: 1                                 # WebSocket 代理副本数
 
+  # 计算节点上的 zun-wsproxy(manifests.daemonset_wsproxy)每个连接 fork 一个
+  # 进程,且在校验令牌之前就 fork:这里给它的 UID 设进程(含线程)数上限
+  # (RLIMIT_NPROC),连接洪水只耗尽它自己,拖不垮节点。null 不设。
+  wsproxy_max_processes: null
+
   # ────────────────────────────────────────────────────────────────────
   # 4.5 生命周期管理
   # ────────────────────────────────────────────────────────────────────
@@ -379,6 +468,10 @@ pod:
         cni_daemon:
           enabled: true
           min_ready_seconds: 10
+          max_unavailable: 1
+        wsproxy:
+          enabled: true
+          min_ready_seconds: 0
           max_unavailable: 1
 
     disruption_budget:
@@ -484,6 +577,15 @@ pod:
         cpu: "100m"
       limits:
         memory: "1024Mi"
+        cpu: "2000m"
+
+    # 计算节点 WebSocket 代理前面的 Envoy 边车(network.wsproxy.edge)
+    wsproxy_edge:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "512Mi"
         cpu: "2000m"
 
     # CNI 守护进程资源
@@ -1405,6 +1507,9 @@ manifests:
   daemonset_cni_daemon: false                 # CNI 守护进程集
   deployment_api: true                        # API 服务部署
   deployment_wsproxy: true                    # WebSocket 代理部署
+  # 每个计算节点一个 WebSocket 代理(宿主机网络),胶囊(CRI)的 exec/attach
+  # 必须用它:运行时的流服务器只监听节点回环地址。见 network.wsproxy。
+  daemonset_wsproxy: false
 
   # ────────────────────────────────────────────────────────────────────
   # 9.4 任务

@@ -1,0 +1,118 @@
+{{/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{/*
+One Service per compute node in front of the zun-wsproxy in that node's
+host network (no selector: a DaemonSet's pods cannot be told apart by
+labels), and a route sending /node/<host>/ to it. See network.wsproxy.
+*/}}
+
+{{- if .Values.manifests.daemonset_wsproxy }}
+{{- $envAll := . }}
+{{- $port := tuple "websocket_proxy" "internal" "wsproxy" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- range $node := .Values.network.wsproxy.nodes }}
+{{- $name := printf "zun-wsproxy-%s" (regexReplaceAll "[^a-z0-9-]" (lower (first (splitList "." $node.host))) "-") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+{{ tuple $envAll "zun" "wsproxy-node" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+  annotations:
+    zun.openstack.org/wsproxy-host: {{ $node.host | quote }}
+spec:
+  ports:
+    - name: ws-zun-wsproxy
+      port: {{ $port }}
+      targetPort: {{ $port }}
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: {{ $name }}
+  labels:
+    kubernetes.io/service-name: {{ $name }}
+    endpointslice.kubernetes.io/managed-by: helm
+{{ tuple $envAll "zun" "wsproxy-node" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+addressType: IPv4
+ports:
+  - name: ws-zun-wsproxy
+    port: {{ $port }}
+    protocol: TCP
+endpoints:
+  - addresses:
+      - {{ $node.ip | quote }}
+    conditions:
+      ready: true
+{{- end }}
+{{- if and .Values.network.wsproxy.backend_tls.enabled .Values.network.wsproxy.nodes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: zun-wsproxy-nodes
+  labels:
+{{ tuple $envAll "zun" "wsproxy-node" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  targetRefs:
+{{- range $node := .Values.network.wsproxy.nodes }}
+    - group: ""
+      kind: Service
+      name: {{ printf "zun-wsproxy-%s" (regexReplaceAll "[^a-z0-9-]" (lower (first (splitList "." $node.host))) "-") }}
+{{- end }}
+  validation:
+    caCertificateRefs:
+      - group: ""
+        kind: ConfigMap
+        name: {{ .Values.network.wsproxy.backend_tls.ca_configmap }}
+    hostname: {{ .Values.network.wsproxy.backend_tls.hostname | quote }}
+{{- end }}
+{{- if and .Values.network.wsproxy.route.enabled .Values.network.wsproxy.nodes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: zun-wsproxy-nodes
+  labels:
+{{ tuple $envAll "zun" "wsproxy-node" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
+spec:
+  parentRefs:
+{{ toYaml .Values.network.wsproxy.route.parentRefs | indent 4 }}
+  hostnames:
+{{ toYaml .Values.network.wsproxy.route.hostnames | indent 4 }}
+  rules:
+{{- range $node := .Values.network.wsproxy.nodes }}
+{{- $name := printf "zun-wsproxy-%s" (regexReplaceAll "[^a-z0-9-]" (lower (first (splitList "." $node.host))) "-") }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ printf "/node/%s/" $node.host | quote }}
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: {{ $name }}
+          port: {{ $port }}
+{{- with $envAll.Values.network.wsproxy.route.timeouts }}
+      timeouts:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

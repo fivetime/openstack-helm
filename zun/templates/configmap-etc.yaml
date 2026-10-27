@@ -220,5 +220,9 @@ data:
   api_audit_map.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.api_audit_map | b64enc }}
   rootwrap.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.rootwrap | b64enc }}
   zun.filters: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.rootwrap_filters | b64enc }}
+{{- if and .Values.manifests.daemonset_wsproxy .Values.network.wsproxy.edge.enabled }}
+{{- $wsproxy_node := dict "websocket_proxy" (dict "wsproxy_host" "127.0.0.1" "wsproxy_port" .Values.network.wsproxy.edge.upstream_port) }}
+  wsproxy-node.conf: {{ include "helm-toolkit.utils.to_oslo_conf" $wsproxy_node | b64enc }}
+{{- end }}
 {{- include "helm-toolkit.snippets.values_template_renderer" (dict "envAll" $envAll "template" .Values.conf.wsgi_zun "key" "wsgi-zun.conf" "format" "Secret" ) | indent 2 }}
 {{- end }}

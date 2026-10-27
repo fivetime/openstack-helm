@@ -46,6 +46,12 @@ data:
 {{ tuple "bin/_zun-cni-daemon.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   zun-wsproxy.sh: |
 {{ tuple "bin/_zun-wsproxy.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- if .Values.network.wsproxy.edge.enabled }}
+  zun-wsproxy-edge-init.sh: |
+{{ tuple "bin/_zun-wsproxy-edge-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  wsproxy-edge-envoy-config.py: |
+{{ .Files.Get "files/wsproxy-edge-envoy-config.py" | indent 4 }}
+{{- end }}
   runtime-check.sh: |
 {{ tuple "bin/_runtime-check.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   nova-compat-check.sh: |

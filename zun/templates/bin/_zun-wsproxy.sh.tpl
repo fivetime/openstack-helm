@@ -19,5 +19,22 @@ set -ex
 # Create log directory
 mkdir -p /var/log/zun
 
+{{- if .Values.pod.wsproxy_max_processes }}
+
+# A process per connection, forked before the token is checked: cap the
+# processes (and threads) of this UID so a flood exhausts only the proxy.
+ulimit -u {{ .Values.pod.wsproxy_max_processes }}
+{{- end }}
+
+{{- if and .Values.manifests.daemonset_wsproxy .Values.network.wsproxy.edge.enabled }}
+
+# On a compute node behind the Envoy sidecar: listen on loopback only.
+WSPROXY_NODE_CONF=""
+if [ -f /etc/zun/wsproxy-node.conf ]; then
+    WSPROXY_NODE_CONF="--config-file /etc/zun/wsproxy-node.conf"
+fi
+{{- end }}
+
 exec zun-wsproxy \
-    --config-file /etc/zun/zun.conf
+    --config-file /etc/zun/zun.conf{{ if and .Values.manifests.daemonset_wsproxy .Values.network.wsproxy.edge.enabled }} \
+    ${WSPROXY_NODE_CONF}{{ end }}

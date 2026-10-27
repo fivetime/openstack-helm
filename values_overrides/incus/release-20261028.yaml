@@ -1,0 +1,10 @@
+# Incus 8339ba2e1a8b0f3524d9c7d9d8dd55c5055ae5ce (fivetime/incus#15:
+# security.syscalls.intercept.mount.lxcfs overlays LXCFS on a proc mounted
+# inside a nesting instance, so nested containers see the instance's limits;
+# extension container_syscall_intercept_mount_lxcfs). CRIU commit unchanged
+# (e2f6a2e9), rebuilt binary sha256
+# 3ab24a927fd67523ed36e4ab39527d21cfd4b18649f79e152b231bc0d49c8ab8; change
+# nova incus-criu-admission.yaml together. LXCFS remains independently pinned.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:157a9f58bc1bf232a5b1ee2512a695396574160cf3afb16ce4c8e29ba555f401

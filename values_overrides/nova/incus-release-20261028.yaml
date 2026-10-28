@@ -1,0 +1,11 @@
+# Nova Incus driver 3f6b986 on Nova stable/2026.2 8df1922926; SDK 7cf9852.
+# A nesting Flavor also sets security.syscalls.intercept.mount, .mount.lxcfs
+# and .sysinfo, so a container engine inside the instance sees the
+# instance's memory and CPUs (nova-incus-driver#78); such a Flavor is refused
+# and CUSTOM_INCUS_NESTING is withheld on a compute whose Incus lacks
+# container_syscall_intercept_mount_lxcfs, so Incus release-20261028.yaml goes
+# first. openstack-helm-images c4d9616 (#19), Build All Images run
+# 40601706962. Apply after incus-release-20261026.yaml.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:210ec933a4412d24691af9c5f5117cfb2e230671884492b6cc7ccbea1722c0ae

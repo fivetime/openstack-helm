@@ -130,13 +130,9 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       hostPID: true
-      {{- if and $envAll.Values.pod.tolerations.health_manager.enabled $envAll.Values.pod.tolerations.health_manager.tolerations }}
-      tolerations:
-      {{- toYaml $envAll.Values.pod.tolerations.health_manager.tolerations | nindent 8 }}
-      {{- end }}
       nodeSelector:
         {{ .Values.labels.health_manager.node_selector_key }}: {{ .Values.labels.health_manager.node_selector_value }}
-{{ if and $envAll.Values.pod.tolerations.octavia.enabled (not $envAll.Values.pod.tolerations.health_manager.enabled) }}
+{{ if $envAll.Values.pod.tolerations.octavia.enabled }}
 {{ tuple $envAll "octavia" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
 {{ end }}
       initContainers:
@@ -231,10 +227,9 @@ spec:
 {{ tuple "octavia_health_manager" $envAll | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
 {{ dict "envAll" $envAll "application" "octavia_health_manager" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
-      {{- if and $envAll.Values.pod.tolerations.health_manager.enabled $envAll.Values.pod.tolerations.health_manager.tolerations }}
-      tolerations:
-      {{- toYaml $envAll.Values.pod.tolerations.health_manager.tolerations | nindent 8 }}
-      {{- end }}
+{{ if $envAll.Values.pod.tolerations.octavia.enabled }}
+{{ tuple $envAll "octavia" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
       affinity:
 {{ tuple $envAll "octavia" "health_manager" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       initContainers:

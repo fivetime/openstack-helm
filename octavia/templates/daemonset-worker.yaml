@@ -130,15 +130,11 @@ spec:
 {{ dict "envAll" $envAll "application" "octavia_worker" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
-      # The lb-mgmt nodes are tainted; without this the object renders with
-      # DESIRED=0 and no error anywhere.
-      {{- if and $envAll.Values.pod.tolerations.worker.enabled $envAll.Values.pod.tolerations.worker.tolerations }}
-      tolerations:
-      {{- toYaml $envAll.Values.pod.tolerations.worker.tolerations | nindent 8 }}
-      {{- end }}
       nodeSelector:
         {{ .Values.labels.worker.node_selector_key }}: {{ .Values.labels.worker.node_selector_value }}
-{{ if and $envAll.Values.pod.tolerations.octavia.enabled (not $envAll.Values.pod.tolerations.worker.enabled) }}
+      # The lb-mgmt nodes are tainted; without tolerations the object renders with
+      # DESIRED=0 and no error anywhere.
+{{ if $envAll.Values.pod.tolerations.octavia.enabled }}
 {{ tuple $envAll "octavia" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
 {{ end }}
       initContainers:
@@ -233,10 +229,9 @@ spec:
 {{ tuple "octavia_worker" $envAll | include "helm-toolkit.snippets.kubernetes_pod_runtime_class" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}
 {{ dict "envAll" $envAll "application" "octavia_worker" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
-      {{- if and $envAll.Values.pod.tolerations.worker.enabled $envAll.Values.pod.tolerations.worker.tolerations }}
-      tolerations:
-      {{- toYaml $envAll.Values.pod.tolerations.worker.tolerations | nindent 8 }}
-      {{- end }}
+{{ if $envAll.Values.pod.tolerations.octavia.enabled }}
+{{ tuple $envAll "octavia" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
       affinity:
 {{ tuple $envAll "octavia" "worker" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       initContainers:

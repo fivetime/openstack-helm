@@ -96,10 +96,9 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
 {{- end }}
-      {{- if and $envAll.Values.pod.tolerations.driver_agent.enabled $envAll.Values.pod.tolerations.driver_agent.tolerations }}
-      tolerations:
-      {{- toYaml $envAll.Values.pod.tolerations.driver_agent.tolerations | nindent 8 }}
-      {{- end }}
+{{ if $envAll.Values.pod.tolerations.octavia.enabled }}
+{{ tuple $envAll "octavia" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
       affinity:
 {{ tuple $envAll "octavia" "driver_agent" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
 {{- if not $slot }}

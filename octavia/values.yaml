@@ -763,24 +763,12 @@ pod:
     ## (e.g. OVN) can reach the driver agent unix sockets in /var/run/octavia.
     driver_agent: false
   tolerations:
-    # -- Chart-wide tolerations, applied to every pod and job. A component
-    ## whose own entry below is enabled uses that entry instead.
     octavia:
       enabled: false
       tolerations:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
-    octavia_api:
-      enabled: false
-    driver_agent:
-      enabled: false
-    worker:
-      enabled: false
-    housekeeping:
-      enabled: false
-    health_manager:
-      enabled: false
   affinity:
     anti:
       type:

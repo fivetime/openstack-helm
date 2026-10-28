@@ -37,12 +37,12 @@ images:
     ## API and requests for the broker's management API. Both are on this image,
     ## which the chart already pulls for the rabbitmq-password init container.
     rabbitmq_topology_controller: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
-    rabbitmq: docker.io/rabbitmq:4.3.6
+    rabbitmq: docker.io/rabbitmq:4.3.7
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
     # -- Image for the cluster-wait job. It needs rabbitmqctl to prune cluster
     ## members and an HTTP client to discover them, so it must be a rabbitmq
     ## management image.
-    scripted_test: docker.io/rabbitmq:4.3.6-management
+    scripted_test: docker.io/rabbitmq:4.3.7-management
     # -- Image for the helm test pod. It queries the management HTTP API and
     ## needs only python3, which the 4.x rabbitmq images do not ship.
     rabbitmq_test: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
@@ -246,16 +246,6 @@ conf:
   rabbit_advanced_config:
     enabled: false
     default_consumer_prefetch: 250
-  # -- Extra files for /etc/rabbitmq/conf.d, name -> content. RabbitMQ reads
-  ## conf.d after rabbitmq.conf, and the official image ships
-  ## 10-defaults.conf there (loopback_users.guest = false, log.console), so a
-  ## key it sets cannot be changed through conf.rabbitmq: put it in a file that
-  ## sorts after it, e.g.
-  ##   conf_d:
-  ##     30-site.conf: |
-  ##       loopback_users.guest = true
-  ##       total_memory_available_override_value = 20GB
-  conf_d: {}
   # Feature Flags is introduced in RabbitMQ 3.8.0
   # To deploy with standard list of feature, leave as default
   # To deploy with specific feature, separate each feature with comma

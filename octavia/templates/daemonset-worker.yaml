@@ -138,6 +138,9 @@ spec:
       {{- end }}
       nodeSelector:
         {{ .Values.labels.worker.node_selector_key }}: {{ .Values.labels.worker.node_selector_value }}
+{{ if and $envAll.Values.pod.tolerations.octavia.enabled (not $envAll.Values.pod.tolerations.worker.enabled) }}
+{{ tuple $envAll "octavia" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
       initContainers:
 {{ tuple $envAll "worker" $mounts_octavia_worker_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         - name: octavia-worker-get-port

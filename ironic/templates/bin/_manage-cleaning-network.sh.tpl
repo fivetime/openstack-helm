@@ -68,26 +68,13 @@ if [ -z "${IRONIC_NEUTRON_CLEANING_NET_ID}" ]; then
   exit 1
 fi
 
-# 检查并创建子网
-SUBNET_OUTPUT=$(openstack network show $IRONIC_NEUTRON_CLEANING_NET_ID -f yaml)
-SUBNET_EXISTS=false
+SUBNET_ID=$(openstack subnet list -f value -c ID \
+  --network ${IRONIC_NEUTRON_CLEANING_NET_ID} \
+  --name ${neutron_subnet_name})
 
-# 提取子网ID列表
-SUBNET_IDS=$(echo "$SUBNET_OUTPUT" | grep -A10 "subnets:" | grep -e "- " | sed 's/^[^a-zA-Z0-9]*- //g')
-
-if [ -n "$SUBNET_IDS" ]; then
-  for SUBNET_ID in $SUBNET_IDS; do
-    CURRENT_SUBNET=$(openstack subnet show $SUBNET_ID -f value -c name)
-    if [ "x${CURRENT_SUBNET}" == "x${neutron_subnet_name}" ]; then
-      openstack subnet show ${neutron_subnet_name}
-      SUBNET_EXISTS=true
-      break
-    fi
-  done
-fi
-
-if [ "x${SUBNET_EXISTS}" != "xtrue" ]; then
-  echo "Creating subnet ${neutron_subnet_name}..."
+if [ -n "${SUBNET_ID}" ]; then
+  openstack subnet show ${SUBNET_ID}
+else
   openstack subnet create \
     --gateway ${neutron_subnet_gateway%/*} \
     --allocation-pool start=${neutron_subnet_alloc_start},end=${neutron_subnet_alloc_end} \

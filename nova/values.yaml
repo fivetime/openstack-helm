@@ -71,7 +71,7 @@ images:
     db_drop: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     db_init: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
-    rabbit_init: docker.io/rabbitmq:4.3.5-management
+    rabbit_init: docker.io/rabbitmq:4.3.7-management
     ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     nova_archive_deleted_rows: quay.io/airshipit/nova:2026.2-ubuntu_resolute
@@ -2670,18 +2670,6 @@ pod:
       weight:
         default: 10
   tolerations:
-    # -- statefulset-compute-ironic reads pod.tolerations.compute_ironic.enabled
-    ## unconditionally, so without this key `helm template` dies with a nil
-    ## pointer the moment manifests.statefulset_compute_ironic is turned on.
-    compute_ironic:
-      enabled: false
-      tolerations:
-        - key: node-role.kubernetes.io/master
-          operator: Exists
-          effect: NoSchedule
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
-          effect: NoSchedule
     compute_incus:
       enabled: true
       tolerations:

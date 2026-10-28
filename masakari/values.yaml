@@ -30,7 +30,7 @@ images:
     # commands.
     masakari_incus_exporter: quay.io/airshipit/masakari-monitors:2026.2-ubuntu_resolute
     masakari_incus_notifier: quay.io/airshipit/masakari-monitors:2026.2-ubuntu_resolute
-    rabbit_init: docker.io/rabbitmq:4.3.5-management
+    rabbit_init: docker.io/rabbitmq:4.3.7-management
     dep_check: quay.io/airshipit/kubernetes-entrypoint:latest-ubuntu_noble
   pull_policy: "IfNotPresent"
   local_registry:
@@ -414,6 +414,13 @@ pod:
         default: kubernetes.io/hostname
       weight:
         default: 10
+  tolerations:
+    masakari:
+      enabled: false
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
   replicas:
     masakari_api: 1
     masakari_engine: 1
@@ -690,10 +697,15 @@ conf:
       connection: ""
     wsgi:
       api_paste_config: /etc/masakari/api-paste.ini
-  # -- Optional DNS domain appended to the node name the monitors report.
-  ## Set when nova-compute registers by FQDN (e.g. "cloud.local") so
-  ## monitor notifications name the same host nova and masakari know.
   monitors:
+    # -- DNS domain appended to the Kubernetes node name that the instance,
+    ## introspective instance and process monitors report as their host, e.g.
+    ## "example.com". The host in a notification has to be the one nova-compute
+    ## registered, which the nova chart takes from `hostname --fqdn` by default
+    ## (pod.use_fqdn.compute), while the node name is often the short name.
+    ## Leave it empty when the node names already are the names nova uses. The
+    ## host monitor's kubernetes driver reports node names itself and is not
+    ## affected.
     hostname_domain: ""
   masakarimonitors:
     DEFAULT:
@@ -790,6 +802,20 @@ mariadb_db:
     name: masakari-db-password
     key: password
 
+rabbitmq_topology:
+  # -- API group of the RabbitMQ topology custom resources this chart renders
+  ## when manifests.rabbitmq_topology is enabled. Either group works: the
+  ## resources are the same, only who reconciles them differs.
+  ##   rabbitmq.osh.openstack.org -- the rabbitmq chart's own topology
+  ##                                 controller
+  ##                                 (manifests.deployment_topology_controller)
+  ##   rabbitmq.com               -- the upstream messaging-topology-operator,
+  ##                                 which must then be deployed separately,
+  ##                                 along with a RabbitmqCluster named after
+  ##                                 endpoints.oslo_messaging.hosts.default for
+  ##                                 rabbitmqClusterReference to resolve to
+  api_group: rabbitmq.osh.openstack.org
+
 manifests:
   job_ks_user: true
   job_db_sync: true
@@ -818,6 +844,11 @@ manifests:
   secret_keystone: true
   secret_registry: true
   job_rabbit_init: true
+  # -- Declare this chart's messaging vhost, account and permissions
+  ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
+  ## topology controller, instead of running the rabbit_init job. The
+  ## two are mutually exclusive.
+  rabbitmq_topology: false
   service_api: true
   pdb_api: true
   # Host Monitors default driver is kubernetes

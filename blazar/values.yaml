@@ -36,7 +36,7 @@ images:
     ks_user: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     ks_service: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
     ks_endpoints: quay.io/airshipit/openstack-client:2026.2-ubuntu_resolute
-    rabbit_init: docker.io/rabbitmq:4.3.5-management
+    rabbit_init: docker.io/rabbitmq:4.3.7-management
     blazar_db_sync: quay.io/airshipit/blazar:2026.2-ubuntu_resolute
     blazar_api: quay.io/airshipit/blazar:2026.2-ubuntu_resolute
     blazar_manager: quay.io/airshipit/blazar:2026.2-ubuntu_resolute
@@ -798,6 +798,20 @@ mariadb_db:
     name: blazar-db-password
     key: password
 
+rabbitmq_topology:
+  # -- API group of the RabbitMQ topology custom resources this chart renders
+  ## when manifests.rabbitmq_topology is enabled. Either group works: the
+  ## resources are the same, only who reconciles them differs.
+  ##   rabbitmq.osh.openstack.org -- the rabbitmq chart's own topology
+  ##                                 controller
+  ##                                 (manifests.deployment_topology_controller)
+  ##   rabbitmq.com               -- the upstream messaging-topology-operator,
+  ##                                 which must then be deployed separately,
+  ##                                 along with a RabbitmqCluster named after
+  ##                                 endpoints.oslo_messaging.hosts.default for
+  ##                                 rabbitmqClusterReference to resolve to
+  api_group: rabbitmq.osh.openstack.org
+
 manifests:
   certificates: false
   configmap_bin: true
@@ -817,6 +831,11 @@ manifests:
   job_ks_service: true
   job_ks_user: true
   job_rabbit_init: true
+  # -- Declare this chart's messaging vhost, account and permissions
+  ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
+  ## topology controller, instead of running the rabbit_init job. The
+  ## two are mutually exclusive.
+  rabbitmq_topology: false
   pdb_api: true
   pdb_manager: true
   pod_rally_test: true

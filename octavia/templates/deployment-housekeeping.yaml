@@ -65,6 +65,9 @@ spec:
       # -------------- Add by Simon End --------------
       nodeSelector:
         {{ .Values.labels.housekeeping.node_selector_key }}: {{ .Values.labels.housekeeping.node_selector_value }}
+{{ if and $envAll.Values.pod.tolerations.octavia.enabled (not $envAll.Values.pod.tolerations.housekeeping.enabled) }}
+{{ tuple $envAll "octavia" | include "helm-toolkit.snippets.kubernetes_tolerations" | indent 6 }}
+{{ end }}
       initContainers:
 {{ tuple $envAll "housekeeping" $mounts_octavia_housekeeping_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:

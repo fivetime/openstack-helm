@@ -1,0 +1,9 @@
+# Incus f2c810f77691cace0fddb13218b837c76892b981 (fivetime/incus#16: an
+# intercepted fuseblk data-volume mount keeps the caller's nosuid instead of
+# forcing it, so Db2 can run its set-user-ID programs; nodev stays forced).
+# CRIU commit unchanged (e2f6a2e9), rebuilt binary sha256
+# fb53c56ac88e22fe9d0857bef4583541a5d8aec30541b81fba9255b3f89fd249; change
+# nova incus-criu-admission.yaml together. LXCFS remains independently pinned.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:6b9f3eb8ca5bfa786521dc0a7a200b276b4557ca045285454c42132b66291f6a

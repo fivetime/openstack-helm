@@ -1,0 +1,8 @@
+# Nova Incus driver 3f6b986 on Nova stable/2026.2 8df1922926; SDK b9fd81ee
+# (fivetime/incus-python-sdk#4, canonical/pylxd merged through 11f6181).
+# Only the SDK changes from incus-release-20261028.yaml.
+# openstack-helm-images 4a62193b (#21), Build All Images run 40822486095.
+# Apply after incus-release-20261028.yaml.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:d76f1afb757966fc9feba3397769fdc4cb98ade92f8ff8ee6cd4d6bab0e66107

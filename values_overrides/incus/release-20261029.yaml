@@ -1,0 +1,9 @@
+# Incus f3289ac8b355f9d1895a38de66b50f137ecec87c: the fork merged with upstream
+# main b36eba17e1 (fivetime/incus#17), and CRIU at fork commit d734365a, which
+# merges upstream criu-dev through bc54b592b (fivetime/criu#7, incus#18). The
+# rebuilt CRIU binary has sha256
+# 2fb34bd4c07fe9959a1a080dd7c686310ca98ef32dff3c8cd80a5b98c584340c; change
+# nova incus-criu-admission.yaml together. LXCFS remains independently pinned.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:7f0754b1c8f33429cb8fd685c65f71c30314a1e1ead4019ccb5727a12464e00e

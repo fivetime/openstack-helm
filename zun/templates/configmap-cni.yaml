@@ -23,4 +23,24 @@ metadata:
 data:
   10-zun-cni.conf: |
 {{ .Values.network.drivers.cni.config_file | toJson | indent 4 }}
+{{- if .Values.network.drivers.cni.containerd.manage_drop_ins }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zun-cni-containerd
+  namespace: {{ $envAll.Release.Namespace }}
+data:
+  # The capsule driver's CRI is the host's containerd: without this its
+  # sandboxes get the network of whatever the default CNI dir holds.
+  20-zun-cni.toml: |
+    version = 4
+
+    [plugins.'io.containerd.cri.v1.runtime'.cni]
+      conf_dir = {{ .Values.network.drivers.cni.paths.conf_dir | squote }}
+{{- range $name, $content := .Values.network.drivers.cni.containerd.drop_ins }}
+  {{ $name }}: |
+{{ $content | indent 4 }}
+{{- end }}
+{{- end }}
 {{- end }}

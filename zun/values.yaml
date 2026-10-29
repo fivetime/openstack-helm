@@ -150,6 +150,18 @@ network:
         conf_dir: /etc/cni/zun-net.d
         bin_dir: /opt/cni/bin                  # 只写入 zun-cni 一个文件
 
+      # 宿主机 containerd 的 drop-in:capsule 走的是宿主机 containerd 的 CRI,它的
+      # CNI 目录(上面的 conf_dir)和 capsule 用到的 runtime handler 都要在那里配置。
+      # 开启后由 zun-cni-daemon 的 init 容器写入 conf_d:总会写 20-zun-cni.toml
+      # (cni conf_dir 指向 paths.conf_dir),再加上 drop_ins 里列出的文件
+      # (文件名: 内容)。按解析后的 TOML 比较,内容没变就不写;有文件写入时
+      # 重启一次 unit(运行中的容器不受影响,shim 是独立进程),新节点只要打标签。
+      containerd:
+        manage_drop_ins: false
+        conf_d: /etc/containerd/conf.d
+        unit: containerd.service
+        drop_ins: {}
+
       # CNI 配置文件内容(zun_cni_daemon = shim 转发的 daemon 地址)
       config_file:
         cniVersion: "0.3.1"

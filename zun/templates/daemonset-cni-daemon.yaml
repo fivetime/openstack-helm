@@ -48,6 +48,9 @@ spec:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
         configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+{{- if .Values.network.drivers.cni.containerd.manage_drop_ins }}
+        configmap-cni-hash: {{ tuple "configmap-cni.yaml" . | include "helm-toolkit.utils.hash" }}
+{{- end }}
 {{ tuple "zun_cni_daemon" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ tuple "zun_cni_daemon" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
@@ -106,6 +109,90 @@ spec:
               readOnly: true
             - name: cni-conf
               mountPath: {{ .Values.network.drivers.cni.paths.conf_dir }}
+{{- if .Values.network.drivers.cni.containerd.manage_drop_ins }}
+        # The host containerd's drop-ins for the capsule driver. A file is
+        # compared as parsed TOML, so one written by hand with the same
+        # settings is left alone, and containerd, which does not reload its
+        # configuration, is restarted only when a file was written. Running
+        # containers survive that: their shims are processes of their own.
+        # systemctl reaches the host's systemd through /run/systemd; without
+        # SYSTEMD_IGNORE_CHROOT it sees a root other than PID 1's, prints
+        # "Running in chroot, ignoring command" and exits 0.
+        - name: containerd-drop-ins
+{{ tuple $envAll "zun_cni_daemon" | include "helm-toolkit.snippets.image" | indent 10 }}
+          securityContext:
+            runAsUser: 0
+            privileged: true
+          env:
+            - name: CONF_D
+              value: {{ .Values.network.drivers.cni.containerd.conf_d | quote }}
+            - name: UNIT
+              value: {{ .Values.network.drivers.cni.containerd.unit | quote }}
+            - name: SYSTEMD_IGNORE_CHROOT
+              value: "1"
+          command:
+            - python3
+            - -c
+            - |
+              import os, subprocess, sys, time, tomllib
+
+              src_dir, dst_dir, unit = '/tmp/containerd', os.environ['CONF_D'], os.environ['UNIT']
+
+              def load(path):
+                  with open(path, 'rb') as f:
+                      return tomllib.load(f)
+
+              # Every file is parsed before any is written: a bad one stops
+              # the pod instead of leaving containerd half configured.
+              wanted = {}
+              for name in sorted(os.listdir(src_dir)):
+                  path = os.path.join(src_dir, name)
+                  # The volume also holds the configMap's ..data links.
+                  if not name.startswith('.') and os.path.isfile(path):
+                      wanted[name] = (path, load(path))
+
+              written = []
+              for name, (path, settings) in wanted.items():
+                  dst = os.path.join(dst_dir, name)
+                  try:
+                      current = load(dst)
+                  except FileNotFoundError:
+                      current = None
+                  except tomllib.TOMLDecodeError as e:
+                      print(f'{dst}: not TOML ({e}); replacing it')
+                      current = None
+                  if current == settings:
+                      print(f'{dst}: unchanged')
+                      continue
+                  tmp = os.path.join(dst_dir, f'.{name}.new')
+                  with open(path, 'rb') as f, open(tmp, 'wb') as g:
+                      g.write(f.read())
+                  os.chmod(tmp, 0o644)
+                  os.replace(tmp, dst)
+                  written.append(name)
+                  print(f'{dst}: written')
+
+              if not written:
+                  sys.exit(0)
+              subprocess.run(['systemctl', 'restart', unit], check=True)
+              for _ in range(60):
+                  state = subprocess.run(
+                      ['systemctl', 'show', '--property=ActiveState', '--value', unit],
+                      check=True, capture_output=True, text=True).stdout.strip()
+                  if state == 'active':
+                      print(f'{unit} restarted for {", ".join(written)}')
+                      sys.exit(0)
+                  time.sleep(1)
+              sys.exit(f'{unit} is {state!r} a minute after its restart')
+          volumeMounts:
+            - name: containerd-drop-ins
+              mountPath: /tmp/containerd
+              readOnly: true
+            - name: containerd-conf-d
+              mountPath: {{ .Values.network.drivers.cni.containerd.conf_d }}
+            - name: host-run-systemd
+              mountPath: /run/systemd
+{{- end }}
       containers:
         - name: zun-cni-daemon
 {{ tuple $envAll "zun_cni_daemon" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -230,6 +317,20 @@ spec:
           hostPath:
             path: /run/openvswitch
             type: DirectoryOrCreate
+{{- if .Values.network.drivers.cni.containerd.manage_drop_ins }}
+        - name: containerd-drop-ins
+          configMap:
+            name: zun-cni-containerd
+            defaultMode: 0644
+        - name: containerd-conf-d
+          hostPath:
+            path: {{ .Values.network.drivers.cni.containerd.conf_d }}
+            type: DirectoryOrCreate
+        - name: host-run-systemd
+          hostPath:
+            path: /run/systemd
+            type: Directory
+{{- end }}
 
         # ═══════════════════════════════════════════════════════════
         # 用户自定义卷

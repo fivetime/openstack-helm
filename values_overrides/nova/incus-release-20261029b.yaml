@@ -1,0 +1,9 @@
+# Nova Incus driver ce9261e on Nova stable/2026.2 8df1922926; SDK b9fd81ee.
+# Only the driver changes from incus-release-20261029.yaml: the default
+# limits.processes is now instance memory MiB x [incus]
+# process_limit_per_memory_mib (8), capped at maximum_process_limit.
+# openstack-helm-images e8a51deb (#22), Build All Images run 40864535281.
+# Apply after incus-release-20261029.yaml.
+images:
+  tags:
+    nova_compute_incus: ghcr.io/fivetime/openstackhelm/nova-incus@sha256:fe23787e25baa126beb638d527fa050a4eff0581674ac0509b0993c6841f5702

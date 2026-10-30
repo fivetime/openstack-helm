@@ -30,6 +30,15 @@ labels:
         enabled: false
         node_selector_key: openstack-incus-admitted
         node_selector_value: enabled
+        # The label is persistent, so a worker that reboots unexpectedly would
+        # start nova-compute, and resume its guests, without the returning-host
+        # audit. The token holds nova-compute in an init container until the
+        # host carries /run/openstack-incus/compute-admitted written in its
+        # current boot (openstack-incus-compute-admission admit on the host);
+        # /run is emptied by a reboot, so a returning host waits.
+        token:
+          enabled: false
+          poll_seconds: 30
     compute_kata:
       node_selector_key: openstack-kata-compute-node
       node_selector_value: enabled
@@ -2306,6 +2315,7 @@ pod:
       runtime: /run/incus
       lxcfs: /var/lib/lxcfs
       manila_shares: /var/lib/nova-incus/instances/incus-shares
+      admission: /run/openstack-incus
     nova_compute_kata:
       nova_state: /var/lib/nova
       state: /var/lib/nova-kata
@@ -2514,6 +2524,9 @@ pod:
           # Must match incus.values.incus.socket_gid and the nova-incus image.
           - 42425
       container:
+        nova_compute_incus_admission:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         nova_compute_incus_init:
           runAsUser: 0
           readOnlyRootFilesystem: true

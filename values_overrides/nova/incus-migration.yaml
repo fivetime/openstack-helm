@@ -11,6 +11,12 @@ labels:
         enabled: true
         node_selector_key: openstack-incus-admitted
         node_selector_value: enabled
+        # Each worker must carry openstack-incus-compute-admission (from the
+        # nova-incus-driver tools) and be admitted with it after the
+        # returning-host audit; its pod waits in Init until then.
+        token:
+          enabled: true
+          poll_seconds: 30
 
 incus_migration:
   enabled: true

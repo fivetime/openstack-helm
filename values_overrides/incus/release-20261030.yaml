@@ -1,0 +1,9 @@
+# Incus 220735dda3806a88dff74b09630cc5f339505aa9: fuseblk superblock flags at
+# mount time and remount of an intercepted fuseblk mount (fivetime/incus#21,
+# #22), so a guest's mount -o sync and mount -o remount,sync take effect.
+# CRIU is still fork commit d734365a; the rebuilt binary has sha256
+# 717a836315737dcc423459250f920f0e7861ce2e169aa2046389a740f50a3366; change
+# nova incus-criu-admission.yaml together. LXCFS remains independently pinned.
+images:
+  tags:
+    incus: ghcr.io/fivetime/incus@sha256:2d244bf08f5655fad6b7a13566e821d67a2e66bd0bd2c7bf6929b8610b74bb3d

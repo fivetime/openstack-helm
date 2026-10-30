@@ -265,6 +265,29 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       initContainers:
 {{ tuple $envAll "pod_dependency" $mountsInit | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{- if .Values.labels.agent.compute_incus.admission.token.enabled }}
+        - name: nova-compute-incus-admission
+{{ tuple $envAll "nova_compute_incus" | include "helm-toolkit.snippets.image" | indent 10 }}
+{{ dict "envAll" $envAll "application" "nova_incus" "container" "nova_compute_incus_admission" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Hold nova-compute until the host carries the admission token of
+              # its current boot (openstack-incus-compute-admission admit, run on
+              # the host after the returning-host audit). A reboot empties /run,
+              # so a returning host waits here until an operator readmits it.
+              while ! /usr/local/sbin/openstack-incus-compute-admission check; do
+                sleep {{ .Values.labels.agent.compute_incus.admission.token.poll_seconds }}
+              done
+          env:
+            - name: OPENSTACK_INCUS_ADMISSION_DIR
+              value: /run/openstack-incus
+          volumeMounts:
+            - name: incus-admission
+              mountPath: /run/openstack-incus
+              readOnly: true
+{{- end }}
         - name: nova-compute-incus-init
 {{ tuple $envAll "nova_compute_incus" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ dict "envAll" $envAll "application" "nova_incus" "container" "nova_compute_incus_init" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
@@ -564,6 +587,12 @@ spec:
           hostPath:
             path: {{ $hostPaths.nova_state }}
             type: DirectoryOrCreate
+{{- if .Values.labels.agent.compute_incus.admission.token.enabled }}
+        - name: incus-admission
+          hostPath:
+            path: {{ $hostPaths.admission }}
+            type: DirectoryOrCreate
+{{- end }}
         - name: incus-state
           hostPath:
             path: {{ $hostPaths.state }}

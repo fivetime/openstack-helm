@@ -28,6 +28,7 @@ exec:
 {{ tuple $envAll "ovn_northd" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 
 {{- $env_ovn := .Values.pod.envs }}
+{{- $mounts_ovn_northd := .Values.pod.mounts.ovn_northd.ovn_northd }}
 
 ---
 kind: Deployment
@@ -73,15 +74,25 @@ spec:
           env:
 {{ if $env_ovn.common }}{{ toYaml $env_ovn.common | indent 12 }}{{ end }}
 {{ if $env_ovn.northd }}{{ toYaml $env_ovn.northd | indent 12 }}{{ end }}
-{{- with .Values.pod.extraContainers.northd }}
-          # ovn-northd names its control socket after its pid under
-          # /var/run/ovn; share that directory with the extra containers.
+{{- if or .Values.pod.extraContainers.northd $mounts_ovn_northd.volumeMounts }}
           volumeMounts:
+{{- with .Values.pod.extraContainers.northd }}
+            # ovn-northd names its control socket after its pid under
+            # /var/run/ovn; share that directory with the extra containers.
             - name: run-ovn
               mountPath: /var/run/ovn
-          {{- tpl (toYaml .) $envAll | nindent 8 }}
+{{- end }}
+{{ if $mounts_ovn_northd.volumeMounts }}{{ toYaml $mounts_ovn_northd.volumeMounts | indent 12 }}{{ end }}
+{{- end }}
+{{- with .Values.pod.extraContainers.northd }}
+        {{- tpl (toYaml .) $envAll | nindent 8 }}
+{{- end }}
+{{- if or .Values.pod.extraContainers.northd $mounts_ovn_northd.volumes }}
       volumes:
+{{- with .Values.pod.extraContainers.northd }}
         - name: run-ovn
           emptyDir: {}
+{{- end }}
+{{ if $mounts_ovn_northd.volumes }}{{ toYaml $mounts_ovn_northd.volumes | indent 8 }}{{ end }}
 {{- end }}
 {{- end }}

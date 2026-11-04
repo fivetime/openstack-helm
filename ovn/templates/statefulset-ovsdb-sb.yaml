@@ -32,6 +32,7 @@ exec:
 {{ tuple $envAll "ovn_ovsdb_sb" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 
 {{- $env_ovn := .Values.pod.envs }}
+{{- $mounts_ovn_ovsdb_sb := .Values.pod.mounts.ovn_ovsdb_sb.ovn_ovsdb_sb }}
 
 ---
 apiVersion: apps/v1
@@ -97,6 +98,7 @@ spec:
               mountPath: /var/run/ovn
             - name: data
               mountPath: {{ $envAll.Values.volume.ovn_ovsdb_sb.path }}
+{{ if $mounts_ovn_ovsdb_sb.volumeMounts }}{{ toYaml $mounts_ovn_ovsdb_sb.volumeMounts | indent 12 }}{{ end }}
         {{- with .Values.pod.extraContainers.ovsdb_sb }}
           {{- tpl (toYaml .) $envAll | nindent 8 }}
         {{- end }}
@@ -109,6 +111,7 @@ spec:
           # dual-identity / fragmented cluster). A central DB pod needs no host
           # runtime access -- northd/controller/neutron reach it over TCP.
           emptyDir: {}
+{{ if $mounts_ovn_ovsdb_sb.volumes }}{{ toYaml $mounts_ovn_ovsdb_sb.volumes | indent 8 }}{{ end }}
 {{- if not .Values.volume.ovn_ovsdb_sb.enabled }}
         - name: data
           emptyDir: {}

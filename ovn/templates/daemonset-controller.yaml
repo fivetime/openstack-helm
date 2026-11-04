@@ -47,6 +47,7 @@ exec:
 {{- with $envAll }}
 
 {{- $env_ovn := .Values.pod.envs }}
+{{- $mounts_ovn_controller := .Values.pod.mounts.ovn_controller.ovn_controller }}
 
 ---
 kind: DaemonSet
@@ -128,6 +129,9 @@ spec:
             - name: gw-enabled
               mountPath: /tmp/gw-enabled
               readOnly: true
+        {{- with .Values.pod.extraInitContainers.ovn_controller }}
+          {{- tpl (toYaml .) $envAll | nindent 8 }}
+        {{- end }}
       containers:
         - name: controller
 {{ tuple $envAll "ovn_controller" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -150,6 +154,10 @@ spec:
               mountPath: /var/log/ovn
             - name: run-openvswitch
               mountPath: /run/ovn
+{{ if $mounts_ovn_controller.volumeMounts }}{{ toYaml $mounts_ovn_controller.volumeMounts | indent 12 }}{{ end }}
+        {{- with .Values.pod.extraContainers.ovn_controller }}
+          {{- tpl (toYaml .) $envAll | nindent 8 }}
+        {{- end }}
         {{- if .Values.pod.sidecars.vector }}
         - name: vector
 {{ tuple $envAll "vector" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -216,6 +224,7 @@ spec:
             type: DirectoryOrCreate
         - name: gw-enabled
           emptyDir: {}
+{{ if $mounts_ovn_controller.volumes }}{{ toYaml $mounts_ovn_controller.volumes | indent 8 }}{{ end }}
         {{- if .Values.pod.sidecars.vector }}
         - name: vector-config
           secret:

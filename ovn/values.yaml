@@ -235,6 +235,9 @@ pod:
     ovsdb_nb: []
     ovsdb_sb: []
     northd: []
+    ovn_controller: []
+  extraInitContainers:
+    ovn_controller: []
   # NOTE: should be same as nova.pod.use_fqdn.compute
   use_fqdn:
     compute: true
@@ -353,6 +356,26 @@ pod:
     ovn_bgp_agent:
       init_container: null
       ovn_bgp_agent:
+        volumeMounts:
+        volumes:
+    ovn_ovsdb_nb:
+      init_container: null
+      ovn_ovsdb_nb:
+        volumeMounts:
+        volumes:
+    ovn_ovsdb_sb:
+      init_container: null
+      ovn_ovsdb_sb:
+        volumeMounts:
+        volumes:
+    ovn_northd:
+      init_container: null
+      ovn_northd:
+        volumeMounts:
+        volumes:
+    ovn_controller:
+      init_container: null
+      ovn_controller:
         volumeMounts:
         volumes:
   affinity:

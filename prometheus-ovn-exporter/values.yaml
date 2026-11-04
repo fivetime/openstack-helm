@@ -60,9 +60,17 @@ network:
 
 conf:
   ovn_exporter:
-    # Plain host:port; ovn_exporter does not accept a tcp: prefix.
+    # Plain host:port (ovn_exporter does not accept a tcp: prefix), or a comma
+    # separated list of ssl:host:port with ssl.enabled.
     northbound: ovn-ovsdb-nb.openstack.svc.cluster.local:6641
     southbound: ovn-ovsdb-sb.openstack.svc.cluster.local:6642
+    ssl:
+      enabled: false
+      # Secret with tls.key and tls.crt.
+      secret: ""
+      # ConfigMap and key with the CA that verifies the servers.
+      ca_configmap: ""
+      ca_key: ca.crt
     extra_args: []
 
 monitoring:

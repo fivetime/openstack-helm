@@ -61,8 +61,22 @@ spec:
             - -database.southbound.socket.remote={{ .Values.conf.ovn_exporter.southbound }}
             - -collector.components=
             - -collector.topology=true
+{{- if .Values.conf.ovn_exporter.ssl.enabled }}
+            - -database.ssl.private-key=/etc/ovn-tls/tls.key
+            - -database.ssl.certificate=/etc/ovn-tls/tls.crt
+            - -database.ssl.ca-cert=/etc/ovn-tls-ca/{{ .Values.conf.ovn_exporter.ssl.ca_key }}
+{{- end }}
 {{- range .Values.conf.ovn_exporter.extra_args }}
             - {{ . | quote }}
+{{- end }}
+{{- if .Values.conf.ovn_exporter.ssl.enabled }}
+          volumeMounts:
+            - name: ovn-tls
+              mountPath: /etc/ovn-tls
+              readOnly: true
+            - name: ovn-tls-ca
+              mountPath: /etc/ovn-tls-ca
+              readOnly: true
 {{- end }}
           ports:
             - name: ovn-metrics
@@ -77,4 +91,24 @@ spec:
               port: ovn-metrics
             initialDelaySeconds: 30
             periodSeconds: 60
+{{- if .Values.conf.ovn_exporter.ssl.enabled }}
+      volumes:
+        - name: ovn-tls
+          secret:
+            secretName: {{ .Values.conf.ovn_exporter.ssl.secret }}
+            # Group readable: the container runs as non-root and needs
+            # pod.security_context.ovn_exporter.pod.fsGroup to read the key.
+            defaultMode: 0440
+            items:
+              - key: tls.key
+                path: tls.key
+              - key: tls.crt
+                path: tls.crt
+        - name: ovn-tls-ca
+          configMap:
+            name: {{ .Values.conf.ovn_exporter.ssl.ca_configmap }}
+            items:
+              - key: {{ .Values.conf.ovn_exporter.ssl.ca_key }}
+                path: {{ .Values.conf.ovn_exporter.ssl.ca_key }}
+{{- end }}
 {{- end }}

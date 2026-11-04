@@ -119,7 +119,7 @@ spec:
 {{- dict "enabled" .Values.tls.oslo_db "name" "client-certs" "path" "/etc/mysql/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 16 }}
 {{- dict "enabled" (not (empty .Values.secrets.tls.ca)) "name" .Values.secrets.tls.ca | include "helm-toolkit.snippets.tls_volume_mount" | indent 16 }}
 {{- dict "enabled" $envAll.Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 16 }}
-{{ if $mounts_neutron_ovn_db_sync.volumeMounts }}{{ toYaml $mounts_neutron_ovn_db_sync.volumeMounts | indent 14 }}{{ end }}
+{{ if $mounts_neutron_ovn_db_sync.volumeMounts }}{{ toYaml $mounts_neutron_ovn_db_sync.volumeMounts | indent 16 }}{{ end }}
           volumes:
             - name: pod-tmp
               emptyDir: {}

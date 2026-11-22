@@ -171,7 +171,7 @@ conf:
     app:healthcheck:
       paste.app_factory: oslo_middleware:Healthcheck.app_factory
       backends: disable_by_file
-      disable_by_file_path: /etc/glance/healthcheck_disable
+      disable_by_file_path: /tmp/healthcheck_disable
     filter:versionnegotiation:
       paste.filter_factory: glance.api.middleware.version_negotiation:VersionNegotiationFilter.factory
     filter:cache:
@@ -208,7 +208,7 @@ conf:
     [DEFAULT]
     # List of directories to load filter definitions from (separated by ',').
     # These directories MUST all be only writeable by root !
-    filters_path=/etc/glance/rootwrap.d,/usr/share/glance/rootwrap
+    filters_path=/etc/glance/rootwrap.d,/usr/share/glance/rootwrap,/var/lib/openstack/etc/glance/rootwrap.d
 
     # List of directories to search executables in, in case filters do not
     # explicitely specify a full path (separated by ',')
@@ -229,27 +229,17 @@ conf:
     # INFO means log all usage
     # ERROR means only log unsuccessful attempts
     syslog_log_level=ERROR
-  rootwrap_filters:
-    glance_cinder_store:
-      pods:
-        - api
-      content: |
-        # glance-rootwrap command filters for glance cinder store
-        # This file should be owned by (and only-writable by) the root user
-
-        [Filters]
-        # cinder store driver
-        disk_chown: RegExpFilter, chown, root, chown, \d+, /dev/(?!.*/\.\.).*
-
-        # os-brick library commands
-        # os_brick.privileged.run_as_root oslo.privsep context
-        # This line ties the superuser privs with the config files, context name,
-        # and (implicitly) the actual python code invoked.
-        privsep-rootwrap: RegExpFilter, privsep-helper, root, privsep-helper, --config-file, /etc/(?!\.\.).*, --privsep_context, os_brick.privileged.default, --privsep_sock_path, /tmp/.*
-
-        chown: CommandFilter, chown, root
-        mount: CommandFilter, mount, root
-        umount: CommandFilter, umount, root
+  # Additional rootwrap filter files. The filters that glance ships are loaded
+  # from the image through filters_path in rootwrap above. Each entry is
+  # mounted as /etc/glance/rootwrap.d/<name>.filters into the listed pods,
+  # for example:
+  #   glance_cinder_store:
+  #     pods:
+  #       - api
+  #     content: |
+  #       [Filters]
+  #       ...
+  rootwrap_filters: {}
   glance:
     DEFAULT:
       log_config_append: /etc/glance/logging.conf
@@ -1112,6 +1102,11 @@ mariadb_db:
   ## clients connect through. Set it when they differ, such as a MariaDB named
   ## mariadb served by a mariadb-primary service.
   mariadb_ref: ""
+  # -- What happens in MariaDB when a Database, User or Grant resource of this
+  ## chart is deleted. Either value works with both API groups.
+  ##   Skip   -- keep the database, account or grant
+  ##   Delete -- drop it
+  cleanup_policy: Skip
   # -- Secret holding the password of the glance database account.
   ## The User and Connection resources read it from here.
   password_secret:
@@ -1128,11 +1123,11 @@ manifests:
   deployment_api: true
   job_bootstrap: true
   job_clean: true
-  job_db_init: true
+  job_db_init: false
   # -- Render the MariaDB Database/User/Grant/Connection custom resources
   ## reconciled by the mariadb chart's db controller, instead of running the
   ## db-init job. Mutually exclusive with job_db_init.
-  mariadb_db: false
+  mariadb_db: true
   job_db_sync: true
   job_db_drop: false
   job_image_repo_sync: true
@@ -1147,7 +1142,7 @@ manifests:
   job_ks_user: true
   job_storage_init: true
   job_metadefs_load: true
-  job_rabbit_init: true
+  job_rabbit_init: false
   pdb_api: true
   pod_rally_test: true
   pvc_images: true
@@ -1157,7 +1152,7 @@ manifests:
   ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
   ## topology controller, instead of running the rabbit_init job. The
   ## two are mutually exclusive.
-  rabbitmq_topology: false
+  rabbitmq_topology: true
   secret_db: true
   secret_keystone: true
   secret_rabbitmq: true

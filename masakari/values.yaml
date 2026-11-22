@@ -323,6 +323,14 @@ dependencies:
           service: identity
 
 pod:
+  # -- Extra sidecar containers and volumes to inject into the masakari-api
+  ## Deployment. Used e.g. to add an nginx TLS-terminating sidecar.
+  ## Keyed per component.
+  ## The entries are rendered through tpl, so they can reference values.
+  extraContainers:
+    masakari_api: []
+  extraVolumes:
+    masakari_api: []
   security_context:
     masakari:
       pod:
@@ -414,13 +422,6 @@ pod:
         default: kubernetes.io/hostname
       weight:
         default: 10
-  tolerations:
-    masakari:
-      enabled: false
-      tolerations:
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
-          effect: NoSchedule
   replicas:
     masakari_api: 1
     masakari_engine: 1
@@ -771,6 +772,9 @@ conf:
 
 network:
   masakari_api:
+    # Pod port the Service routes to; null => Kubernetes uses the Service port.
+    # A deployment override sets this (e.g. 443) to point at a TLS sidecar.
+    target_port: null
     node_port:
       enabled: false
       port: 33033
@@ -791,6 +795,11 @@ mariadb_db:
   ## clients connect through. Set it when they differ, such as a MariaDB named
   ## mariadb served by a mariadb-primary service.
   mariadb_ref: ""
+  # -- What happens in MariaDB when a Database, User or Grant resource of this
+  ## chart is deleted. Either value works with both API groups.
+  ##   Skip   -- keep the database, account or grant
+  ##   Delete -- drop it
+  cleanup_policy: Skip
   # -- Secret holding the password of the masakari database account.
   ## The User and Connection resources read it from here.
   password_secret:
@@ -817,13 +826,19 @@ rabbitmq_topology:
   api_group: rabbitmq.osh.openstack.org
 
 manifests:
+  # -- Declare this chart's keystone user, roles and catalog entry as custom
+  ## resources reconciled by the keystone chart's identity controller, instead
+  ## of running the ks_user, ks_service and ks_endpoints jobs. Those three must
+  ## be disabled: both paths write the same user's password and race on the
+  ## same catalog entry.
+  identity_entities: false
   job_ks_user: true
   job_db_sync: true
-  job_db_init: true
+  job_db_init: false
   # -- Render the MariaDB Database/User/Grant/Connection custom resources
   ## reconciled by the mariadb chart's db controller, instead of running the
   ## db-init job. Mutually exclusive with job_db_init.
-  mariadb_db: false
+  mariadb_db: true
   job_db_drop: false
   job_ks_endpoints: true
   job_ks_service: true
@@ -843,12 +858,12 @@ manifests:
   secret_rabbitmq: true
   secret_keystone: true
   secret_registry: true
-  job_rabbit_init: true
+  job_rabbit_init: false
   # -- Declare this chart's messaging vhost, account and permissions
   ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
   ## topology controller, instead of running the rabbit_init job. The
   ## two are mutually exclusive.
-  rabbitmq_topology: false
+  rabbitmq_topology: true
   service_api: true
   pdb_api: true
   # Host Monitors default driver is kubernetes

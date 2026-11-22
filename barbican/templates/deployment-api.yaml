@@ -45,6 +45,9 @@ httpGet:
 {{- $mounts_barbican_api := .Values.pod.mounts.barbican_api.barbican_api }}
 {{- $mounts_barbican_api_init := .Values.pod.mounts.barbican_api.init_container }}
 {{- $etcSources := .Values.pod.etcSources.barbican_api }}
+{{- if .Values.manifests.mariadb_db }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "barbican-db-conn")) }}
+{{- end }}
 
 {{- $serviceAccountName := "barbican-api" }}
 {{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
@@ -70,7 +73,7 @@ spec:
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "barbican_api" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ dict "envAll" $envAll "application" "barbican" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
@@ -146,6 +149,9 @@ spec:
 {{- dict "enabled" $envAll.Values.tls.oslo_messaging "name" "client-certs" "path" "/etc/rabbitmq/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
 
 {{ if $mounts_barbican_api.volumeMounts }}{{ toYaml $mounts_barbican_api.volumeMounts | indent 12 }}{{ end }}
+{{- range $extraContainer := $envAll.Values.pod.extraContainers.barbican_api }}
+        - {{ tpl (toYaml $extraContainer) $envAll | indent 10 | trim }}
+{{- end }}
       volumes:
         - name: pod-tmp
           emptyDir: {}
@@ -173,4 +179,7 @@ spec:
 {{- dict "enabled" .Values.tls.identity "name" .Values.secrets.tls.key_manager.api.internal | include "helm-toolkit.snippets.tls_volume" | indent 8 }}
 
 {{ if $mounts_barbican_api.volumes }}{{ toYaml $mounts_barbican_api.volumes | indent 8 }}{{ end }}
+{{- range $extraVolume := $envAll.Values.pod.extraVolumes.barbican_api }}
+        - {{ tpl (toYaml $extraVolume) $envAll | indent 10 | trim }}
+{{- end }}
 {{- end }}

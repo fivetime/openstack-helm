@@ -18,9 +18,10 @@ reconciled by the mariadb chart's db controller, which creates the database,
 the account and its grants, and writes the connection string into the secret
 named below as an oslo.config snippet.
 
-Enable this instead of the db-init job, and null out the connection in
-conf.nova.database and conf.nova.api_database so the projected snippets are
-the only source. See values_overrides/nova/mariadb-crd.yaml.
+Enable this instead of the db-init job. The chart then projects the snippets
+into the config directory of every workload that reads the database, and does
+not generate the connection in conf.nova.database and conf.nova.api_database,
+so the snippets are the only source.
 */}}
 {{- if .Values.manifests.mariadb_db }}
 {{- $envAll := . }}
@@ -105,6 +106,7 @@ spec:
   require:
     x509: true
 {{- end }}
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 
 {{- /* The cell1 database. */}}
@@ -127,6 +129,7 @@ spec:
   {{- end }}
   characterSet: utf8
   collate: utf8_general_ci
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -146,6 +149,7 @@ spec:
   username: {{ $novaAuth.username | quote }}
   host: "%"
   grantOption: false
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -206,6 +210,7 @@ spec:
   {{- end }}
   characterSet: utf8
   collate: utf8_general_ci
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -225,6 +230,7 @@ spec:
   username: {{ $novaAuth.username | quote }}
   host: "%"
   grantOption: false
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -285,6 +291,7 @@ spec:
   {{- end }}
   characterSet: utf8
   collate: utf8_general_ci
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -304,6 +311,7 @@ spec:
   username: {{ $novaAuth.username | quote }}
   host: "%"
   grantOption: false
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}

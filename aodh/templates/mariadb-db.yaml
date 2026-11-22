@@ -18,9 +18,10 @@ reconciled by the mariadb chart's db controller, which creates the database,
 the account and its grants, and writes the connection string into the secret
 named below as an oslo.config snippet.
 
-Enable this instead of the db-init job, and null out the connection in
-conf.aodh.database so the projected snippet is the only source. See
-values_overrides/aodh/mariadb-crd.yaml.
+Enable this instead of the db-init job. The chart then projects the snippet
+into the config directory of every workload that reads the database, and does
+not generate the connection in conf.aodh.database, so the snippet is the only
+source.
 */}}
 {{- if .Values.manifests.mariadb_db }}
 {{- $envAll := . }}
@@ -90,6 +91,7 @@ spec:
     key: {{ $passwordSecret.key }}
   {{- /* 0 means unlimited. Anything else throttles the service. */}}
   maxUserConnections: 0
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 
 {{- /* The aodh database. */}}
@@ -112,6 +114,7 @@ spec:
   {{- end }}
   characterSet: utf8
   collate: utf8_general_ci
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -131,6 +134,7 @@ spec:
   username: {{ $auth.username | quote }}
   host: "%"
   grantOption: false
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}

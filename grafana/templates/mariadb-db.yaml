@@ -18,9 +18,8 @@ reconciled by the mariadb chart's db controller, which creates the databases,
 the accounts and their grants, and writes the connection strings into the
 secrets named below.
 
-Enable this instead of the db-init jobs, and null out conf.grafana.database.url
-so the environment variable is the only source. See
-values_overrides/grafana/mariadb-crd.yaml.
+Enable this instead of the db-init jobs. The chart then drops
+conf.grafana.database.url, so the environment variable is the only source.
 */}}
 {{- if .Values.manifests.mariadb_db }}
 {{- $envAll := . }}
@@ -108,6 +107,7 @@ spec:
   require:
     x509: true
 {{- end }}
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 
 {{- /* The grafana database. */}}
@@ -130,6 +130,7 @@ spec:
   {{- end }}
   characterSet: utf8
   collate: utf8_general_ci
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -149,6 +150,7 @@ spec:
   username: {{ $grafanaAuth.username | quote }}
   host: "%"
   grantOption: false
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -174,7 +176,7 @@ spec:
     set-admin-user and run-migrator take this as the GF_DATABASE_URL
     environment variable. The scheme is grafana's driver name, mysql, not
     SQLAlchemy's mysql+pymysql, and client TLS is configured by the ssl_* keys
-    in [database], so the URL carries no query, as in configmap-etc.yaml. The
+    in [database], so the URL carries no query, as in secret-etc.yaml. The
     block scalar strips the trailing newline -- an environment variable carries
     the bytes verbatim, and grafana would be handed the newline too. */}}
     key: GF_DATABASE_URL
@@ -233,6 +235,7 @@ spec:
   require:
     x509: true
 {{- end }}
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 
 {{- /* The grafana_session database. */}}
@@ -255,6 +258,7 @@ spec:
   {{- end }}
   characterSet: utf8
   collate: utf8_general_ci
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -274,6 +278,7 @@ spec:
   username: {{ $sessionAuth.username | quote }}
   host: "%"
   grantOption: false
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}

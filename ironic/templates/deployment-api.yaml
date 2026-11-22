@@ -18,6 +18,9 @@ limitations under the License.
 {{- $mounts_ironic_api := .Values.pod.mounts.ironic_api.ironic_api }}
 {{- $mounts_ironic_api_init := .Values.pod.mounts.ironic_api.init_container }}
 {{- $etcSources := .Values.pod.etcSources.ironic_api }}
+{{- if .Values.manifests.mariadb_db }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "ironic-db-conn")) }}
+{{- end }}
 
 {{- $serviceAccountName := "ironic-api" }}
 {{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
@@ -43,7 +46,7 @@ spec:
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "ironic_api" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ tuple "ironic_api" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}

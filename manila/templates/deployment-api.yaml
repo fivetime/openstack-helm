@@ -32,6 +32,9 @@ httpGet:
 {{- $mounts_manila_api := .Values.pod.mounts.manila_api.manila_api }}
 {{- $mounts_manila_api_init := .Values.pod.mounts.manila_api.init_container }}
 {{- $etcSources := .Values.pod.etcSources.manila_api }}
+{{- if .Values.manifests.mariadb_db }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "manila-db-conn")) }}
+{{- end }}
 
 {{- $serviceAccountName := "manila-api" }}
 {{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
@@ -57,7 +60,7 @@ spec:
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "manila_api" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ dict "envAll" $envAll "application" "manila" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}

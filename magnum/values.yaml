@@ -72,7 +72,7 @@ conf:
     app:healthcheck:
       paste.app_factory: oslo_middleware:Healthcheck.app_factory
       backends: disable_by_file
-      disable_by_file_path: /etc/magnum/healthcheck_disable
+      disable_by_file_path: /tmp/healthcheck_disable
     filter:authtoken:
       acl_public_routes: /, /v1
       paste.filter_factory: magnum.api.middleware.auth_token:AuthTokenMiddleware.factory
@@ -407,6 +407,7 @@ endpoints:
       default: null
     path:
       default: /v1
+      healthcheck: /healthcheck
     scheme:
       default: http
     port:
@@ -664,6 +665,11 @@ mariadb_db:
   ## clients connect through. Set it when they differ, such as a MariaDB named
   ## mariadb served by a mariadb-primary service.
   mariadb_ref: ""
+  # -- What happens in MariaDB when a Database, User or Grant resource of this
+  ## chart is deleted. Either value works with both API groups.
+  ##   Skip   -- keep the database, account or grant
+  ##   Delete -- drop it
+  cleanup_policy: Skip
   # -- Secret holding the password of the magnum database account.
   ## The User and Connection resources read it from here.
   password_secret:
@@ -694,24 +700,30 @@ manifests:
   configmap_etc: true
   deployment_api: true
   job_bootstrap: true
-  job_db_init: true
+  job_db_init: false
   # -- Render the MariaDB Database/User/Grant/Connection custom resources
   ## reconciled by the mariadb chart's db controller, instead of running the
   ## db-init job. Mutually exclusive with job_db_init.
-  mariadb_db: false
+  mariadb_db: true
   job_db_sync: true
   job_db_drop: false
   job_image_repo_sync: true
+  # -- Declare this chart's keystone user, roles and catalog entry as custom
+  ## resources reconciled by the keystone chart's identity controller, instead
+  ## of running the ks_user, ks_service and ks_endpoints jobs. Those three must
+  ## be disabled: both paths write the same user's password and race on the
+  ## same catalog entry.
+  identity_entities: false
   job_ks_endpoints: true
   job_ks_service: true
   job_ks_user_domain: true
   job_ks_user: true
-  job_rabbit_init: true
+  job_rabbit_init: false
   # -- Declare this chart's messaging vhost, account and permissions
   ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
   ## topology controller, instead of running the rabbit_init job. The
   ## two are mutually exclusive.
-  rabbitmq_topology: false
+  rabbitmq_topology: true
   pdb_api: true
   network_policy: false
   secret_db: true

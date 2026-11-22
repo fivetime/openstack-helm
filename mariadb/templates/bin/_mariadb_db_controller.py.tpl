@@ -105,6 +105,10 @@ MARIADB_ADMIN_CNF = "/etc/mysql/admin_user.cnf"
 API_VERSION = f"{MARIADB_DB_CONTROLLER_API_GROUP}/v1alpha1"
 FINALIZER = f"{MARIADB_DB_CONTROLLER_API_GROUP}/finalizer"
 CONNECTION_LABEL = f"{MARIADB_DB_CONTROLLER_API_GROUP}/connection"
+CONNECTION_SECRET_SELECTOR = {
+    "application": "mariadb",
+    "component": "db-connection",
+}
 DEFAULT_CREDS_KEY = "password"
 
 READY_CONDITION = "Ready"
@@ -299,15 +303,19 @@ def list_resources(klass):
 
 def read_secret_key(name, key):
     """Read and decode one key of a secret in the watched namespace."""
-    try:
-        secret = (
-            pykube.Secret.objects(api)
-            .filter(namespace=MARIADB_DB_CONTROLLER_NAMESPACE)
-            .get(name=name)
-        )
-    except pykube.exceptions.ObjectDoesNotExist:
+    if name not in secrets:
+        try:
+            secret = (
+                pykube.Secret.objects(api)
+                .filter(namespace=MARIADB_DB_CONTROLLER_NAMESPACE)
+                .get(name=name)
+            )
+            secrets[name] = secret.obj.get("data") or {}
+        except pykube.exceptions.ObjectDoesNotExist:
+            secrets[name] = None
+    if secrets[name] is None:
         raise ReconcileError(f"secret {name} does not exist")
-    data = secret.obj.get("data") or {}
+    data = secrets[name]
     if key not in data:
         raise ReconcileError(f"secret {name} has no key {key}")
     return base64.b64decode(data[key]).decode("utf-8")
@@ -657,10 +665,18 @@ def reconcile_grant(obj, spec):
 def finalize_grant(obj, spec):
     privileges, target, account = grant_target(spec)
     LOG.info(f"Revoking {privileges} on {target} from {account}")
-    sql.execute(
-        # See reconcile_grant.
-        f"REVOKE IF EXISTS {', '.join(privileges)} ON {target} FROM {account}"
-    )
+    try:
+        sql.execute(
+            # See reconcile_grant.
+            f"REVOKE {', '.join(privileges)} ON {target} FROM {account}"
+        )
+    except pymysql.err.MySQLError as error:
+        # MariaDB has no REVOKE IF EXISTS. A grant or account that is already
+        # gone is reported as 1141, or 1147 for a table, and leaves nothing
+        # to revoke.
+        if error.args[0] not in (1141, 1147):
+            raise
+        LOG.info(f"Nothing to revoke: {error.args[1]}")
 
 
 # The Go template subset understood in Connection.spec.secretTemplate.format.
@@ -684,15 +700,20 @@ def render_format(template, context):
     return TEMPLATE_RE.sub(substitute, template)
 
 
-def connection_context(spec):
-    """Build the substitution context for a Connection resource."""
-    username = spec.get("username")
+def connection_password(spec):
+    """Return the password a Connection resource renders."""
     password_ref = spec.get("passwordSecretKeyRef") or {}
     if not password_ref.get("name"):
         raise ReconcileError("passwordSecretKeyRef.name is required")
-    password = read_secret_key(
+    return read_secret_key(
         password_ref["name"], password_ref.get("key") or DEFAULT_CREDS_KEY
     )
+
+
+def connection_context(spec):
+    """Build the substitution context for a Connection resource."""
+    username = spec.get("username")
+    password = connection_password(spec)
     database = spec.get("database") or ""
     host = spec.get("host")
     if not host:
@@ -765,13 +786,30 @@ def owner_reference(obj):
     }
 
 
+def connection_secret_name(obj, spec):
+    return spec.get("secretName") or obj.name
+
+
+def list_connection_secrets():
+    """Names of the secrets written for Connections, with a single LIST."""
+    return {
+        secret.name
+        for secret in pykube.Secret.objects(api)
+        .filter(
+            namespace=MARIADB_DB_CONTROLLER_NAMESPACE,
+            selector=CONNECTION_SECRET_SELECTOR,
+        )
+        .iterator()
+    }
+
+
 def apply_connection_secret(obj, spec, data):
     """Create or update the secret, only writing when the content changed."""
-    name = spec.get("secretName") or obj.name
+    name = connection_secret_name(obj, spec)
     template = spec.get("secretTemplate") or {}
     metadata = template.get("metadata") or {}
     labels = dict(metadata.get("labels") or {})
-    labels.update({"application": "mariadb", "component": "db-connection"})
+    labels.update(CONNECTION_SECRET_SELECTOR)
     labels[CONNECTION_LABEL] = obj.name
     encoded = {
         key: base64.b64encode(value.encode("utf-8")).decode("ascii")
@@ -800,7 +838,12 @@ def apply_connection_secret(obj, spec, data):
         pykube.Secret(api, body).create()
         LOG.info(f"Created connection secret {name}")
         return name
-    if (secret.obj.get("data") or {}) == encoded:
+    # The labels are compared too: a secret without them is not listed by
+    # list_connection_secrets and would otherwise be rewritten on every sweep.
+    current_labels = secret.obj["metadata"].get("labels") or {}
+    if (secret.obj.get("data") or {}) == encoded and all(
+        current_labels.get(key) == value for key, value in labels.items()
+    ):
         LOG.debug(f"Connection secret {name} is up to date")
         return name
     secret.patch({"metadata": body["metadata"], "data": encoded})
@@ -847,6 +890,11 @@ HANDLERS = (
 applied = {}
 # uid -> timestamp before which the resource is not retried
 backoff = {}
+# secret name -> data, or None if it does not exist; read once per sweep, as
+# the User and the Connection of a service usually share one password secret
+secrets = {}
+# names of the secrets written for Connections, listed once per sweep
+connection_secrets = set()
 
 
 def desired_hash(obj, spec, extra=""):
@@ -970,11 +1018,18 @@ def reconcile(obj, handler, finalizer):
         # finalizer behind that would wedge a later deletion.
         remove_finalizer(obj)
 
-    # For a User the password lives in a secret, so the secret's content is
-    # part of the desired state even when the spec has not changed.
-    extra = ""
+    # A User sets, and a Connection renders, a password that lives in a
+    # secret, so the secret's content is part of the desired state even when
+    # the spec has not changed. Leaving it out of the Connection's digest
+    # rotates the account on the next sweep but the rendered secret only on
+    # the full resync, and every consumer that connects in between is denied.
+    password = None
     if obj.kind == "User":
         password, _ = user_password(spec)
+    elif obj.kind == "Connection":
+        password = connection_password(spec)
+    extra = ""
+    if password is not None:
         extra = hashlib.sha256(password.encode("utf-8")).hexdigest()
 
     digest = desired_hash(obj, spec, extra)
@@ -984,6 +1039,16 @@ def reconcile(obj, handler, finalizer):
         or previous[0] != digest
         or now - previous[1] >= MARIADB_DB_CONTROLLER_FULL_RESYNC_INTERVAL
     )
+    # A deleted connection secret would otherwise only come back on the full
+    # resync, and every consumer pod started in between waits for it, since
+    # the secret is projected without being optional.
+    missing = (
+        obj.kind == "Connection"
+        and connection_secret_name(obj, spec) not in connection_secrets
+    )
+    if not stale and missing:
+        LOG.info(f"Connection {obj.name}: its secret is missing, rewriting it")
+        stale = True
     if not stale:
         set_ready(obj, "True", REASON_RECONCILED, ready_message(obj))
         return
@@ -995,6 +1060,9 @@ def reconcile(obj, handler, finalizer):
 
 
 def sweep():
+    secrets.clear()
+    connection_secrets.clear()
+    connection_secrets.update(list_connection_secrets())
     live = set()
     for klass, handler, finalizer in HANDLERS:
         for obj in list_resources(klass):

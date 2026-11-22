@@ -25,6 +25,9 @@ rename and the producer would start.
 {{- $mounts_designate_producer := .Values.pod.mounts.designate_producer.designate_producer }}
 {{- $mounts_designate_producer_init := .Values.pod.mounts.designate_producer.init_container }}
 {{- $etcSources := .Values.pod.etcSources.designate_producer }}
+{{- if .Values.manifests.mariadb_db }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "designate-db-conn")) }}
+{{- end }}
 
 {{- $serviceAccountName := "designate-producer" }}
 {{ tuple $envAll "producer" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
@@ -52,7 +55,7 @@ spec:
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "designate_producer" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ tuple "designate_producer" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}

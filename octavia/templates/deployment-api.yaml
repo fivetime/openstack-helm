@@ -56,6 +56,10 @@ httpGet:
 {{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 
 {{- $etcSources := .Values.pod.etcSources.octavia_api }}
+{{- if .Values.manifests.mariadb_db }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "octavia-db-conn")) }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "octavia-persistence-db-conn")) }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -77,7 +81,7 @@ spec:
 {{ tuple $envAll "octavia" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
       annotations:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "octavia_api" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ tuple "octavia_api" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
@@ -136,8 +140,6 @@ spec:
             {{- end }}
             - name: octavia-driver-agents
               mountPath: /var/run/octavia
-            - name: run-openvswitch
-              mountPath: /var/run/ovn
 {{ if $mounts_octavia_api.volumeMounts }}{{ toYaml $mounts_octavia_api.volumeMounts | indent 12 }}{{ end }}
         - name: octavia-driver-agent
 {{ tuple $envAll "octavia_driver_agent" | include "helm-toolkit.snippets.image" | indent 10 }}
@@ -171,8 +173,6 @@ spec:
             {{- end }}
             - name: octavia-driver-agents
               mountPath: /var/run/octavia
-            - name: run-openvswitch
-              mountPath: /var/run/ovn
             # The sidecar runs the same binary against the same octavia.conf as
             # the api container, so it takes the api's extra mounts (the Kafka
             # CA among them). Only those are added to this pod's volumes: the
@@ -180,15 +180,14 @@ spec:
             # Deployment, and mounting them here referenced volumes this pod
             # never defines.
 {{ if $mounts_octavia_api.volumeMounts }}{{ toYaml $mounts_octavia_api.volumeMounts | indent 12 }}{{ end }}
+{{- range $extraContainer := $envAll.Values.pod.extraContainers.octavia_api }}
+        - {{ tpl (toYaml $extraContainer) $envAll | indent 10 | trim }}
+{{- end }}
       volumes:
         - name: pod-tmp
           emptyDir: {}
         - name: octavia-driver-agents
           emptyDir: {}
-        - name: run-openvswitch
-          hostPath:
-            path: /run/openvswitch
-            type: DirectoryOrCreate
         - name: oslo-lock-path
           emptyDir: {}
         - name: pod-etc-octavia
@@ -210,4 +209,7 @@ spec:
           emptyDir: {}
 {{ end }}
 {{ if $mounts_octavia_api.volumes }}{{ toYaml $mounts_octavia_api.volumes | indent 8 }}{{ end }}
+{{- range $extraVolume := $envAll.Values.pod.extraVolumes.octavia_api }}
+        - {{ tpl (toYaml $extraVolume) $envAll | indent 10 | trim }}
+{{- end }}
 {{- end }}

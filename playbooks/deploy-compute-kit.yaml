@@ -93,6 +93,20 @@
         tasks_from: mariadb
       when: not (mariadb_operator_enabled | default(false))
 
+    # Upgrades the release it just installed, once mariadb-controller has
+    # edited the master service, which no later step does. Self-skipping
+    # without the release or the controller.
+    - name: Verify MariaDB upgrades in place
+      include_role:
+        name: deploy-charts
+        tasks_from: _script
+      vars:
+        osh_script: verify-mariadb-upgrade.sh
+        osh_script_args: "{{ osh_namespace | default('osh') }} {{ osh_helm_repo }}/mariadb"
+        osh_script_env:
+          HELM_TIMEOUT: "{{ osh_helm_timeout }}s"
+      when: not (mariadb_operator_enabled | default(false))
+
     - name: Deploy Memcached
       include_role:
         name: deploy-charts
@@ -185,9 +199,12 @@
         # sections) and only cell0 keeps a user/admin secret pair.
         # Point nova's check at the cell0 secrets; the empty string lets every
         # other service fall back to the default <svc>-db-user / <svc>-db-admin.
+        # With manifests.mariadb_db nova's [database] section (cell1) comes
+        # from nova-cell1-db-conn; nova-db-conn holds only [api_database].
         osh_script_env:
           USER_SECRET: "{{ 'nova-db-cell0-user' if item == 'nova' else '' }}"
           ADMIN_SECRET: "{{ 'nova-db-cell0-admin' if item == 'nova' else '' }}"
+          CONN_SECRET: "{{ 'nova-cell1-db-conn' if item == 'nova' else '' }}"
       loop:
         - keystone
         - glance
@@ -220,10 +237,10 @@
         name: deploy-charts
         tasks_from: force-cronjob-run
 
-    # Self-skipping: exits 0 when no rabbitmq.osh.openstack.org resources exist,
-    # which is every job that still provisions messaging with the per-chart
-    # rabbit-init jobs. The definitions themselves are installed either way, so
-    # they do not distinguish the two paths.
+    # Self-skipping: exits 0 when no topology resources exist, which is a job
+    # that turns manifests.rabbitmq_topology off and provisions messaging with
+    # the per-chart rabbit-init jobs instead. The definitions themselves are
+    # installed either way, so they do not distinguish the two paths.
     - name: Verify the RabbitMQ topology custom resources reconciled
       include_role:
         name: deploy-charts

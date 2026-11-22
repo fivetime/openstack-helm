@@ -80,6 +80,9 @@ bootstrap:
 
 network:
   api:
+    # Pod port the Service routes to; null => Kubernetes uses the Service port.
+    # A deployment override sets this (e.g. 443) to point at a TLS sidecar.
+    target_port: null
     external_policy_local: false
     node_port:
       enabled: false
@@ -307,9 +310,12 @@ conf:
   octavia:
     DEFAULT:
       log_config_append: /etc/octavia/logging.conf
+    # -- The OVN NB and SB databases the OVN provider driver connects to.
+    ## When empty, they are built from endpoints.ovn_ovsdb_nb and
+    ## endpoints.ovn_ovsdb_sb.
     ovn:
-      ovn_nb_connection: unix:/var/run/ovn/ovnnb_db.sock
-      ovn_sb_connection: unix:/var/run/ovn/ovnsb_db.sock
+      ovn_nb_connection: ""
+      ovn_sb_connection: ""
     api_settings:
       api_handler: queue_producer
       bind_host: 0.0.0.0
@@ -659,6 +665,21 @@ endpoints:
         default: 5672
       http:
         default: 15672
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
   network:
     name: neutron
     hosts:
@@ -686,8 +707,47 @@ endpoints:
       server:
         default: 6379
         sentinel: 26379
+  # The OVN northbound and southbound databases of the ovn chart, used by the
+  # OVN provider driver: the octavia-api container connects to the
+  # northbound database, the provider agent in the octavia-driver-agent
+  # container to both. By default the driver connects to each database's
+  # Service. The driver's connections are leader only, so with a clustered
+  # OVN a connection through the Service is turned away by followers and
+  # retried until it reaches the leader. Setting statefulset (name and
+  # replicas, equal to the ovn chart's pod.replicas.ovn_ovsdb_nb and
+  # pod.replicas.ovn_ovsdb_sb) gives the driver every member instead. The
+  # connections use host names, which python-ovs resolves only with the
+  # python unbound module (python3-unbound).
+  ovn_ovsdb_nb:
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-nb
+    host_fqdn_override:
+      default: null
+    statefulset: null
+    port:
+      ovsdb:
+        default: 6641
+  ovn_ovsdb_sb:
+    namespace: null
+    hosts:
+      default: ovn-ovsdb-sb
+    host_fqdn_override:
+      default: null
+    statefulset: null
+    port:
+      ovsdb:
+        default: 6642
 
 pod:
+  # -- Extra sidecar containers and volumes to inject into the octavia-api
+  ## Deployment. Used e.g. to add an nginx TLS-terminating sidecar.
+  ## Keyed per component.
+  ## The entries are rendered through tpl, so they can reference values.
+  extraContainers:
+    octavia_api: []
+  extraVolumes:
+    octavia_api: []
   probes:
     api:
       octavia-api:
@@ -965,6 +1025,11 @@ mariadb_db:
   ## clients connect through. Set it when they differ, such as a MariaDB named
   ## mariadb served by a mariadb-primary service.
   mariadb_ref: ""
+  # -- What happens in MariaDB when a Database, User or Grant resource of this
+  ## chart is deleted. Either value works with both API groups.
+  ##   Skip   -- keep the database, account or grant
+  ##   Delete -- drop it
+  cleanup_policy: Skip
   # -- Secret holding the password of the octavia database account.
   ## The User and Connection resources read it from here.
   password_secret:
@@ -1003,20 +1068,26 @@ manifests:
   deployment_housekeeping: true
   network_attachment_definition: false
   job_bootstrap: true
-  job_db_init: true
+  job_db_init: false
   # -- Render the MariaDB Database/User/Grant/Connection custom resources
   ## reconciled by the mariadb chart's db controller, instead of running the
   ## db-init job. Mutually exclusive with job_db_init.
-  mariadb_db: false
+  mariadb_db: true
   job_db_sync: true
   job_db_drop: false
   job_image_repo_sync: true
-  job_rabbit_init: true
+  job_rabbit_init: false
   # -- Declare this chart's messaging vhost, account and permissions
   ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
   ## topology controller, instead of running the rabbit_init job. The
   ## two are mutually exclusive.
-  rabbitmq_topology: false
+  rabbitmq_topology: true
+  # -- Declare this chart's keystone user, roles and catalog entry as custom
+  ## resources reconciled by the keystone chart's identity controller, instead
+  ## of running the ks_user, ks_service and ks_endpoints jobs. Those three must
+  ## be disabled: both paths write the same user's password and race on the
+  ## same catalog entry.
+  identity_entities: false
   job_ks_endpoints: true
   job_ks_service: true
   job_ks_user: true

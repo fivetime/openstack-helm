@@ -13,6 +13,12 @@ limitations under the License.
 */}}
 
 {{- if .Values.manifests.deployment }}
+{{- /* Wait for the Connection to report Ready. The dependency resolver reads
+the values, so add it there. */}}
+{{- if .Values.manifests.mariadb_db }}
+{{- $connection := dict "apiVersion" (printf "%s/v1alpha1" .Values.mariadb_db.api_group) "kind" "Connection" "name" "grafana-db-conn" "conditions" (list (dict "type" "Ready")) }}
+{{- $_ := set .Values.dependencies.static.grafana "custom_resources" (append (.Values.dependencies.static.grafana.custom_resources | default list) $connection) }}
+{{- end }}
 {{- $envAll := . }}
 
 {{- $mounts_grafana := .Values.pod.mounts.grafana.grafana }}
@@ -40,7 +46,7 @@ spec:
 {{ tuple $envAll "grafana" "dashboard" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
       annotations:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
     spec:
 {{ dict "envAll" $envAll "application" "dashboard" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
       serviceAccountName: {{ $serviceAccountName }}

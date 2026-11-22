@@ -67,6 +67,10 @@ interface arrives configured.
 {{- $configMapName := index . 1 }}
 {{- $mounts_octavia_health_manager := $envAll.Values.pod.mounts.octavia_health_manager.octavia_health_manager }}
 {{- $etcSources := $envAll.Values.pod.etcSources.octavia_health_manager }}
+{{- if $envAll.Values.manifests.mariadb_db }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "octavia-db-conn")) }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "octavia-persistence-db-conn")) }}
+{{- end }}
 - name: oslo-lock-path
   emptyDir: {}
 - name: pod-etc-octavia
@@ -120,7 +124,7 @@ spec:
 {{ tuple $envAll "octavia" "health_manager" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 8 }}
       annotations:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "octavia_health_manager" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ tuple "octavia_health_manager" . | include "helm-toolkit.snippets.kubernetes_pod_priority_class" | indent 6 }}
@@ -218,7 +222,7 @@ spec:
         octavia-health-manager-slot: {{ $slot.name | quote }}
       annotations:
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" $envAll | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" $envAll | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" $envAll | include "helm-toolkit.utils.hash" }}
         {{- $network := dict "name" $lbMgmt.nad_name "namespace" ($lbMgmt.nad_namespace | default $envAll.Release.Namespace) "mac" $slot.mac "ips" (list (printf "%s/%d" $slot.ip (int $lbMgmt.prefix_length))) "cni-args" (dict "OvnPort" $slot.port_id) }}
         k8s.v1.cni.cncf.io/networks: {{ list $network | toJson | quote }}
 {{ tuple "octavia_health_manager" $envAll | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
@@ -263,7 +267,7 @@ spec:
 {{- end }}
 {{- else }}
 {{- $daemonset_yaml := list $daemonset $configMapName $serviceAccountName . | include "octavia.health_manager.daemonset" | toString | fromYaml }}
-{{- $configmap_yaml := "octavia.configmap.etc" }}
+{{- $configmap_yaml := "octavia.secret.etc" }}
 {{- list $daemonset $daemonset_yaml $configmap_yaml $configMapName . | include "helm-toolkit.utils.daemonset_overrides" }}
 {{- end }}
 {{- end }}

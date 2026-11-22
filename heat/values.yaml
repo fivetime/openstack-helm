@@ -302,6 +302,8 @@ conf:
       heat.app_factory: heat.api.cfn.v1:API
     app:healthcheck:
       paste.app_factory: oslo_middleware:Healthcheck.app_factory
+      backends: disable_by_file
+      disable_by_file_path: /tmp/healthcheck_disable
     filter:versionnegotiation:
       paste.filter_factory: heat.common.wsgi:filter_factory
       heat.filter_factory: heat.api.openstack:version_negotiation_filter
@@ -1264,6 +1266,11 @@ mariadb_db:
   ## clients connect through. Set it when they differ, such as a MariaDB named
   ## mariadb served by a mariadb-primary service.
   mariadb_ref: ""
+  # -- What happens in MariaDB when a Database, User or Grant resource of this
+  ## chart is deleted. Either value works with both API groups.
+  ##   Skip   -- keep the database, account or grant
+  ##   Delete -- drop it
+  cleanup_policy: Skip
   # -- Secret holding the password of the heat database account.
   ## The User and Connection resources read it from here.
   password_secret:
@@ -1282,11 +1289,11 @@ manifests:
   deployment_api: true
   deployment_cfn: true
   job_bootstrap: true
-  job_db_init: true
+  job_db_init: false
   # -- Render the MariaDB Database/User/Grant/Connection custom resources
   ## reconciled by the mariadb chart's db controller, instead of running the
   ## db-init job. Mutually exclusive with job_db_init.
-  mariadb_db: false
+  mariadb_db: true
   job_db_sync: true
   job_db_drop: false
   job_image_repo_sync: true
@@ -1302,7 +1309,7 @@ manifests:
   job_ks_user_domain: true
   job_ks_user_trustee: true
   job_ks_user: true
-  job_rabbit_init: true
+  job_rabbit_init: false
   pdb_api: true
   pdb_cfn: true
   pod_rally_test: true
@@ -1311,7 +1318,7 @@ manifests:
   ## as RabbitMQ custom resources reconciled by the rabbitmq chart's
   ## topology controller, instead of running the rabbit_init job. The
   ## two are mutually exclusive.
-  rabbitmq_topology: false
+  rabbitmq_topology: true
   secret_db: true
   secret_keystone: true
   secret_rabbitmq: true

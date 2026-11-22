@@ -22,8 +22,7 @@ Enable this instead of the db-init job. Skyline is not an oslo.config service:
 skyline.yaml is rendered from endpoints.oslo_db. The service config therefore
 keeps the connection string generated from endpoints.oslo_db, which names the
 same account, password and database these resources provision, and the first
-consumer of the database waits for the Connection to report Ready. See
-values_overrides/skyline/mariadb-crd.yaml.
+consumer of the database waits for the Connection to report Ready.
 */}}
 {{- if .Values.manifests.mariadb_db }}
 {{- $envAll := . }}
@@ -99,6 +98,7 @@ spec:
   require:
     x509: true
 {{- end }}
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 
 {{- /* The skyline database. */}}
@@ -121,6 +121,7 @@ spec:
   {{- end }}
   characterSet: utf8
   collate: utf8_general_ci
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -140,6 +141,7 @@ spec:
   username: {{ $auth.username | quote }}
   host: "%"
   grantOption: false
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}

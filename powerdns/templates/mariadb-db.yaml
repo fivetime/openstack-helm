@@ -18,12 +18,11 @@ reconciled by the mariadb chart's db controller, which creates the database,
 the account and its grants, and writes the connection string into the secret
 named below as a bare URI.
 
-Enable this instead of the db-init job. PowerDNS is not an oslo.config
-service: pdns.conf is rendered from endpoints.oslo_db. The service config
-therefore keeps the connection string generated from endpoints.oslo_db, which
-names the same account, password and database these resources provision, and
-the first consumer of the database waits for the Connection to report Ready.
-See values_overrides/powerdns/mariadb-crd.yaml.
+Enable this instead of the db-init job. PowerDNS is not an oslo.config service:
+pdns.conf is rendered from endpoints.oslo_db. The service config therefore
+keeps the connection string generated from endpoints.oslo_db, which names the
+same account, password and database these resources provision, and the first
+consumer of the database waits for the Connection to report Ready.
 */}}
 {{- if .Values.manifests.mariadb_db }}
 {{- $envAll := . }}
@@ -95,6 +94,7 @@ spec:
     key: {{ $passwordSecret.key }}
   {{- /* 0 means unlimited. Anything else throttles the service. */}}
   maxUserConnections: 0
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 
 {{- /* The powerdns database. */}}
@@ -117,6 +117,7 @@ spec:
   {{- end }}
   characterSet: utf8
   collate: utf8_general_ci
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}
@@ -136,6 +137,7 @@ spec:
   username: {{ $auth.username | quote }}
   host: "%"
   grantOption: false
+  cleanupPolicy: {{ .Values.mariadb_db.cleanup_policy }}
   retryInterval: 10s
 ---
 apiVersion: {{ $apiVersion }}

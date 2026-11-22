@@ -48,7 +48,7 @@ spec:
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "freezer_api" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ dict "envAll" $envAll "application" "freezer" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
@@ -85,6 +85,8 @@ spec:
             - name: freezer-api
               containerPort: {{ tuple "backup" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
           volumeMounts:
+            - name: pod-tmp
+              mountPath: /tmp
             - name: oslo-lock-path
               mountPath: {{ .Values.conf.freezer.oslo_concurrency.lock_path }}
             - name: freezer-etc
@@ -107,6 +109,8 @@ spec:
 {{- dict "enabled" .Values.tls.oslo_db "name" "client-certs" "path" "/etc/mysql/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
 {{- dict "enabled" .Values.tls.identity "name" .Values.secrets.tls.backup.api.internal "path" "/etc/freezer/certs" | include "helm-toolkit.snippets.tls_volume_mount" | indent 12 }}
       volumes:
+        - name: pod-tmp
+          emptyDir: {}
         - name: oslo-lock-path
           emptyDir: {}
         - name: freezer-bin

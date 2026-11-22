@@ -75,7 +75,7 @@ spec:
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "neutron_ovn_agent" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ dict "envAll" $envAll "application" "neutron_ovn_agent" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
@@ -274,7 +274,7 @@ spec:
 {{- /* Only the OVN agents on the nodes that run the ovn-evpn-frr daemonset
        get the ovn-evpn extension, which brings up the EVPN bridge and
        configures FRR: add a label override for those nodes, so they get
-       their own daemonset and configuration (see configmap-etc). */ -}}
+       their own daemonset and configuration (see secret-etc). */ -}}
 {{- if .Values.manifests.daemonset_ovn_evpn_frr }}
 {{- $overrides := default dict $envAll.Values.conf.overrides }}
 {{- $agentOverrides := default dict (index $overrides (printf "%s_%s" $envAll.Chart.Name $daemonset)) }}
@@ -284,6 +284,6 @@ spec:
 {{- $_ := set $overrides (printf "%s_%s" $envAll.Chart.Name $daemonset) $agentOverrides }}
 {{- $_ := set $envAll.Values.conf "overrides" $overrides }}
 {{- end }}
-{{- $configmap_yaml := "neutron.configmap.etc" }}
+{{- $configmap_yaml := "neutron.secret.etc" }}
 {{-  list $daemonset $daemonset_yaml $configmap_yaml $configMapName . | include "helm-toolkit.utils.daemonset_overrides" }}
 {{- end }}

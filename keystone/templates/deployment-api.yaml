@@ -29,6 +29,9 @@ httpGet:
 {{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 
 {{- $etcSources := .Values.pod.etcSources.keystone_api }}
+{{- if .Values.manifests.mariadb_db }}
+{{- $etcSources = append $etcSources (dict "secret" (dict "name" "keystone-db-conn")) }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -51,7 +54,7 @@ spec:
       annotations:
 {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" | indent 8 }}
         configmap-bin-hash: {{ tuple "configmap-bin.yaml" . | include "helm-toolkit.utils.hash" }}
-        configmap-etc-hash: {{ tuple "configmap-etc.yaml" . | include "helm-toolkit.utils.hash" }}
+        secret-etc-hash: {{ tuple "secret-etc.yaml" . | include "helm-toolkit.utils.hash" }}
 {{ tuple "keystone_api" . | include "helm-toolkit.snippets.custom_pod_annotations" | indent 8 }}
     spec:
 {{ dict "envAll" $envAll "application" "keystone" | include "helm-toolkit.snippets.kubernetes_pod_security_context" | indent 6 }}
@@ -74,14 +77,9 @@ spec:
 {{ tuple $envAll $envAll.Values.pod.resources.api | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
 {{ dict "envAll" $envAll "application" "keystone" "container" "keystone_api" | include "helm-toolkit.snippets.kubernetes_container_security_context" | indent 10 }}
           command:
-            - /tmp/keystone-api.sh
-            - start
-          lifecycle:
-            preStop:
-              exec:
-                command:
-                  - /tmp/keystone-api.sh
-                  - stop
+            - uwsgi
+            - --ini
+            - /etc/keystone/keystone-api-uwsgi.ini
           ports:
             - name: ks-pub
               containerPort: {{ tuple "identity" "service" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
@@ -94,14 +92,6 @@ spec:
               mountPath: {{ .Values.conf.keystone.oslo_concurrency.lock_path }}
             - name: etckeystone
               mountPath: /etc/keystone
-            - name: logs-apache
-              mountPath: /var/log/apache2
-            - name: run-apache
-              mountPath: /var/run/apache2
-            - name: keystone-bin
-              mountPath: /var/www/cgi-bin/keystone/wsgi.py
-              subPath: wsgi.py
-              readOnly: true
             - name: keystone-etc
               mountPath: /etc/keystone/keystone.conf
               subPath: keystone.conf
@@ -110,8 +100,8 @@ spec:
               mountPath: /etc/keystone/keystone.conf.d/
               readOnly: true
             - name: keystone-etc
-              mountPath: /etc/apache2/ports.conf
-              subPath: ports.conf
+              mountPath: /etc/keystone/keystone-api-uwsgi.ini
+              subPath: keystone-api-uwsgi.ini
               readOnly: true
             {{- if .Values.conf.keystone.DEFAULT.log_config_append }}
             - name: keystone-etc
@@ -130,24 +120,6 @@ spec:
             - name: keystone-etc
               mountPath: /etc/keystone/sso_callback_template.html
               subPath: sso_callback_template.html
-              readOnly: true
-            - name: keystone-etc
-              mountPath: {{ .Values.conf.software.apache2.conf_dir }}/wsgi-keystone.conf
-              subPath: wsgi-keystone.conf
-              readOnly: true
-            - name: keystone-etc
-              mountPath: {{ .Values.conf.software.apache2.mods_dir }}/mpm_event.conf
-              subPath: mpm_event.conf
-              readOnly: true
-{{- if .Values.conf.security }}
-            - name: keystone-etc
-              mountPath: {{ .Values.conf.software.apache2.conf_dir }}/security.conf
-              subPath: security.conf
-              readOnly: true
-{{- end }}
-            - name: keystone-bin
-              mountPath: /tmp/keystone-api.sh
-              subPath: keystone-api.sh
               readOnly: true
 {{- if .Values.endpoints.ldap.auth.client.tls.ca }}
             - name: keystone-ldap-tls
@@ -174,10 +146,6 @@ spec:
         - name: oslo-lock-path
           emptyDir: {}
         - name: etckeystone
-          emptyDir: {}
-        - name: logs-apache
-          emptyDir: {}
-        - name: run-apache
           emptyDir: {}
         - name: keystone-etc
           secret:

@@ -74,22 +74,22 @@ spec:
 {{ if $mounts_tacker_conductor.volumeMounts }}{{ toYaml $mounts_tacker_conductor.volumeMounts | indent 10 }}{{ end }}
           - name: localtime
             mountPath: "/etc/localtime"
-            readOnly: yes
+            readOnly: true
           - name: tacker-etc
             mountPath: "/etc/tacker/config.json"
-            readOnly: yes
+            readOnly: true
             subPath: config-conductor.json
           - name: tacker-etc
             mountPath: "/etc/tacker/api-paste.ini"
-            readOnly: yes
+            readOnly: true
             subPath: api-paste.ini
           - name: tacker-etc
             mountPath: "/etc/tacker/tacker.conf"
-            readOnly: yes
+            readOnly: true
             subPath: tacker.conf
           - name: tacker-etc
             mountPath: "/etc/tacker/logging.conf"
-            readOnly: yes
+            readOnly: true
             subPath: logging.conf
 {{- range $key, $volume := $envAll.Values.storage.volumes }}
           - name: {{ $key | replace "_" "-" }}

@@ -1425,6 +1425,10 @@ conf:
     before:
       enabled: false
       date: 'nil'
+    # Also archive task_log records older than before.date (--task-log).
+    task_log: false
+    # Seconds to sleep between batches with until_completion (--sleep).
+    sleep: null
   nova_api_uwsgi:
     uwsgi:
       add-header: "Connection: close"
